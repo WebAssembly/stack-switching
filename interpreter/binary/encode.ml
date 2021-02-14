@@ -428,6 +428,8 @@ let encode m =
       | Convert (F64 F64Op.DemoteF64) -> assert false
       | Convert (F64 F64Op.ReinterpretInt) -> op 0xbf
 
+      | Try _ | Throw -> failwith "encode.ml: not yet implemented"
+
     let const c =
       list instr c.it; end_ ()
 

@@ -11,6 +11,7 @@ module Link = Error.Make ()
 module Trap = Error.Make ()
 module Crash = Error.Make ()
 module Exhaustion = Error.Make ()
+module Uncaught = Error.Make ()
 
 exception Link = Link.Error
 exception Trap = Trap.Error
@@ -66,6 +67,8 @@ and admin_instr' =
   | Label of int * instr list * code
   | Local of int * value list * code
   | Frame of int * frame * code
+  | Catch of int * instr list * code
+  | Throwing
 
 type config =
 {
@@ -525,7 +528,17 @@ let rec step (c : config) : config =
 
       | Convert cvtop, Num n :: vs' ->
         (try Num (Eval_numeric.eval_cvtop cvtop n) :: vs', []
-        with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at])
+         with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at])
+
+      | Try (bt, es1, es2), vs ->
+        let FuncType (ts1, ts2) = block_type c.frame.inst bt e.at in
+        let n1 = List.length ts1 in
+        let n2 = List.length ts2 in
+        let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+        vs', [Catch (n2, es2, ([], [Label (n2, [], (args, List.map plain es1)) @@ e.at])) @@ e.at]
+
+      | Throw, vs ->
+         vs, [Throwing @@ e.at]
 
       | _ ->
         let s1 = string_of_values (List.rev vs) in
@@ -554,7 +567,10 @@ let rec step (c : config) : config =
       take n vs0 e.at @ vs, List.map plain es0
 
     | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es')), vs ->
-      vs, [Breaking (Int32.sub k 1l, vs0) @@ at]
+       vs, [Breaking (Int32.sub k 1l, vs0) @@ at]
+
+    | Label (n, es0, (vs', {it = Throwing; at} :: _)), vs ->
+      vs, [Throwing @@ at]
 
     | Label (n, es0, (vs', e' :: es')), vs when is_jumping e' ->
       vs, [e']
@@ -582,7 +598,10 @@ let rec step (c : config) : config =
       vs, [Trapping msg @@ at]
 
     | Frame (n, frame', (vs', {it = Returning vs0; at} :: es')), vs ->
-      take n vs0 e.at @ vs, []
+       take n vs0 e.at @ vs, []
+
+    | Frame (n, frame', (vs', {it = Throwing; at} :: _)), vs ->
+      vs, [Throwing @@ at]
 
     | Frame (n, frame', (vs', {it = ReturningInvoke (vs0, f); at} :: es')), vs ->
       let FuncType (ts1, _) = Func.type_of f in
@@ -616,6 +635,20 @@ let rec step (c : config) : config =
       | Func.ClosureFunc (_, f', args') ->
         args @ args' @ vs', [Invoke f' @@ e.at]
       )
+
+    | Throwing, _ ->
+       Uncaught.error e.at "uncaught exception"
+
+    | Catch (_, _, (_, ({it = Trapping _ | Breaking _ | Returning _; _} as e) :: _)), vs ->
+      vs, [e]
+
+    | Catch (n, es1, (_, { it = Throwing; at} :: _)), vs ->
+      let exn = [] in
+      vs, [Label (n, [], (exn, List.map plain es1)) @@ e.at]
+
+    | Catch (n, es', code'), vs ->
+      let c' = step {c with code = code'} in
+      vs, [Catch (n, es', c'.code) @@ e.at]
   in {c with code = vs', es' @ List.tl es}
 
 

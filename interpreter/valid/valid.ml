@@ -538,6 +538,16 @@ let rec check_instr (c : context) (e : instr) (s : infer_stack_type) : op_type =
     let t1, t2 = type_cvtop e.at cvtop in
     [NumType t1] --> [NumType t2]
 
+  | Try (bt, es1, es2) ->
+    let FuncType (ts1, ts2) as ft1 = check_block_type c bt e.at in
+    check_block {c with labels = ts2 :: c.labels} es1 ft1 e.at;
+    let ft2 = FuncType ([], ts2) in
+    check_block {c with labels = ts2 :: c.labels} es2 ft2 e.at;
+    ts1 --> ts2
+
+  | Throw ->
+    [] -->... []
+
 and check_seq (c : context) (s : infer_stack_type) (es : instr list)
   : infer_stack_type =
   match es with
