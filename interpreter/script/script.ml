@@ -1,5 +1,8 @@
 type var = string Source.phrase
 
+type Value.ref_ += ExternRef of int32
+type literal = Value.t Source.phrase
+
 type definition = definition' Source.phrase
 and definition' =
   | Textual of Ast.module_
@@ -8,17 +11,19 @@ and definition' =
 
 type action = action' Source.phrase
 and action' =
-  | Invoke of var option * Ast.name * Ast.literal list
+  | Invoke of var option * Ast.name * literal list
   | Get of var option * Ast.name
 
 type nanop = nanop' Source.phrase
-and nanop' = (unit, unit, nan, nan) Values.op
+and nanop' = (Lib.void, Lib.void, nan, nan) Value.op
 and nan = CanonicalNan | ArithmeticNan
 
 type result = result' Source.phrase
 and result' =
-  | LitResult of Ast.literal
+  | LitResult of literal
   | NanResult of nanop
+  | RefResult of Types.heap_type
+  | NullResult
 
 type assertion = assertion' Source.phrase
 and assertion' =
@@ -47,3 +52,16 @@ and meta' =
 and script = command list
 
 exception Syntax of Source.region * string
+
+
+let () =
+  let type_of_ref' = !Value.type_of_ref' in
+  Value.type_of_ref' := function
+    | ExternRef _ -> Types.ExternHeapType
+    | r -> type_of_ref' r
+
+let () =
+  let string_of_ref' = !Value.string_of_ref' in
+  Value.string_of_ref' := function
+    | ExternRef n -> "ref " ^ Int32.to_string n
+    | r -> string_of_ref' r

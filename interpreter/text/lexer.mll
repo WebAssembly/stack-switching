@@ -45,7 +45,7 @@ let string s =
   done;
   Buffer.contents b
 
-let value_type = function
+let num_type = function
   | "i32" -> Types.I32Type
   | "i64" -> Types.I64Type
   | "f32" -> Types.F32Type
@@ -160,44 +160,75 @@ rule token = parse
   | '"'character*'\\'_
     { error_nest (Lexing.lexeme_end_p lexbuf) lexbuf "illegal escape" }
 
-  | (nxx as t) { VALUE_TYPE (value_type t) }
+  | "ref" { REF }
+  | "null" { NULL }
+  | "extern" { EXTERN }
+  | "externref" { EXTERNREF }
+  | "funcref" { FUNCREF }
+  | (nxx as t) { NUM_TYPE (num_type t) }
+  | "mut" { MUT }
+
   | (nxx as t)".const"
     { let open Source in
       CONST (numop t
         (fun s -> let n = I32.of_string s.it in
-          i32_const (n @@ s.at), Values.I32 n)
+          i32_const (n @@ s.at), Value.I32 n)
         (fun s -> let n = I64.of_string s.it in
-          i64_const (n @@ s.at), Values.I64 n)
+          i64_const (n @@ s.at), Value.I64 n)
         (fun s -> let n = F32.of_string s.it in
-          f32_const (n @@ s.at), Values.F32 n)
+          f32_const (n @@ s.at), Value.F32 n)
         (fun s -> let n = F64.of_string s.it in
-          f64_const (n @@ s.at), Values.F64 n))
+          f64_const (n @@ s.at), Value.F64 n))
     }
-  | "funcref" { FUNCREF }
-  | "mut" { MUT }
+  | "ref.null" { REF_NULL }
+  | "ref.func" { REF_FUNC }
+  | "ref.extern" { REF_EXTERN }
+  | "ref.is_null" { REF_IS_NULL }
+  | "ref.as_non_null" { REF_AS_NON_NULL }
 
   | "nop" { NOP }
   | "unreachable" { UNREACHABLE }
   | "drop" { DROP }
   | "block" { BLOCK }
   | "loop" { LOOP }
+  | "let" { LET }
   | "end" { END }
   | "br" { BR }
   | "br_if" { BR_IF }
   | "br_table" { BR_TABLE }
+  | "br_on_null" { BR_ON_NULL }
   | "return" { RETURN }
   | "if" { IF }
   | "then" { THEN }
   | "else" { ELSE }
   | "select" { SELECT }
   | "call" { CALL }
+  | "call_ref" { CALL_REF }
   | "call_indirect" { CALL_INDIRECT }
+  | "return_call_ref" { RETURN_CALL_REF }
+  | "func.bind" { FUNC_BIND }
 
   | "local.get" { LOCAL_GET }
   | "local.set" { LOCAL_SET }
   | "local.tee" { LOCAL_TEE }
   | "global.get" { GLOBAL_GET }
   | "global.set" { GLOBAL_SET }
+
+  | "table.get" { TABLE_GET }
+  | "table.set" { TABLE_SET }
+  | "table.size" { TABLE_SIZE }
+  | "table.grow" { TABLE_GROW }
+  | "table.fill" { TABLE_FILL }
+  | "table.copy" { TABLE_COPY }
+  | "table.init" { TABLE_INIT }
+  | "elem.drop" { ELEM_DROP }
+
+  | "memory.size" { MEMORY_SIZE }
+  | "memory.grow" { MEMORY_GROW }
+  | "memory.fill" { MEMORY_FILL }
+  | "memory.copy" { MEMORY_COPY }
+  | "memory.init" { MEMORY_INIT }
+  | "data.drop" { DATA_DROP }
 
   | (nxx as t)".load"
     { LOAD (fun a o ->
@@ -325,9 +356,6 @@ rule token = parse
   | "i32.reinterpret_f32" { CONVERT i32_reinterpret_f32 }
   | "i64.reinterpret_f64" { CONVERT i64_reinterpret_f64 }
 
-  | "memory.size" { MEMORY_SIZE }
-  | "memory.grow" { MEMORY_GROW }
-
   | "type" { TYPE }
   | "func" { FUNC }
   | "start" { START }
@@ -339,7 +367,9 @@ rule token = parse
   | "memory" { MEMORY }
   | "elem" { ELEM }
   | "data" { DATA }
+  | "declare" { DECLARE }
   | "offset" { OFFSET }
+  | "item" { ITEM }
   | "import" { IMPORT }
   | "export" { EXPORT }
 

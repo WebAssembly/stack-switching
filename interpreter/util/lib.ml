@@ -1,10 +1,14 @@
+type void
+
 module Fun =
 struct
+  let id x = x
+  let flip f x y = f y x
   let curry f x y = f (x, y)
   let uncurry f (x, y) = f x y
 
   let rec repeat n f x =
-    if n = 0 then () else (f x; repeat (n - 1) f x)
+    if n = 0 then x else repeat (n - 1) f (f x)
 end
 
 module Int =
@@ -76,6 +80,13 @@ struct
     | n, _::xs' when n > 0 -> drop (n - 1) xs'
     | _ -> failwith "drop"
 
+  let rec split n xs = split' n [] xs
+  and split' n xs ys =
+    match n, ys with
+    | 0, _ -> List.rev xs, ys
+    | n, y::ys' when n > 0 -> split' (n - 1) (y::xs) ys'
+    | _ -> failwith "split"
+
   let rec last = function
     | x::[] -> x
     | _::xs -> last xs
@@ -137,6 +148,11 @@ struct
     | 0l, _ -> xs
     | n, _::xs' when n > 0l -> drop (Int32.sub n 1l) xs'
     | _ -> failwith "drop"
+
+  let rec mapi f xs = mapi' f 0l xs
+  and mapi' f i = function
+    | [] -> []
+    | x::xs -> f i x :: mapi' f (Int32.add i 1l) xs
 end
 
 module Array32 =
@@ -188,6 +204,11 @@ struct
     | Some y -> y
     | None -> x
 
+  let force o =
+    match o with
+    | Some y -> y
+    | None -> raise (Invalid_argument "Option.force")
+
   let map f = function
     | Some x -> Some (f x)
     | None -> None
@@ -195,4 +216,16 @@ struct
   let app f = function
     | Some x -> f x
     | None -> ()
+end
+
+module Promise =
+struct
+  type 'a t = 'a option ref
+
+  exception Promise
+
+  let make () = ref None
+  let fulfill p x = if !p = None then p := Some x else raise Promise
+  let value_opt p = !p
+  let value p = match !p with Some x -> x | None -> raise Promise
 end
