@@ -228,7 +228,7 @@ let inline_func_type_explicit (c : context) x ft at =
 %token NAN
 %token INPUT OUTPUT
 %token EOF
-%token TRY CATCH THROW
+%token TRY CATCH DO THROW
 
 %token<string> NAT
 %token<string> INT
