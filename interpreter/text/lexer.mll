@@ -387,6 +387,7 @@ rule token = parse
   | "assert_return" { ASSERT_RETURN }
   | "assert_trap" { ASSERT_TRAP }
   | "assert_exhaustion" { ASSERT_EXHAUSTION }
+  | "assert_uncaught" { ASSERT_UNCAUGHT }
   | "nan:canonical" { NAN Script.CanonicalNan }
   | "nan:arithmetic" { NAN Script.ArithmeticNan }
   | "input" { INPUT }
@@ -396,7 +397,6 @@ rule token = parse
   | "catch" { CATCH }
   | "do" { DO }
   | "throw" { THROW }
-  | "assert_uncaught" { ASSERT_UNCAUGHT }
 
   | name as s { VAR s }
 

@@ -270,13 +270,14 @@ let rec instr s =
     end
 
   | 0x05 -> error s pos "misplaced ELSE opcode"
+
   | 0x06 ->
-     let bt = block_type s in
-     let es1 = instr_block s in
-     expect 0x07 s "CATCH opcode expected";
-     let es2 = instr_block s in
-     end_ s;
-     try_ bt es1 es2
+    let bt = block_type s in
+    let es1 = instr_block s in
+    expect 0x07 s "CATCH opcode expected";
+    let es2 = instr_block s in
+    end_ s;
+    try_ bt es1 es2
   | 0x07 -> error s pos "misplaced CATCH opcode"
   | 0x08 -> throw
 
