@@ -730,7 +730,7 @@ try_block_result_body :
       let out' = snd $3 c in
       FuncType (ins, out' @ out), es }
 try_ :
- | LPAR THEN instr_list RPAR LPAR CATCH instr_list RPAR
+ | LPAR DO instr_list RPAR LPAR CATCH instr_list RPAR
    { fun c ->
      let es1, es2 = $3 c, $7 c in
      (es1, es2) }
