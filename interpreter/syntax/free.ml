@@ -123,7 +123,7 @@ let rec instr (e : instr) =
     memories zero
   | MemoryInit x -> memories zero ++ datas (idx x)
   | DataDrop x -> datas (idx x)
-  | Try (_, es1, es2) -> block es1 ++ block es2
+  | Try (bt, es1, es2) -> block_type bt ++ block es1 ++ block es2
   | Throw -> empty
 
 and block (es : instr list) =
