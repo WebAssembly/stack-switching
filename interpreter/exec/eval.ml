@@ -534,7 +534,7 @@ let rec step (c : config) : config =
         let FuncType (ts1, ts2) = block_type c.frame.inst bt e.at in
         let n1 = List.length ts1 in
         let n2 = List.length ts2 in
-        let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+        let args, vs' = split n1 vs e.at in
         vs', [Catch (n2, es2, ([], [Label (n2, [], (args, List.map plain es1)) @@ e.at])) @@ e.at]
 
       | Throw, vs ->
