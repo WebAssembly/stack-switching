@@ -448,7 +448,7 @@ let run_assertion ass =
     )
 
   | AssertUncaught (act, re) ->
-    trace ("Asserting trap...");
+    trace ("Asserting exception...");
     (match run_action act with
     | exception Eval.Uncaught (_, msg) -> assert_message ass.at "runtime" msg re
     | _ -> Assert.error ass.at "expected runtime error"
