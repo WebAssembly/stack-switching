@@ -290,7 +290,7 @@ let rec instr e =
     | Convert op -> cvtop op, []
     | Try (bt, es1, es2) ->
       "try", block_type bt @
-               [Node ("then", list instr es1); Node ("catch", list instr es2)]
+        [Node ("do", list instr es1); Node ("catch", list instr es2)]
     | Throw -> "throw", []
   in Node (head, inner)
 
