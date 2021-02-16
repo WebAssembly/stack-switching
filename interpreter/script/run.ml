@@ -451,7 +451,7 @@ let run_assertion ass =
     trace ("Asserting exception...");
     (match run_action act with
     | exception Eval.Uncaught (_, msg) -> assert_message ass.at "runtime" msg re
-    | _ -> Assert.error ass.at "expected runtime error"
+    | _ -> Assert.error ass.at "expected exception"
     )
 
 let rec run_command cmd =
