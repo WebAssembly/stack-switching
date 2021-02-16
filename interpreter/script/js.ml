@@ -192,7 +192,7 @@ function assert_return(action, ...expected) {
 
 function assert_uncaught(action) {
   try { action() } catch (e) {
-    if (e instanceof WebAssembly.RuntimeError) return;
+    if (!(e instanceof WebAssembly.RuntimeError)) return;
   }
   throw new Error("Wasm uncaught exception expected");
 }
