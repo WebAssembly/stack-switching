@@ -270,7 +270,17 @@ let rec instr s =
     end
 
   | 0x05 -> error s pos "misplaced ELSE opcode"
-  | 0x06| 0x07 | 0x08 | 0x09 | 0x0a as b -> illegal s pos b
+  | 0x06 ->
+     let bt = block_type s in
+     let es1 = instr_block s in
+     expect 0x07 s "CATCH opcode expected";
+     let es2 = instr_block s in
+     end_ s;
+     try_ bt es1 es2
+  | 0x07 -> error s pos "misplaced CATCH opcode"
+  | 0x08 -> throw
+
+  | 0x09 | 0x0a as b -> illegal s pos b
   | 0x0b -> error s pos "misplaced END opcode"
 
   | 0x0c -> br (at var s)
@@ -538,7 +548,7 @@ let rec instr s =
 and instr_block s = List.rev (instr_block' s [])
 and instr_block' s es =
   match peek s with
-  | None | Some (0x05 | 0x0b) -> es
+  | None | Some (0x05 | 0x07 | 0x0b) -> es
   | _ ->
     let pos = pos s in
     let e' = instr s in
