@@ -392,6 +392,11 @@ rule token = parse
   | "input" { INPUT }
   | "output" { OUTPUT }
 
+  | "try" { TRY }
+  | "catch" { CATCH }
+  | "do" { DO }
+  | "throw" { THROW }
+
   | name as s { VAR s }
 
   | ";;"utf8_no_nl*eof { EOF }
