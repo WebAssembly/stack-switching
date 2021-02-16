@@ -646,6 +646,9 @@ let rec step (c : config) : config =
     | Catch (n, es1, (_, {it = Throwing; _} :: _)), vs ->
       vs, [Label (n, [], ([], List.map plain es1)) @@ e.at]
 
+    | Catch (_, _, (vs', [])), vs ->
+      vs' @ vs, []
+
     | Catch (n, es', code'), vs ->
       let c' = step {c with code = code'} in
       vs, [Catch (n, es', c'.code) @@ e.at]
