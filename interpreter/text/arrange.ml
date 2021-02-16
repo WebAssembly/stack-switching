@@ -538,6 +538,8 @@ let assertion mode ass =
     [Node ("assert_trap", [action mode act; Atom (string re)])]
   | AssertExhaustion (act, re) ->
     [Node ("assert_exhaustion", [action mode act; Atom (string re)])]
+  | AssertUncaught (act, re) ->
+    [Node ("assert_uncaught", [action mode act; Atom (string re)])]
 
 let command mode cmd =
   match cmd.it with

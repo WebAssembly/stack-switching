@@ -228,7 +228,7 @@ let inline_func_type_explicit (c : context) x ft at =
 %token NAN
 %token INPUT OUTPUT
 %token EOF
-%token TRY CATCH DO THROW
+%token TRY CATCH DO THROW ASSERT_UNCAUGHT
 
 %token<string> NAT
 %token<string> INT
@@ -1207,6 +1207,7 @@ assertion :
   | LPAR ASSERT_RETURN action result_list RPAR { AssertReturn ($3, $4) @@ at () }
   | LPAR ASSERT_TRAP action STRING RPAR { AssertTrap ($3, $4) @@ at () }
   | LPAR ASSERT_EXHAUSTION action STRING RPAR { AssertExhaustion ($3, $4) @@ at () }
+  | LPAR ASSERT_UNCAUGHT action STRING RPAR { AssertUncaught ($3, $4) @@ at () }
 
 cmd :
   | action { Action $1 @@ at () }

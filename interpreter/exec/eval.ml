@@ -17,6 +17,7 @@ exception Link = Link.Error
 exception Trap = Trap.Error
 exception Crash = Crash.Error (* failure that cannot happen in valid code *)
 exception Exhaustion = Exhaustion.Error
+exception Uncaught = Uncaught.Error
 
 let table_error at = function
   | Table.Bounds -> "out of bounds table access"

@@ -396,6 +396,7 @@ rule token = parse
   | "catch" { CATCH }
   | "do" { DO }
   | "throw" { THROW }
+  | "assert_uncaught" { ASSERT_UNCAUGHT }
 
   | name as s { VAR s }
 
