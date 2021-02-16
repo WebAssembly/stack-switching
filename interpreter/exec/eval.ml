@@ -642,7 +642,7 @@ let rec step (c : config) : config =
     | Catch (_, _, (_, ({it = Trapping _ | Breaking _ | Returning _; _} as e) :: _)), vs ->
       vs, [e]
 
-    | Catch (n, es1, (_, { it = Throwing; at} :: _)), vs ->
+    | Catch (n, es1, (_, {it = Throwing; _} :: _)), vs ->
       let exn = [] in
       vs, [Label (n, [], (exn, List.map plain es1)) @@ e.at]
 
