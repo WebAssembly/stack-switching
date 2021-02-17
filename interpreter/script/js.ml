@@ -136,6 +136,13 @@ function assert_trap(action) {
   throw new Error("Wasm trap expected");
 }
 
+function assert_exception(action) {
+  try { action() } catch (e) {
+    if (!(e instanceof WebAssembly.RuntimeError)) return;
+  }
+  throw new Error("Wasm exception expected");
+}
+
 let StackOverflow;
 try { (function f() { 1 + f() })() } catch (e) { StackOverflow = e.constructor }
 
@@ -188,13 +195,6 @@ function assert_return(action, ...expected) {
         };
     }
   }
-}
-
-function assert_uncaught(action) {
-  try { action() } catch (e) {
-    if (!(e instanceof WebAssembly.RuntimeError)) return;
-  }
-  throw new Error("Wasm uncaught exception expected");
 }
 |}
 
@@ -534,10 +534,10 @@ let of_assertion mods ass =
       (Some (assert_return ress))
   | AssertTrap (act, _) ->
     of_assertion' mods act "assert_trap" [] None
+  | AssertException (act, _) ->
+    of_assertion' mods act "assert_exception" [] None
   | AssertExhaustion (act, _) ->
     of_assertion' mods act "assert_exhaustion" [] None
-  | AssertUncaught (act, _) ->
-    of_assertion' mods act "assert_uncaught" [] None
 
 let of_command mods cmd =
   "\n// " ^ Filename.basename cmd.at.left.file ^

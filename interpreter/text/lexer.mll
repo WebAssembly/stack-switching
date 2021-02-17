@@ -208,6 +208,12 @@ rule token = parse
   | "return_call_ref" { RETURN_CALL_REF }
   | "func.bind" { FUNC_BIND }
 
+  | "throw" { THROW }
+  | "try" { TRY }
+  | "do" { DO }
+  | "catch" { CATCH }
+  | "catch_all" { CATCH_ALL }
+
   | "local.get" { LOCAL_GET }
   | "local.set" { LOCAL_SET }
   | "local.tee" { LOCAL_TEE }
@@ -365,6 +371,8 @@ rule token = parse
   | "global" { GLOBAL }
   | "table" { TABLE }
   | "memory" { MEMORY }
+  | "event" { EVENT }
+  | "exception" { EXCEPTION }
   | "elem" { ELEM }
   | "data" { DATA }
   | "declare" { DECLARE }
@@ -386,17 +394,12 @@ rule token = parse
   | "assert_unlinkable" { ASSERT_UNLINKABLE }
   | "assert_return" { ASSERT_RETURN }
   | "assert_trap" { ASSERT_TRAP }
+  | "assert_exception" { ASSERT_EXCEPTION }
   | "assert_exhaustion" { ASSERT_EXHAUSTION }
-  | "assert_uncaught" { ASSERT_UNCAUGHT }
   | "nan:canonical" { NAN Script.CanonicalNan }
   | "nan:arithmetic" { NAN Script.ArithmeticNan }
   | "input" { INPUT }
   | "output" { OUTPUT }
-
-  | "try" { TRY }
-  | "catch" { CATCH }
-  | "do" { DO }
-  | "throw" { THROW }
 
   | name as s { VAR s }
 

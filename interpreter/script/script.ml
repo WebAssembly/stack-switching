@@ -33,8 +33,8 @@ and assertion' =
   | AssertUninstantiable of definition * string
   | AssertReturn of action * result list
   | AssertTrap of action * string
+  | AssertException of action * string
   | AssertExhaustion of action * string
-  | AssertUncaught of action * string
 
 type command = command' Source.phrase
 and command' =

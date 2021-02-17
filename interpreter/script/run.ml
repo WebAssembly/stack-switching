@@ -110,9 +110,9 @@ let input_from get_script run =
   | Import.Unknown (at, msg) -> error at "link failure" msg
   | Eval.Link (at, msg) -> error at "link failure" msg
   | Eval.Trap (at, msg) -> error at "runtime trap" msg
+  | Eval.Exception (at, msg) -> error at "runtime exception" msg
   | Eval.Exhaustion (at, msg) -> error at "resource exhaustion" msg
   | Eval.Crash (at, msg) -> error at "runtime crash" msg
-  | Eval.Uncaught (at, msg) -> error at "runtime uncaught" msg
   | Encode.Code (at, msg) -> error at "encoding error" msg
   | Script.Error (at, msg) -> error at "script error" msg
   | IO (at, msg) -> error at "i/o error" msg
@@ -439,19 +439,19 @@ let run_assertion ass =
     | _ -> Assert.error ass.at "expected runtime error"
     )
 
+  | AssertException (act, re) ->
+    trace ("Asserting exception...");
+    (match run_action act with
+    | exception Eval.Exception (_, msg) -> assert_message ass.at "runtime" msg re
+    | _ -> Assert.error ass.at "expected exception"
+    )
+
   | AssertExhaustion (act, re) ->
     trace ("Asserting exhaustion...");
     (match run_action act with
     | exception Eval.Exhaustion (_, msg) ->
       assert_message ass.at "exhaustion" msg re
     | _ -> Assert.error ass.at "expected exhaustion error"
-    )
-
-  | AssertUncaught (act, re) ->
-    trace ("Asserting exception...");
-    (match run_action act with
-    | exception Eval.Uncaught (_, msg) -> assert_message ass.at "runtime" msg re
-    | _ -> Assert.error ass.at "expected exception"
     )
 
 let rec run_command cmd =

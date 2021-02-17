@@ -128,6 +128,13 @@ let encode m =
     let memory_type = function
       | MemoryType lim -> limits vu32 lim
 
+    let resumability = function
+      | Terminal -> u8 0
+      | Resumable -> u8 1
+
+    let event_type = function
+      | EventType (ft, res) -> resumability res; func_type ft  (* TODO *)
+
     let mutability = function
       | Immutable -> u8 0
       | Mutable -> u8 1
@@ -178,6 +185,15 @@ let encode m =
         list instr es2; end_ ()
       | Let (bt, locs, es) ->
         op 0x17; block_type bt; locals locs; list instr es; end_ ()
+
+      | Try (bt, es1, xo, es2) ->
+        op 0x06; block_type bt; list instr es1;
+        (match xo with
+        | Some x -> op 0x07; var x
+        | None -> op 0x19
+        );
+        list instr es2; end_ ()
+      | Throw x -> op 0x08; var x
 
       | Br x -> op 0x0c; var x
       | BrIf x -> op 0x0d; var x
@@ -428,11 +444,6 @@ let encode m =
       | Convert (F64 F64Op.DemoteF64) -> assert false
       | Convert (F64 F64Op.ReinterpretInt) -> op 0xbf
 
-      | Try (bt, es1, es2) ->
-        op 0x06; block_type bt; list instr es1;
-        op 0x07; list instr es2; end_ ()
-      | Throw -> op 0x08
-
     let const c =
       list instr c.it; end_ ()
 
@@ -460,6 +471,7 @@ let encode m =
       | TableImport t -> u8 0x01; table_type t
       | MemoryImport t -> u8 0x02; memory_type t
       | GlobalImport t -> u8 0x03; global_type t
+      | EventImport t -> u8 0x04; event_type t
 
     let import im =
       let {module_name; item_name; idesc} = im.it in
@@ -498,6 +510,14 @@ let encode m =
     let global_section gs =
       section 6 (vec global) gs (gs <> [])
 
+    (* Event section *)
+    let event evt =
+      let {evtype} = evt.it in
+      event_type evtype
+
+    let event_section es =
+      section 13 (vec event) es (es <> [])
+
     (* Export section *)
     let export_desc d =
       match d.it with
@@ -505,6 +525,7 @@ let encode m =
       | TableExport x -> u8 1; var x
       | MemoryExport x -> u8 2; var x
       | GlobalExport x -> u8 3; var x
+      | EventExport x -> u8 4; var x
 
     let export ex =
       let {name = n; edesc} = ex.it in
@@ -605,6 +626,7 @@ let encode m =
       func_section m.it.funcs;
       table_section m.it.tables;
       memory_section m.it.memories;
+      event_section m.it.events;
       global_section m.it.globals;
       export_section m.it.exports;
       start_section m.it.start;

@@ -23,6 +23,9 @@ let loop bt es = Loop (bt, es)
 let if_ bt es1 es2 = If (bt, es1, es2)
 let let_ bt ts es = Let (bt, ts, es)
 
+let try_ bt es1 xo es2 = Try (bt, es1, xo, es2)
+let throw x = Throw x
+
 let br x = Br x
 let br_if x = BrIf x
 let br_table xs x = BrTable (xs, x)
@@ -238,6 +241,3 @@ let i32_reinterpret_f32 = Convert (I32 I32Op.ReinterpretFloat)
 let i64_reinterpret_f64 = Convert (I64 I64Op.ReinterpretFloat)
 let f32_reinterpret_i32 = Convert (F32 F32Op.ReinterpretInt)
 let f64_reinterpret_i64 = Convert (F64 F64Op.ReinterpretInt)
-
-let try_ bt es1 es2 = Try (bt, es1, es2)
-let throw = Throw
