@@ -275,9 +275,7 @@ let rec instr e =
     | ContNew x -> "cont.new", [Node ("type " ^ var x, [])]
     | ContResume xys ->
       "cont.resume",
-      List.concat_map (fun (x, y) ->
-        [Node ("event " ^ var x, []); Atom (var y)]
-      ) xys
+      List.map (fun (x, y) -> [Node ("event " ^ var x ^ " " ^ var y, [])]) xys
     | ContSuspend x -> "cont.suspend", [Node ("event" ^ var x, [])]
     | ContThrow x -> "cont.throw", [Node ("exception" ^ var x, [])]
     | LocalGet x -> "local.get " ^ var x, []
