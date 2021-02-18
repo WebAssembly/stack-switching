@@ -63,6 +63,7 @@ and admin_instr' =
   | Invoke of func_inst
   | Trapping of string
   | Throwing of event_inst * value stack
+  | Suspending of event_inst * value stack * admin_instr
   | Returning of value stack
   | ReturningInvoke of value stack * func_inst
   | Breaking of int32 * value stack
@@ -70,6 +71,12 @@ and admin_instr' =
   | Local of int * value list * code
   | Frame of int * frame * code
   | Catch of int * event_inst option * instr list * code
+  | Resume of (event_inst * idx) list * code
+  | Hole
+
+type cont = int * code
+
+type ref_ += ContRef of cont
 
 type config =
 {
@@ -129,6 +136,23 @@ let drop n (vs : 'a stack) at =
   try Lib.List.drop n vs with Failure _ -> Crash.error at "stack underflow"
 
 let split n (vs : 'a stack) at = take n vs at, drop n vs at
+
+let compose (vs1, es1) (vs2, es2) = vs1 @ vs2, es1 @ es2
+let rec plug c (vs, es) =
+  match es with
+  | {it = Label (n, es, c'); at} :: es' ->
+    vs, (Label (n, es, plug c c') @@ at) :: es'
+  | {it = Local (n, vs, c'); at} :: es' ->
+    vs, (Local (n, vs, plug c c') @@ at) :: es'
+  | {it = Frame (n, frame, c'); at} :: es' ->
+    vs, (Frame (n, frame, plug c c') @@ at) :: es'
+  | {it = Catch (n, evo, es, c'); at} :: es' ->
+    vs, (Catch (n, evo, es, plug c c') @@ at) :: es'
+  | {it = Resume (hs, c'); at} :: es' ->
+    vs, (Resume (hs, plug c c') @@ at) :: es'
+  | {it = Hole; at} :: es' ->
+    compose c (vs, es')
+  | _ -> assert false
 
 
 (* Evaluation *)
@@ -209,7 +233,10 @@ let rec step (c : config) : config =
         vs', [Catch (n2, exno, es2, ([], [Label (n2, [], (args, List.map plain es1)) @@ e.at])) @@ e.at]
 
       | Throw x, vs ->
-        [], [Throwing (event c.frame.inst x, vs) @@ e.at]
+        let evt = event c.frame.inst x in
+        let EventType (FuncType (ts, _), _) = Event.type_of evt in
+        let vs0, vs' = split (List.length ts) vs e.at in
+        vs', [Throwing (evt, vs0) @@ e.at]
 
       | Br x, vs ->
         [], [Breaking (x.it, vs) @@ e.at]
@@ -277,6 +304,37 @@ let rec step (c : config) : config =
         in
         let f' = Func.alloc_closure (type_ c.frame.inst x) f args in
         Ref (FuncRef f') :: vs', []
+
+      | ContNew x, Ref (NullRef _) :: vs ->
+        vs, [Trapping "null function reference" @@ e.at]
+
+      | ContNew x, Ref (FuncRef f) :: vs ->
+        let FuncType (ts, _) = Func.type_of f in
+        Ref (ContRef (List.length ts, ([], [Invoke f @@ e.at]))) :: vs, []
+
+      | ContSuspend x, vs ->
+        let evt = event c.frame.inst x in
+        let EventType (FuncType (ts, _), _) = Event.type_of evt in
+        let vs0, vs' = split (List.length ts) vs e.at in
+        vs', [Suspending (evt, vs0, Hole @@ e.at) @@ e.at]
+
+      | ContThrow x, Ref (NullRef _) :: vs ->
+        vs, [Trapping "null continuation reference" @@ e.at]
+
+      | ContThrow x, Ref (ContRef (n, code)) :: vs ->
+        let evt = event c.frame.inst x in
+        let EventType (FuncType (ts, _), _) = Event.type_of evt in
+        let vs0, vs' = split (List.length ts) vs e.at in
+        let vs1', es1' = plug (vs0, [Plain (Throw x) @@ e.at]) code in
+        vs1' @ vs', es1'
+
+      | ContResume xls, Ref (NullRef _) :: vs ->
+        vs, [Trapping "null continuation reference" @@ e.at]
+
+      | ContResume xls, Ref (ContRef (n, code)) :: vs ->
+        let hs = List.map (fun (x, l) -> event c.frame.inst x, l) xls in
+        let vs0, vs' = split n vs e.at in
+        vs', [Resume (hs, plug (vs0, []) code) @@ e.at]
 
       | Drop, v :: vs' ->
         vs', []
@@ -557,6 +615,9 @@ let rec step (c : config) : config =
     | Label (n, es0, (vs', [])), vs ->
       vs' @ vs, []
 
+    | Label (n, es0, (vs', {it = Suspending (evt, vs1, e1); at} :: es')), vs ->
+      vs, [Suspending (evt, vs1, Label (n, es0, (vs', e1 :: es')) @@ e.at) @@ at]
+
     | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es')), vs ->
       take n vs0 e.at @ vs, List.map plain es0
 
@@ -573,6 +634,9 @@ let rec step (c : config) : config =
     | Local (n, vs0, (vs', [])), vs ->
       vs' @ vs, []
 
+    | Local (n, vs0, (vs', {it = Suspending (evt, vs1, e1); at} :: es')), vs ->
+      vs, [Suspending (evt, vs1, Local (n, vs0, (vs', e1 :: es')) @@ e.at) @@ at]
+
     | Local (n, vs0, (vs', e' :: es')), vs when is_jumping e' ->
       vs, [e']
 
@@ -584,6 +648,9 @@ let rec step (c : config) : config =
 
     | Frame (n, frame', (vs', [])), vs ->
       vs' @ vs, []
+
+    | Frame (n, frame', (vs', {it = Suspending (evt, vs1, e1); at} :: es')), vs ->
+      vs, [Suspending (evt, vs1, Frame (n, frame', (vs', e1 :: es')) @@ e.at) @@ at]
 
     | Frame (n, frame', (vs', {it = Returning vs0; at} :: es')), vs ->
       take n vs0 e.at @ vs, []
@@ -630,14 +697,15 @@ let rec step (c : config) : config =
     | Catch (n, exno, es0, (vs', [])), vs ->
       vs' @ vs, []
 
+    | Catch (n, exno, es0, (vs', {it = Suspending (evt, vs1, e1); at} :: es')), vs ->
+      vs, [Suspending (evt, vs1, Catch (n, exno, es0, (vs', e1 :: es')) @@ e.at) @@ at]
+
     | Catch (n, None, es0, (vs', {it = Throwing (exn, vs0); at} :: _)), vs ->
       vs, [Label (n, [], ([], List.map plain es0)) @@ e.at]
 
     | Catch (n, Some exn, es0, (vs', {it = Throwing (exn0, vs0); at} :: _)), vs
       when exn0 == exn ->
-      let EventType (FuncType (ts, _), _) = Event.type_of exn in
-      let n' = List.length ts in
-      vs, [Label (n, [], (take n' vs0 at, List.map plain es0)) @@ e.at]
+      vs, [Label (n, [], (vs0, List.map plain es0)) @@ e.at]
 
     | Catch (n, exno, es0, (vs', e' :: es')), vs when is_jumping e' ->
       vs, [e']
@@ -646,6 +714,22 @@ let rec step (c : config) : config =
       let c' = step {c with code = code'} in
       vs, [Catch (n, exno, es0, c'.code) @@ e.at]
 
+    | Resume (hs, (vs', [])), vs ->
+      vs' @ vs, []
+
+    | Resume (hs, (vs', {it = Suspending (evt, vs1, e1); at} :: es')), vs
+      when List.mem_assq evt hs ->
+      let EventType (FuncType (_, ts), _) = Event.type_of evt in
+      [Ref (ContRef (List.length ts, (vs', e1 :: es')))] @ vs1 @ vs,
+      [Plain (Br (List.assq evt hs)) @@ e.at]
+
+    | Resume (hs, (vs', e' :: es')), vs when is_jumping e' ->
+      vs, [e']
+
+    | Resume (hs, code'), vs ->
+      let c' = step {c with code = code'} in
+      vs, [Resume (hs, c'.code) @@ e.at]
+
     | Returning _, vs
     | ReturningInvoke _, vs ->
       Crash.error e.at "undefined frame"
@@ -653,8 +737,10 @@ let rec step (c : config) : config =
     | Breaking (k, vs'), vs ->
       Crash.error e.at "undefined label"
 
-    | Trapping _, vs
-    | Throwing _, vs ->
+    | Trapping _, _
+    | Throwing _, _
+    | Suspending _, _
+    | Hole, _ ->
       assert false
 
   in {c with code = vs', es' @ List.tl es}
@@ -669,7 +755,10 @@ let rec eval (c : config) : value stack =
     Trap.error at msg
 
   | vs, {it = Throwing _; at} :: _ ->
-    Exception.error at "uncaught exception"
+    Exception.error at "unhandled exception"
+
+  | vs, {it = Suspending _; at} :: _ ->
+    Exception.error at "unhandled event"
 
   | vs, es ->
     eval (step c)

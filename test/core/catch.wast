@@ -82,5 +82,5 @@
 (assert_return (invoke "catch-4") (i32.const 66))
 (assert_return (invoke "success-0") (i32.const 0))
 (assert_return (invoke "success-1") (i32.const 1))
-(assert_exception (invoke "uncaught-1") "uncaught exception")
-(assert_exception (invoke "uncaught-2") "uncaught exception")
+(assert_exception (invoke "uncaught-1") "unhandled")
+(assert_exception (invoke "uncaught-2") "unhandled")
