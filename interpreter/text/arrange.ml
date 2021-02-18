@@ -55,6 +55,7 @@ let break_string s =
 
 (* Types *)
 
+let var_type t = string_of_var t
 let num_type t = string_of_num_type t
 let ref_type t = string_of_ref_type t
 let heap_type t = string_of_heap_type t
@@ -65,9 +66,13 @@ let decls kind ts = tab kind (atom value_type) ts
 let func_type (FuncType (ins, out)) =
   Node ("func", decls "param" ins @ decls "result" out)
 
+let cont_type (ContType x) =
+  Node ("cont", [Atom (var_type x)])
+
 let def_type dt =
   match dt with
   | FuncDefType ft -> func_type ft
+  | ContDefType ct -> cont_type ct
 
 let resumability = function
   | Terminal -> " exception"
@@ -267,6 +272,14 @@ let rec instr e =
       "call_indirect " ^ var x, [Node ("type " ^ var y, [])]
     | ReturnCallRef -> "return_call_ref", []
     | FuncBind x -> "func.bind", [Node ("type " ^ var x, [])]
+    | ContNew x -> "cont.new", [Node ("type " ^ var x, [])]
+    | ContResume xys ->
+      "cont.resume",
+      List.concat_map (fun (x, y) ->
+        [Node ("event " ^ var x, []); Atom (var y)]
+      ) xys
+    | ContSuspend x -> "cont.suspend", [Node ("event" ^ var x, [])]
+    | ContThrow x -> "cont.throw", [Node ("exception" ^ var x, [])]
     | LocalGet x -> "local.get " ^ var x, []
     | LocalSet x -> "local.set " ^ var x, []
     | LocalTee x -> "local.tee " ^ var x, []

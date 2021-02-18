@@ -144,6 +144,7 @@ let label (c : context) x = lookup "label " c.labels x
 let func_type (c : context) x =
   match (Lib.List32.nth c.types.list x.it).it with
   | FuncDefType ft -> ft
+  | _ -> error x.at ("non-function type " ^ Int32.to_string x.it)
   | exception Failure _ -> error x.at ("unknown type " ^ Int32.to_string x.it)
 
 

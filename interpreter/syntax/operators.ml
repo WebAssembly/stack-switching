@@ -38,6 +38,11 @@ let call_indirect x y = CallIndirect (x, y)
 let return_call_ref = ReturnCallRef
 let func_bind x = FuncBind x
 
+let cont_new x = ContNew x
+let cont_suspend x = ContSuspend x
+let cont_throw x = ContThrow x
+let cont_resume xys = ContResume xys
+
 let local_get x = LocalGet x
 let local_set x = LocalSet x
 let local_tee x = LocalTee x

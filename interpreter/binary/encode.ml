@@ -91,6 +91,10 @@ let encode m =
 
     open Types
 
+    let var_type = function
+      | SynVar x -> vs33 x
+      | SemVar _ -> assert false
+
     let num_type = function
       | I32Type -> vs7 (-0x01)
       | I64Type -> vs7 (-0x02)
@@ -100,8 +104,7 @@ let encode m =
     let heap_type = function
       | FuncHeapType -> vs7 (-0x10)
       | ExternHeapType -> vs7 (-0x11)
-      | DefHeapType (SynVar x) -> vs33 x
-      | DefHeapType (SemVar _) -> assert false
+      | DefHeapType x -> var_type x
       | BotHeapType -> assert false
 
     let ref_type = function
@@ -118,6 +121,9 @@ let encode m =
     let func_type = function
       | FuncType (ts1, ts2) ->
         vs7 (-0x20); vec value_type ts1; vec value_type ts2
+
+    let cont_type = function
+      | ContType x -> vs7 (-0x21); var_type x
 
     let limits vu {min; max} =
       bool (max <> None); vu min; opt vu max
@@ -144,6 +150,7 @@ let encode m =
 
     let def_type = function
       | FuncDefType ft -> func_type ft
+      | ContDefType ct -> cont_type ct
 
 
     (* Expressions *)
@@ -158,6 +165,7 @@ let encode m =
     let memop {align; offset; _} = vu32 (Int32.of_int align); vu32 offset
 
     let var x = vu32 x.it
+    let var_pair (x, y) = var x; var y
 
     let block_type = function
       | ValBlockType None -> vs33 (-0x40l)
@@ -205,6 +213,11 @@ let encode m =
       | CallIndirect (x, y) -> op 0x11; var y; var x
       | ReturnCallRef -> op 0x15
       | FuncBind x -> op 0x16; var x
+
+      | ContNew x -> op 0xe0; var x
+      | ContSuspend x -> op 0xe1; var x
+      | ContThrow x -> op 0xe2; var x
+      | ContResume xls -> op 0xe3; vec var_pair xls
 
       | Drop -> op 0x1a
       | Select None -> op 0x1b
