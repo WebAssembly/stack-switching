@@ -10,6 +10,7 @@ type t =
   globals : Set.t;
   tables : Set.t;
   memories : Set.t;
+  events : Set.t;
   funcs : Set.t;
   elems : Set.t;
   datas : Set.t;
@@ -23,6 +24,7 @@ let empty : t =
   globals = Set.empty;
   tables = Set.empty;
   memories = Set.empty;
+  events = Set.empty;
   funcs = Set.empty;
   elems = Set.empty;
   datas = Set.empty;
@@ -36,6 +38,7 @@ let union (s1 : t) (s2 : t) : t =
   globals = Set.union s1.globals s2.globals;
   tables = Set.union s1.tables s2.tables;
   memories = Set.union s1.memories s2.memories;
+  events = Set.union s1.events s2.events;
   funcs = Set.union s1.funcs s2.funcs;
   elems = Set.union s1.elems s2.elems;
   datas = Set.union s1.datas s2.datas;
@@ -47,6 +50,7 @@ let types s = {empty with types = s}
 let globals s = {empty with globals = s}
 let tables s = {empty with tables = s}
 let memories s = {empty with memories = s}
+let events s = {empty with events = s}
 let funcs s = {empty with funcs = s}
 let elems s = {empty with elems = s}
 let datas s = {empty with datas = s}
@@ -59,6 +63,7 @@ let zero = Set.singleton 0l
 let shift s = Set.map (Int32.add (-1l)) (Set.remove 0l s)
 
 let (++) = union
+let opt free xo = Lib.Option.get (Option.map free xo) empty
 let list free xs = List.fold_left union empty (List.map free xs)
 
 let var_type = function
@@ -89,6 +94,7 @@ let func_type (FuncType (ins, out)) =
 let global_type (GlobalType (t, _mut)) = value_type t
 let table_type (TableType (_lim, t)) = ref_type t
 let memory_type (MemoryType (_lim)) = empty
+let event_type (EventType (ft, _res)) = func_type ft
 
 let def_type = function
   | FuncDefType ft -> func_type ft
@@ -106,6 +112,9 @@ let rec instr (e : instr) =
   | Let (bt, ts, es) ->
     let free = block_type bt ++ block es in
     {free with locals = Lib.Fun.repeat (List.length ts) shift free.locals}
+  | Try (bt, es1, xo, es2) ->
+    block_type bt ++ block es1 ++ opt (fun x -> events (idx x)) xo ++ block es2
+  | Throw x -> events (idx x)
   | Br x | BrIf x | BrOnNull x -> labels (idx x)
   | BrTable (xs, x) -> list (fun x -> labels (idx x)) (x::xs)
   | Return | CallRef | ReturnCallRef -> empty
@@ -123,8 +132,6 @@ let rec instr (e : instr) =
     memories zero
   | MemoryInit x -> memories zero ++ datas (idx x)
   | DataDrop x -> datas (idx x)
-  | Try (bt, es1, es2) -> block_type bt ++ block es1 ++ block es2
-  | Throw -> empty
 
 and block (es : instr list) =
   let free = list instr es in {free with labels = shift free.labels}
@@ -136,6 +143,7 @@ let func (f : func) =
   {(types (idx f.it.ftype) ++ block f.it.body) with locals = Set.empty}
 let table (t : table) = table_type t.it.ttype
 let memory (m : memory) = memory_type m.it.mtype
+let event (e : event) = event_type e.it.evtype
 
 let segment_mode f (m : segment_mode) =
   match m.it with
@@ -156,6 +164,7 @@ let export_desc (d : export_desc) =
   | TableExport x -> tables (idx x)
   | MemoryExport x -> memories (idx x)
   | GlobalExport x -> globals (idx x)
+  | EventExport x -> events (idx x)
 
 let import_desc (d : import_desc) =
   match d.it with
@@ -163,6 +172,7 @@ let import_desc (d : import_desc) =
   | TableImport tt -> table_type tt
   | MemoryImport mt -> memory_type mt
   | GlobalImport gt -> global_type gt
+  | EventImport et -> event_type et
 
 let export (e : export) = export_desc e.it.edesc
 let import (i : import) = import_desc i.it.idesc
@@ -175,6 +185,7 @@ let module_ (m : module_) =
   list global m.it.globals ++
   list table m.it.tables ++
   list memory m.it.memories ++
+  list event m.it.events ++
   list func m.it.funcs ++
   start m.it.start ++
   list elem m.it.elems ++

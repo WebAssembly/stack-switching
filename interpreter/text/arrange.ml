@@ -69,6 +69,10 @@ let def_type dt =
   match dt with
   | FuncDefType ft -> func_type ft
 
+let resumability = function
+  | Terminal -> " exception"
+  | Resumable -> ""
+
 let limits nat {min; max} =
   String.concat " " (nat min :: opt nat max)
 
@@ -245,6 +249,12 @@ let rec instr e =
     | Let (bt, locals, es) ->
       "let", block_type bt @ decls "local" (List.map Source.it locals) @
         list instr es
+    | Try (bt, es1, xo, es2) ->
+      let catch =
+        match xo with Some x -> "catch " ^ var x | None -> "catch_all" in
+      "try", block_type bt @
+        [Node ("do", list instr es1); Node (catch, list instr es2)]
+    | Throw x -> "throw " ^ var x, []
     | Br x -> "br " ^ var x, []
     | BrIf x -> "br_if " ^ var x, []
     | BrTable (xs, x) ->
@@ -288,10 +298,6 @@ let rec instr e =
     | Unary op -> unop op, []
     | Binary op -> binop op, []
     | Convert op -> cvtop op, []
-    | Try (bt, es1, es2) ->
-      "try", block_type bt @
-        [Node ("do", list instr es1); Node ("catch", list instr es2)]
-    | Throw -> "throw", []
   in Node (head, inner)
 
 let const head c =
@@ -330,6 +336,12 @@ let table off i tab =
 let memory off i mem =
   let {mtype = MemoryType lim} = mem.it in
   Node ("memory $" ^ nat (off + i) ^ " " ^ limits nat32 lim, [])
+
+let event off i evt =
+  let {evtype = EventType (FuncType (ins, out), res)} = evt.it in
+  Node ("event $" ^ nat (off + i) ^ resumability res,
+    decls "param" ins @ decls "result" out
+  )
 
 let is_elem_kind = function
   | (NonNullable, FuncHeapType) -> true
@@ -377,7 +389,7 @@ let data i seg =
 let type_ i ty =
   Node ("type $" ^ nat i, [def_type ty.it])
 
-let import_desc fx tx mx gx d =
+let import_desc fx tx mx ex gx d =
   match d.it with
   | FuncImport x ->
     incr fx; Node ("func $" ^ nat (!fx - 1), [Node ("type", [atom var x])])
@@ -385,13 +397,15 @@ let import_desc fx tx mx gx d =
     incr tx; table 0 (!tx - 1) ({ttype = t} @@ d.at)
   | MemoryImport t ->
     incr mx; memory 0 (!mx - 1) ({mtype = t} @@ d.at)
+  | EventImport t ->
+    incr ex; event 0 (!ex - 1) ({evtype = t} @@ d.at)
   | GlobalImport t ->
     incr gx; Node ("global $" ^ nat (!gx - 1), [global_type t])
 
-let import fx tx mx gx im =
+let import fx tx mx ex gx im =
   let {module_name; item_name; idesc} = im.it in
   Node ("import",
-    [atom name module_name; atom name item_name; import_desc fx tx mx gx idesc]
+    [atom name module_name; atom name item_name; import_desc fx tx mx ex gx idesc]
   )
 
 let export_desc d =
@@ -400,6 +414,7 @@ let export_desc d =
   | TableExport x -> Node ("table", [atom var x])
   | MemoryExport x -> Node ("memory", [atom var x])
   | GlobalExport x -> Node ("global", [atom var x])
+  | EventExport x -> Node ("event", [atom var x])
 
 let export ex =
   let {name = n; edesc} = ex.it in
@@ -420,13 +435,15 @@ let module_with_var_opt x_opt m =
   let fx = ref 0 in
   let tx = ref 0 in
   let mx = ref 0 in
+  let ex = ref 0 in
   let gx = ref 0 in
-  let imports = list (import fx tx mx gx) m.it.imports in
+  let imports = list (import fx tx mx ex gx) m.it.imports in
   Node ("module" ^ var_opt x_opt,
     listi type_ m.it.types @
     imports @
     listi (table !tx) m.it.tables @
     listi (memory !mx) m.it.memories @
+    listi (event !ex) m.it.events @
     listi (global !gx) m.it.globals @
     listi (func_with_index !fx) m.it.funcs @
     list export m.it.exports @
@@ -538,8 +555,8 @@ let assertion mode ass =
     [Node ("assert_trap", [action mode act; Atom (string re)])]
   | AssertExhaustion (act, re) ->
     [Node ("assert_exhaustion", [action mode act; Atom (string re)])]
-  | AssertUncaught (act, re) ->
-    [Node ("assert_uncaught", [action mode act; Atom (string re)])]
+  | AssertException (act, re) ->
+    [Node ("assert_exception", [action mode act; Atom (string re)])]
 
 let command mode cmd =
   match cmd.it with

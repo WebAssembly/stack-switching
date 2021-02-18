@@ -189,6 +189,17 @@ let memory_type s =
   let lim = limits vu32 s in
   MemoryType lim
 
+let resumability s =
+  match u8 s with
+  | 0 -> Terminal
+  | 1 -> Resumable
+  | _ -> error s (pos s - 1) "malformed resumability"
+
+let event_type s =
+  let res = resumability s in
+  let ft = func_type s in  (* TODO *)
+  EventType (ft, res)
+
 let mutability s =
   match u8 s with
   | 0 -> Immutable
@@ -274,12 +285,21 @@ let rec instr s =
   | 0x06 ->
     let bt = block_type s in
     let es1 = instr_block s in
-    expect 0x07 s "CATCH opcode expected";
+    let xo =
+      if peek s = Some 0x07 then begin
+        expect 0x07 s "CATCH or CATCH_ALL opcode expected";
+        Some (at var s)
+      end
+      else begin
+        expect 0x19 s "CATCH or CATCH_ALL opcode expected";
+        None
+      end
+    in
     let es2 = instr_block s in
     end_ s;
-    try_ bt es1 es2
+    try_ bt es1 xo es2
   | 0x07 -> error s pos "misplaced CATCH opcode"
-  | 0x08 -> throw
+  | 0x08 -> throw (at var s)
 
   | 0x09 | 0x0a as b -> illegal s pos b
   | 0x0b -> error s pos "misplaced END opcode"
@@ -311,7 +331,9 @@ let rec instr s =
     end_ s;
     let_ bt locs es
 
-  | 0x18 | 0x19 as b -> illegal s pos b
+  | 0x18 as b -> illegal s pos b
+
+  | 0x19 -> error s pos "misplaced CATCH_ALL opcode"
 
   | 0x1a -> drop
   | 0x1b -> select None
@@ -549,7 +571,7 @@ let rec instr s =
 and instr_block s = List.rev (instr_block' s [])
 and instr_block' s es =
   match peek s with
-  | None | Some (0x05 | 0x07 | 0x0b) -> es
+  | None | Some (0x05 | 0x07 | 0x0b | 0x19) -> es
   | _ ->
     let pos = pos s in
     let e' = instr s in
@@ -580,6 +602,7 @@ let id s =
     | 10 -> `CodeSection
     | 11 -> `DataSection
     | 12 -> `DataCountSection
+    | 13 -> `EventSection
     | _ -> error s (pos s) "malformed section id"
     ) bo
 
@@ -644,6 +667,16 @@ let memory s =
 
 let memory_section s =
   section `MemorySection (vec (at memory)) [] s
+
+
+(* Event section *)
+
+let event s =
+  let evtype = event_type s in
+  {evtype}
+
+let event_section s =
+  section `EventSection (vec (at event)) [] s
 
 
 (* Global section *)
@@ -830,6 +863,8 @@ let module_ s =
   iterate custom_section s;
   let memories = memory_section s in
   iterate custom_section s;
+  let events = event_section s in
+  iterate custom_section s;
   let globals = global_section s in
   iterate custom_section s;
   let exports = export_section s in
@@ -855,7 +890,7 @@ let module_ s =
   let funcs =
     List.map2 Source.(fun t f -> {f.it with ftype = t} @@ f.at)
       func_types func_bodies
-  in {types; tables; memories; globals; funcs; imports; exports; elems; datas; start}
+  in {types; tables; memories; events; globals; funcs; imports; exports; elems; datas; start}
 
 
 let decode name bs = at module_ (stream name bs)

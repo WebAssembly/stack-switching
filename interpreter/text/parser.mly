@@ -86,14 +86,16 @@ type types = {space : space; mutable list : type_ list}
 let empty_types () = {space = empty (); list = []}
 
 type context =
-  { types : types; tables : space; memories : space;
+  { types : types;
+    tables : space; memories : space; events : space;
     funcs : space; locals : space; globals : space;
     datas : space; elems : space; labels : space;
     deferred_locals : (unit -> unit) list ref
   }
 
 let empty_context () =
-  { types = empty_types (); tables = empty (); memories = empty ();
+  { types = empty_types ();
+    tables = empty (); memories = empty (); events = empty ();
     funcs = empty (); locals = empty (); globals = empty ();
     datas = empty (); elems = empty (); labels = empty ();
     deferred_locals = ref []
@@ -134,6 +136,7 @@ let local (c : context) x = lookup "local" c.locals x
 let global (c : context) x = lookup "global" c.globals x
 let table (c : context) x = lookup "table" c.tables x
 let memory (c : context) x = lookup "memory" c.memories x
+let event (c : context) x = lookup "event" c.events x
 let elem (c : context) x = lookup "elem segment" c.elems x
 let data (c : context) x = lookup "data segment" c.datas x
 let label (c : context) x = lookup "label " c.labels x
@@ -162,6 +165,7 @@ let bind_local (c : context) x = force_locals c; bind_abs "local" c.locals x
 let bind_global (c : context) x = bind_abs "global" c.globals x
 let bind_table (c : context) x = bind_abs "table" c.tables x
 let bind_memory (c : context) x = bind_abs "memory" c.memories x
+let bind_event (c : context) x = bind_abs "event" c.events x
 let bind_elem (c : context) x = bind_abs "elem segment" c.elems x
 let bind_data (c : context) x = bind_abs "data segment" c.datas x
 let bind_label (c : context) x = bind_rel "label" c.labels x
@@ -178,6 +182,7 @@ let anon_locals (c : context) n at =
 let anon_global (c : context) at = bind "global" c.globals 1l at
 let anon_table (c : context) at = bind "table" c.tables 1l at
 let anon_memory (c : context) at = bind "memory" c.memories 1l at
+let anon_event (c : context) at = bind "event" c.events 1l at
 let anon_elem (c : context) at = bind "elem segment" c.elems 1l at
 let anon_data (c : context) at = bind "data segment" c.datas 1l at
 let anon_label (c : context) at = bind "label" c.labels 1l at
@@ -210,6 +215,7 @@ let inline_func_type_explicit (c : context) x ft at =
 %token NUM_TYPE FUNCREF EXTERNREF REF EXTERN NULL MUT
 %token UNREACHABLE NOP DROP SELECT
 %token BLOCK END IF THEN ELSE LOOP LET
+%token THROW TRY DO CATCH CATCH_ALL
 %token BR BR_IF BR_TABLE BR_ON_NULL
 %token CALL CALL_REF CALL_INDIRECT RETURN RETURN_CALL_REF FUNC_BIND
 %token LOCAL_GET LOCAL_SET LOCAL_TEE GLOBAL_GET GLOBAL_SET
@@ -219,16 +225,15 @@ let inline_func_type_explicit (c : context) x ft at =
 %token LOAD STORE OFFSET_EQ_NAT ALIGN_EQ_NAT
 %token CONST UNARY BINARY TEST COMPARE CONVERT
 %token REF_NULL REF_FUNC REF_EXTERN REF_IS_NULL REF_AS_NON_NULL
-%token FUNC START TYPE PARAM RESULT LOCAL GLOBAL
+%token FUNC START TYPE PARAM RESULT LOCAL GLOBAL EVENT EXCEPTION
 %token TABLE ELEM MEMORY DATA DECLARE OFFSET ITEM IMPORT EXPORT
 %token MODULE BIN QUOTE
 %token SCRIPT REGISTER INVOKE GET
 %token ASSERT_MALFORMED ASSERT_INVALID ASSERT_SOFT_INVALID ASSERT_UNLINKABLE
-%token ASSERT_RETURN ASSERT_TRAP ASSERT_EXHAUSTION ASSERT_UNCAUGHT
+%token ASSERT_RETURN ASSERT_TRAP ASSERT_EXCEPTION ASSERT_EXHAUSTION
 %token NAN
 %token INPUT OUTPUT
 %token EOF
-%token TRY CATCH DO THROW
 
 %token<string> NAT
 %token<string> INT
@@ -314,6 +319,12 @@ func_type :
     { fun c -> let FuncType (ins, out) = $6 c in
       FuncType ($4 c :: ins, out) }
 
+event_type :
+  | func_type
+    { fun c -> EventType ($1 c, Resumable) }
+  | EXCEPTION func_type
+    { fun c -> EventType ($2 c, Terminal) }
+
 table_type :
   | limits ref_type { fun c -> TableType ($1, $2 c) }
 
@@ -393,6 +404,7 @@ plain_instr :
   | UNREACHABLE { fun c -> unreachable }
   | NOP { fun c -> nop }
   | DROP { fun c -> drop }
+  | THROW var { fun c -> throw ($2 c event) }
   | BR var { fun c -> br ($2 c label) }
   | BR_IF var { fun c -> br_if ($2 c label) }
   | BR_TABLE var var_list
@@ -443,7 +455,6 @@ plain_instr :
   | UNARY { fun c -> $1 }
   | BINARY { fun c -> $1 }
   | CONVERT { fun c -> $1 }
-  | THROW { fun c -> throw }
 
 
 select_instr :
@@ -664,8 +675,8 @@ expr1 :  /* Sugar */
       let bt, ls, es = $3 c c' in [], let_ bt ls es }
   | TRY try_block
     { fun c ->
-      let bt, (es1, es2) = $2 c in
-      [], try_ bt es1 es2 }
+      let bt, (es1, xo, es2) = $2 c in
+      [], try_ bt es1 xo es2 }
 
 select_expr_results :
   | LPAR RESULT value_type_list RPAR select_expr_results
@@ -730,10 +741,10 @@ try_block_result_body :
       let out' = snd $3 c in
       FuncType (ins, out' @ out), es }
 try_ :
- | LPAR DO instr_list RPAR LPAR CATCH instr_list RPAR
-   { fun c ->
-     let es1, es2 = $3 c, $7 c in
-     (es1, es2) }
+ | LPAR DO instr_list RPAR LPAR CATCH var instr_list RPAR
+   { fun c -> $3 c, Some ($7 c event), $8 c }
+ | LPAR DO instr_list RPAR LPAR CATCH_ALL instr_list RPAR
+   { fun c -> $3 c, None, $7 c }
 
 if_block :
   | type_use if_block_param_body
@@ -867,7 +878,7 @@ func_body :
       {f with locals = $4 c :: f.locals} }
 
 
-/* Tables, Memories & Globals */
+/* Tables, Memories, Globals, Events */
 
 table_use :
   | LPAR TABLE var RPAR { fun c -> $3 c }
@@ -1029,6 +1040,40 @@ global_fields :
     { fun c x at -> let globs, ims, exs = $2 c x at in
       globs, ims, $1 (GlobalExport x) c :: exs }
 
+event :
+  | LPAR EVENT bind_var_opt event_fields RPAR
+    { let at = at () in
+      fun c -> let x = $3 c anon_event bind_event @@ at in
+      fun () -> $4 c x at }
+  | LPAR EXCEPTION bind_var_opt exception_fields RPAR  /* Sugar */
+    { let at = at () in
+      fun c -> let x = $3 c anon_event bind_event @@ at in
+      fun () -> $4 c x at }
+
+event_fields :
+  | event_type
+    { fun c x at -> [{evtype = $1 c} @@ at], [], [] }
+  | inline_import event_type  /* Sugar */
+    { fun c x at ->
+      [],
+      [{ module_name = fst $1; item_name = snd $1;
+         idesc = EventImport ($2 c) @@ at } @@ at], [] }
+  | inline_export event_fields  /* Sugar */
+    { fun c x at -> let evts, ims, exs = $2 c x at in
+      evts, ims, $1 (EventExport x) c :: exs }
+
+exception_fields :  /* Sugar */
+  | func_type
+    { fun c x at -> [{evtype = EventType ($1 c, Terminal)} @@ at], [], [] }
+  | inline_import func_type
+    { fun c x at ->
+      [],
+      [{ module_name = fst $1; item_name = snd $1;
+         idesc = EventImport (EventType ($2 c, Terminal)) @@ at } @@ at], [] }
+  | inline_export exception_fields
+    { fun c x at -> let evts, ims, exs = $2 c x at in
+      evts, ims, $1 (EventExport x) c :: exs }
+
 
 /* Imports & Exports */
 
@@ -1049,6 +1094,12 @@ import_desc :
   | LPAR GLOBAL bind_var_opt global_type RPAR
     { fun c -> ignore ($3 c anon_global bind_global);
       fun () -> GlobalImport ($4 c) }
+  | LPAR EVENT bind_var_opt event_type RPAR
+    { fun c -> ignore ($3 c anon_event bind_event);
+      fun () -> EventImport ($4 c) }
+  | LPAR EXCEPTION bind_var_opt func_type RPAR  /* Sugar */
+    { fun c -> ignore ($3 c anon_event bind_event);
+      fun () -> EventImport (EventType ($4 c, Terminal)) }
 
 import :
   | LPAR IMPORT name name import_desc RPAR
@@ -1064,6 +1115,8 @@ export_desc :
   | LPAR TABLE var RPAR { fun c -> TableExport ($3 c table) }
   | LPAR MEMORY var RPAR { fun c -> MemoryExport ($3 c memory) }
   | LPAR GLOBAL var RPAR { fun c -> GlobalExport ($3 c global) }
+  | LPAR EVENT var RPAR { fun c -> EventExport ($3 c event) }
+  | LPAR EXCEPTION var RPAR { fun c -> EventExport ($3 c event) }  /* Sugar */
 
 export :
   | LPAR EXPORT name export_desc RPAR
@@ -1123,6 +1176,14 @@ module_fields1 :
       if mems <> [] && m.imports <> [] then
         error (List.hd m.imports).at "import after memory definition";
       { m with memories = mems @ m.memories; datas = data @ m.datas;
+        imports = ims @ m.imports; exports = exs @ m.exports } }
+  | event module_fields
+    { fun c -> let ef = $1 c in let mff = $2 c in
+      fun () -> let mf = mff () in
+      fun () -> let evts, ims, exs = ef () in let m = mf () in
+      if evts <> [] && m.imports <> [] then
+        error (List.hd m.imports).at "import after event definition";
+      { m with events = evts @ m.events;
         imports = ims @ m.imports; exports = exs @ m.exports } }
   | func module_fields
     { fun c -> let ff = $1 c in let mff = $2 c in
@@ -1206,8 +1267,8 @@ assertion :
     { AssertUninstantiable (snd $3, $4) @@ at () }
   | LPAR ASSERT_RETURN action result_list RPAR { AssertReturn ($3, $4) @@ at () }
   | LPAR ASSERT_TRAP action STRING RPAR { AssertTrap ($3, $4) @@ at () }
+  | LPAR ASSERT_EXCEPTION action STRING RPAR { AssertException ($3, $4) @@ at () }
   | LPAR ASSERT_EXHAUSTION action STRING RPAR { AssertExhaustion ($3, $4) @@ at () }
-  | LPAR ASSERT_UNCAUGHT action STRING RPAR { AssertUncaught ($3, $4) @@ at () }
 
 cmd :
   | action { Action $1 @@ at () }

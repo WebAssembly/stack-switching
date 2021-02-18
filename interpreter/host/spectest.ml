@@ -21,8 +21,12 @@ let global (GlobalType (t, _) as gt) =
 let table =
   Table.alloc (TableType ({min = 10l; max = Some 20l}, (Nullable, FuncHeapType)))
     (NullRef FuncHeapType)
+
 let memory = Memory.alloc (MemoryType {min = 1l; max = Some 2l})
 let func f ft = Func.alloc_host (Types.alloc (FuncDefType ft)) (f ft)
+
+let event = Event.alloc (EventType (FuncType ([NumType I32Type], [NumType I32Type]), Resumable))
+let except = Event.alloc (EventType (FuncType ([NumType I32Type], []), Terminal))
 
 let print_value v =
   Printf.printf "%s : %s\n"
@@ -51,4 +55,6 @@ let lookup name t =
   | "global_f64", _ -> ExternGlobal (global (GlobalType (NumType F64Type, Immutable)))
   | "table", _ -> ExternTable table
   | "memory", _ -> ExternMemory memory
+  | "event", _ -> ExternEvent event
+  | "exception", _ -> ExternEvent except
   | _ -> raise Not_found

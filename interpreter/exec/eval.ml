@@ -9,15 +9,15 @@ open Source
 
 module Link = Error.Make ()
 module Trap = Error.Make ()
-module Crash = Error.Make ()
+module Exception = Error.Make ()
 module Exhaustion = Error.Make ()
-module Uncaught = Error.Make ()
+module Crash = Error.Make ()
 
 exception Link = Link.Error
 exception Trap = Trap.Error
-exception Crash = Crash.Error (* failure that cannot happen in valid code *)
+exception Exception = Exception.Error
 exception Exhaustion = Exhaustion.Error
-exception Uncaught = Uncaught.Error
+exception Crash = Crash.Error (* failure that cannot happen in valid code *)
 
 let table_error at = function
   | Table.Bounds -> "out of bounds table access"
@@ -62,14 +62,14 @@ and admin_instr' =
   | Refer of ref_
   | Invoke of func_inst
   | Trapping of string
+  | Throwing of event_inst * value stack
   | Returning of value stack
   | ReturningInvoke of value stack * func_inst
   | Breaking of int32 * value stack
   | Label of int * instr list * code
   | Local of int * value list * code
   | Frame of int * frame * code
-  | Catch of int * instr list * code
-  | Throwing
+  | Catch of int * event_inst option * instr list * code
 
 type config =
 {
@@ -85,7 +85,8 @@ let plain e = Plain e.it @@ e.at
 
 let is_jumping e =
   match e.it with
-  | Trapping _ | Returning _ | ReturningInvoke _ | Breaking _ -> true
+  | Trapping _ | Throwing _ | Returning _ | ReturningInvoke _ | Breaking _ ->
+    true
   | _ -> false
 
 let lookup category list x =
@@ -97,6 +98,7 @@ let func (inst : module_inst) x = lookup "function" inst.funcs x
 let table (inst : module_inst) x = lookup "table" inst.tables x
 let memory (inst : module_inst) x = lookup "memory" inst.memories x
 let global (inst : module_inst) x = lookup "global" inst.globals x
+let event (inst : module_inst) x = lookup "event" inst.events x
 let elem (inst : module_inst) x = lookup "element segment" inst.elems x
 let data (inst : module_inst) x = lookup "data segment" inst.datas x
 let local (frame : frame) x = lookup "local" frame.locals x
@@ -197,6 +199,17 @@ let rec step (c : config) : config =
             (vs1, [Plain (Block (bt, es')) @@ e.at])
           ) @@ e.at
         ]
+
+      | Try (bt, es1, xo, es2), vs ->
+        let FuncType (ts1, ts2) = block_type c.frame.inst bt e.at in
+        let n1 = List.length ts1 in
+        let n2 = List.length ts2 in
+        let args, vs' = split n1 vs e.at in
+        let exno = Option.map (event c.frame.inst) xo in
+        vs', [Catch (n2, exno, es2, ([], [Label (n2, [], (args, List.map plain es1)) @@ e.at])) @@ e.at]
+
+      | Throw x, vs ->
+        [], [Throwing (event c.frame.inst x, vs) @@ e.at]
 
       | Br x, vs ->
         [], [Breaking (x.it, vs) @@ e.at]
@@ -531,16 +544,6 @@ let rec step (c : config) : config =
         (try Num (Eval_numeric.eval_cvtop cvtop n) :: vs', []
          with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at])
 
-      | Try (bt, es1, es2), vs ->
-        let FuncType (ts1, ts2) = block_type c.frame.inst bt e.at in
-        let n1 = List.length ts1 in
-        let n2 = List.length ts2 in
-        let args, vs' = split n1 vs e.at in
-        vs', [Catch (n2, es2, ([], [Label (n2, [], (args, List.map plain es1)) @@ e.at])) @@ e.at]
-
-      | Throw, vs ->
-         vs, [Throwing @@ e.at]
-
       | _ ->
         let s1 = string_of_values (List.rev vs) in
         let s2 = string_of_stack_type (List.map type_of_value (List.rev vs)) in
@@ -551,16 +554,6 @@ let rec step (c : config) : config =
     | Refer r, vs ->
       Ref r :: vs, []
 
-    | Trapping msg, vs ->
-      assert false
-
-    | Returning _, vs
-    | ReturningInvoke _, vs ->
-      Crash.error e.at "undefined frame"
-
-    | Breaking (k, vs'), vs ->
-      Crash.error e.at "undefined label"
-
     | Label (n, es0, (vs', [])), vs ->
       vs' @ vs, []
 
@@ -568,10 +561,7 @@ let rec step (c : config) : config =
       take n vs0 e.at @ vs, List.map plain es0
 
     | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es')), vs ->
-       vs, [Breaking (Int32.sub k 1l, vs0) @@ at]
-
-    | Label (n, es0, (vs', {it = Throwing; at} :: _)), vs ->
-      vs, [Throwing @@ at]
+      vs, [Breaking (Int32.sub k 1l, vs0) @@ at]
 
     | Label (n, es0, (vs', e' :: es')), vs when is_jumping e' ->
       vs, [e']
@@ -584,7 +574,7 @@ let rec step (c : config) : config =
       vs' @ vs, []
 
     | Local (n, vs0, (vs', e' :: es')), vs when is_jumping e' ->
-      vs' @ vs, [e']
+      vs, [e']
 
     | Local (n, vs0, code'), vs ->
       let frame' = {c.frame with locals = List.map ref vs0 @ c.frame.locals} in
@@ -595,18 +585,18 @@ let rec step (c : config) : config =
     | Frame (n, frame', (vs', [])), vs ->
       vs' @ vs, []
 
-    | Frame (n, frame', (vs', {it = Trapping msg; at} :: es')), vs ->
-      vs, [Trapping msg @@ at]
-
     | Frame (n, frame', (vs', {it = Returning vs0; at} :: es')), vs ->
-       take n vs0 e.at @ vs, []
-
-    | Frame (n, frame', (vs', {it = Throwing; at} :: _)), vs ->
-      vs, [Throwing @@ at]
+      take n vs0 e.at @ vs, []
 
     | Frame (n, frame', (vs', {it = ReturningInvoke (vs0, f); at} :: es')), vs ->
       let FuncType (ts1, _) = Func.type_of f in
       take (List.length ts1) vs0 e.at @ vs, [Invoke f @@ at]
+
+    | Frame (n, fame', (vs', {it = Breaking _; at} :: es')), vs ->
+      Crash.error at "undefined label"
+
+    | Frame (n, frame', (vs', e' :: es')), vs when is_jumping e' ->
+      vs, [e']
 
     | Frame (n, frame', code'), vs ->
       let c' = step {frame = frame'; code = code'; budget = c.budget - 1} in
@@ -637,21 +627,36 @@ let rec step (c : config) : config =
         args @ args' @ vs', [Invoke f' @@ e.at]
       )
 
-    | Throwing, _ ->
-       Uncaught.error e.at "uncaught exception"
-
-    | Catch (_, _, (_, ({it = Trapping _ | Breaking _ | Returning _; _} as e) :: _)), vs ->
-      vs, [e]
-
-    | Catch (n, es1, (_, {it = Throwing; _} :: _)), vs ->
-      vs, [Label (n, [], ([], List.map plain es1)) @@ e.at]
-
-    | Catch (_, _, (vs', [])), vs ->
+    | Catch (n, exno, es0, (vs', [])), vs ->
       vs' @ vs, []
 
-    | Catch (n, es', code'), vs ->
+    | Catch (n, None, es0, (vs', {it = Throwing (exn, vs0); at} :: _)), vs ->
+      vs, [Label (n, [], ([], List.map plain es0)) @@ e.at]
+
+    | Catch (n, Some exn, es0, (vs', {it = Throwing (exn0, vs0); at} :: _)), vs
+      when exn0 == exn ->
+      let EventType (FuncType (ts, _), _) = Event.type_of exn in
+      let n' = List.length ts in
+      vs, [Label (n, [], (take n' vs0 at, List.map plain es0)) @@ e.at]
+
+    | Catch (n, exno, es0, (vs', e' :: es')), vs when is_jumping e' ->
+      vs, [e']
+
+    | Catch (n, exno, es0, code'), vs ->
       let c' = step {c with code = code'} in
-      vs, [Catch (n, es', c'.code) @@ e.at]
+      vs, [Catch (n, exno, es0, c'.code) @@ e.at]
+
+    | Returning _, vs
+    | ReturningInvoke _, vs ->
+      Crash.error e.at "undefined frame"
+
+    | Breaking (k, vs'), vs ->
+      Crash.error e.at "undefined label"
+
+    | Trapping _, vs
+    | Throwing _, vs ->
+      assert false
+
   in {c with code = vs', es' @ List.tl es}
 
 
@@ -662,6 +667,9 @@ let rec eval (c : config) : value stack =
 
   | vs, {it = Trapping msg; at} :: _ ->
     Trap.error at msg
+
+  | vs, {it = Throwing _; at} :: _ ->
+    Exception.error at "uncaught exception"
 
   | vs, es ->
     eval (step c)
@@ -714,6 +722,10 @@ let create_global (inst : module_inst) (glob : global) : global_inst =
   let v = eval_const inst ginit in
   Global.alloc (Types.sem_global_type inst.types gtype) v
 
+let create_event (inst : module_inst) (evt : event) : event_inst =
+  let {evtype} = evt.it in
+  Event.alloc (Types.sem_event_type inst.types evtype)
+
 let create_export (inst : module_inst) (ex : export) : export_inst =
   let {name; edesc} = ex.it in
   let ext =
@@ -722,6 +734,7 @@ let create_export (inst : module_inst) (ex : export) : export_inst =
     | TableExport x -> ExternTable (table inst x)
     | MemoryExport x -> ExternMemory (memory inst x)
     | GlobalExport x -> ExternGlobal (global inst x)
+    | EventExport x -> ExternEvent (event inst x)
   in (name, ext)
 
 let create_elem (inst : module_inst) (seg : elem_segment) : elem_inst =
@@ -745,6 +758,7 @@ let add_import (m : module_) (ext : extern) (im : import) (inst : module_inst)
   | ExternTable tab -> {inst with tables = tab :: inst.tables}
   | ExternMemory mem -> {inst with memories = mem :: inst.memories}
   | ExternGlobal glob -> {inst with globals = glob :: inst.globals}
+  | ExternEvent evt -> {inst with events = evt :: inst.events}
 
 
 let init_type (inst : module_inst) (type_ : type_) (x : type_inst) =
@@ -790,7 +804,7 @@ let run_start start =
 
 let init (m : module_) (exts : extern list) : module_inst =
   let
-    { imports; tables; memories; globals; funcs; types;
+    { types; imports; tables; memories; globals; funcs; events;
       exports; elems; datas; start
     } = m.it
   in
@@ -806,6 +820,7 @@ let init (m : module_) (exts : extern list) : module_inst =
       tables = inst2.tables @ List.map (create_table inst2) tables;
       memories = inst2.memories @ List.map (create_memory inst2) memories;
       globals = inst2.globals @ List.map (create_global inst2) globals;
+      events = inst2.events @ List.map (create_event inst2) events;
     }
   in
   let inst =

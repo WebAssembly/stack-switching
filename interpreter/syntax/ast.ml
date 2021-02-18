@@ -84,6 +84,8 @@ and instr' =
   | Loop of block_type * instr list   (* loop header *)
   | If of block_type * instr list * instr list   (* conditional *)
   | Let of block_type * local list * instr list  (* local bindings *)
+  | Try of block_type * instr list * idx option * instr list  (* handle exception *)
+  | Throw of idx                      (* throw exception *)
   | Br of idx                         (* break to n-th surrounding label *)
   | BrIf of idx                       (* conditional break *)
   | BrTable of idx list * idx         (* indexed break *)
@@ -125,8 +127,6 @@ and instr' =
   | Unary of unop                     (* unary numeric operator *)
   | Binary of binop                   (* binary numeric operator *)
   | Convert of cvtop                  (* conversion *)
-  | Try of block_type * instr list * instr list
-  | Throw
 
 
 (* Globals & Functions *)
@@ -146,6 +146,15 @@ and func' =
   ftype : idx;
   locals : local list;
   body : instr list;
+}
+
+
+(* Events *)
+
+type event = event' Source.phrase
+and event' =
+{
+  evtype : event_type;
 }
 
 
@@ -195,6 +204,7 @@ and export_desc' =
   | TableExport of idx
   | MemoryExport of idx
   | GlobalExport of idx
+  | EventExport of idx
 
 type export = export' Source.phrase
 and export' =
@@ -209,6 +219,7 @@ and import_desc' =
   | TableImport of table_type
   | MemoryImport of memory_type
   | GlobalImport of global_type
+  | EventImport of event_type
 
 type import = import' Source.phrase
 and import' =
@@ -225,6 +236,7 @@ and module_' =
   globals : global list;
   tables : table list;
   memories : memory list;
+  events : event list;
   funcs : func list;
   start : idx option;
   elems : elem_segment list;
@@ -242,6 +254,7 @@ let empty_module =
   globals = [];
   tables = [];
   memories = [];
+  events = [];
   funcs = [];
   start = None;
   elems = [];
@@ -263,6 +276,7 @@ let import_type_of (m : module_) (im : import) : import_type =
     | TableImport t -> ExternTableType t
     | MemoryImport t -> ExternMemoryType t
     | GlobalImport t -> ExternGlobalType t
+    | EventImport t -> ExternEventType t
   in ImportType (et, module_name, item_name)
 
 let export_type_of (m : module_) (ex : export) : export_type =
@@ -285,6 +299,9 @@ let export_type_of (m : module_) (ex : export) : export_type =
     | GlobalExport x ->
       let gts = globals ets @ List.map (fun g -> g.it.gtype) m.it.globals in
       ExternGlobalType (nth gts x.it)
+    | EventExport x ->
+      let evts = events ets @ List.map (fun e -> e.it.evtype) m.it.events in
+      ExternEventType (nth evts x.it)
   in ExportType (et, name)
 
 let module_type_of (m : module_) : module_type =
