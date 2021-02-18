@@ -288,6 +288,10 @@ let rec instr e =
     | Unary op -> unop op, []
     | Binary op -> binop op, []
     | Convert op -> cvtop op, []
+    | Try (bt, es1, es2) ->
+      "try", block_type bt @
+        [Node ("do", list instr es1); Node ("catch", list instr es2)]
+    | Throw -> "throw", []
   in Node (head, inner)
 
 let const head c =
@@ -534,6 +538,8 @@ let assertion mode ass =
     [Node ("assert_trap", [action mode act; Atom (string re)])]
   | AssertExhaustion (act, re) ->
     [Node ("assert_exhaustion", [action mode act; Atom (string re)])]
+  | AssertUncaught (act, re) ->
+    [Node ("assert_uncaught", [action mode act; Atom (string re)])]
 
 let command mode cmd =
   match cmd.it with

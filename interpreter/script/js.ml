@@ -189,6 +189,13 @@ function assert_return(action, ...expected) {
     }
   }
 }
+
+function assert_uncaught(action) {
+  try { action() } catch (e) {
+    if (!(e instanceof WebAssembly.RuntimeError)) return;
+  }
+  throw new Error("Wasm uncaught exception expected");
+}
 |}
 
 
@@ -529,6 +536,8 @@ let of_assertion mods ass =
     of_assertion' mods act "assert_trap" [] None
   | AssertExhaustion (act, _) ->
     of_assertion' mods act "assert_exhaustion" [] None
+  | AssertUncaught (act, _) ->
+    of_assertion' mods act "assert_uncaught" [] None
 
 let of_command mods cmd =
   "\n// " ^ Filename.basename cmd.at.left.file ^

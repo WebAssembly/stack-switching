@@ -224,10 +224,11 @@ let inline_func_type_explicit (c : context) x ft at =
 %token MODULE BIN QUOTE
 %token SCRIPT REGISTER INVOKE GET
 %token ASSERT_MALFORMED ASSERT_INVALID ASSERT_SOFT_INVALID ASSERT_UNLINKABLE
-%token ASSERT_RETURN ASSERT_TRAP ASSERT_EXHAUSTION
+%token ASSERT_RETURN ASSERT_TRAP ASSERT_EXHAUSTION ASSERT_UNCAUGHT
 %token NAN
 %token INPUT OUTPUT
 %token EOF
+%token TRY CATCH DO THROW
 
 %token<string> NAT
 %token<string> INT
@@ -442,6 +443,7 @@ plain_instr :
   | UNARY { fun c -> $1 }
   | BINARY { fun c -> $1 }
   | CONVERT { fun c -> $1 }
+  | THROW { fun c -> throw }
 
 
 select_instr :
@@ -660,6 +662,10 @@ expr1 :  /* Sugar */
     { let at = at () in
       fun c -> let c' = enter_let ($2 c []) at in
       let bt, ls, es = $3 c c' in [], let_ bt ls es }
+  | TRY try_block
+    { fun c ->
+      let bt, (es1, es2) = $2 c in
+      [], try_ bt es1 es2 }
 
 select_expr_results :
   | LPAR RESULT value_type_list RPAR select_expr_results
@@ -691,6 +697,43 @@ call_expr_results :
   | expr_list
     { fun c -> [], $1 c }
 
+
+try_block :
+  | type_use try_block_param_body
+    { let at = at () in
+      fun c ->
+      let t = $1 c type_ in
+      let ft, es = $2 c in
+      let x = SynVar (inline_func_type_explicit c t ft at).it in
+      VarBlockType x, es }
+  | try_block_param_body  /* Sugar */
+    { let at = at () in
+      fun c ->
+      let bt =
+        match fst ($1 c) with
+        | FuncType ([], []) -> ValBlockType None
+        | FuncType ([], [t]) -> ValBlockType (Some t)
+        | ft ->  VarBlockType (SynVar (inline_func_type c ft at).it)
+      in bt, snd ($1 c) }
+try_block_param_body :
+  | try_block_result_body { $1 }
+  | LPAR PARAM value_type_list RPAR try_block_param_body
+    { fun c ->
+      let FuncType (ins, out), es = $5 c in
+      let ins' = snd $3 c in
+      FuncType (ins' @ ins, out), es }
+try_block_result_body :
+  | try_ { fun c -> FuncType ([], []), $1 c }
+  | LPAR RESULT value_type_list RPAR try_block_result_body
+    { fun c ->
+      let FuncType (ins, out), es = $5 c in
+      let out' = snd $3 c in
+      FuncType (ins, out' @ out), es }
+try_ :
+ | LPAR DO instr_list RPAR LPAR CATCH instr_list RPAR
+   { fun c ->
+     let es1, es2 = $3 c, $7 c in
+     (es1, es2) }
 
 if_block :
   | type_use if_block_param_body
@@ -1164,6 +1207,7 @@ assertion :
   | LPAR ASSERT_RETURN action result_list RPAR { AssertReturn ($3, $4) @@ at () }
   | LPAR ASSERT_TRAP action STRING RPAR { AssertTrap ($3, $4) @@ at () }
   | LPAR ASSERT_EXHAUSTION action STRING RPAR { AssertExhaustion ($3, $4) @@ at () }
+  | LPAR ASSERT_UNCAUGHT action STRING RPAR { AssertUncaught ($3, $4) @@ at () }
 
 cmd :
   | action { Action $1 @@ at () }

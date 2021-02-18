@@ -387,10 +387,16 @@ rule token = parse
   | "assert_return" { ASSERT_RETURN }
   | "assert_trap" { ASSERT_TRAP }
   | "assert_exhaustion" { ASSERT_EXHAUSTION }
+  | "assert_uncaught" { ASSERT_UNCAUGHT }
   | "nan:canonical" { NAN Script.CanonicalNan }
   | "nan:arithmetic" { NAN Script.ArithmeticNan }
   | "input" { INPUT }
   | "output" { OUTPUT }
+
+  | "try" { TRY }
+  | "catch" { CATCH }
+  | "do" { DO }
+  | "throw" { THROW }
 
   | name as s { VAR s }
 

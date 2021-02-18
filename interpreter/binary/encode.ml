@@ -428,6 +428,11 @@ let encode m =
       | Convert (F64 F64Op.DemoteF64) -> assert false
       | Convert (F64 F64Op.ReinterpretInt) -> op 0xbf
 
+      | Try (bt, es1, es2) ->
+        op 0x06; block_type bt; list instr es1;
+        op 0x07; list instr es2; end_ ()
+      | Throw -> op 0x08
+
     let const c =
       list instr c.it; end_ ()
 

@@ -123,6 +123,8 @@ let rec instr (e : instr) =
     memories zero
   | MemoryInit x -> memories zero ++ datas (idx x)
   | DataDrop x -> datas (idx x)
+  | Try (bt, es1, es2) -> block_type bt ++ block es1 ++ block es2
+  | Throw -> empty
 
 and block (es : instr list) =
   let free = list instr es in {free with labels = shift free.labels}
