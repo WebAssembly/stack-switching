@@ -55,9 +55,14 @@ and eq_stack_type c a ts1 ts2 =
 and eq_func_type c a (FuncType (ts11, ts12)) (FuncType (ts21, ts22)) =
   eq_stack_type c a ts11 ts21 && eq_stack_type c a ts12 ts22
 
+and eq_cont_type c a (ContType x1) (ContType x2) =
+  eq_var_type c a x1 x1
+
 and eq_def_type c a dt1 dt2 =
   match dt1, dt2 with
   | FuncDefType ft1, FuncDefType ft2 -> eq_func_type c a ft1 ft2
+  | ContDefType ct1, ContDefType ct2 -> eq_cont_type c a ct1 ct2
+  | _, _ -> false
 
 and eq_var_type c a x1 x2 =
   equal_var x1 x2 || assuming a (x1, x2) ||
@@ -104,6 +109,7 @@ and match_heap_type c a t1 t2 =
   | DefHeapType x1, FuncHeapType ->
     (match lookup c x1 with
     | FuncDefType _ -> true
+    | _ -> false
     )
   | DefHeapType x1, DefHeapType x2 -> match_var_type c a x1 x2
   | BotHeapType, _ -> true
