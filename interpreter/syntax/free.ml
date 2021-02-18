@@ -91,6 +91,7 @@ let block_type = function
 
 let func_type (FuncType (ins, out)) =
   list value_type ins ++ list value_type out
+let cont_type (ContType x) = var_type x
 let global_type (GlobalType (t, _mut)) = value_type t
 let table_type (TableType (_lim, t)) = ref_type t
 let memory_type (MemoryType (_lim)) = empty
@@ -98,6 +99,7 @@ let event_type (EventType (ft, _res)) = func_type ft
 
 let def_type = function
   | FuncDefType ft -> func_type ft
+  | ContDefType ct -> cont_type ct
 
 let rec instr (e : instr) =
   match e.it with
@@ -114,13 +116,14 @@ let rec instr (e : instr) =
     {free with locals = Lib.Fun.repeat (List.length ts) shift free.locals}
   | Try (bt, es1, xo, es2) ->
     block_type bt ++ block es1 ++ opt (fun x -> events (idx x)) xo ++ block es2
-  | Throw x -> events (idx x)
+  | Throw x | ContThrow x | ContSuspend x -> events (idx x)
   | Br x | BrIf x | BrOnNull x -> labels (idx x)
   | BrTable (xs, x) -> list (fun x -> labels (idx x)) (x::xs)
   | Return | CallRef | ReturnCallRef -> empty
   | Call x -> funcs (idx x)
   | CallIndirect (x, y) -> tables (idx x) ++ types (idx y)
-  | FuncBind x -> types (idx x)
+  | FuncBind x | ContNew x -> types (idx x)
+  | ContResume xys -> list (fun (x, y) -> events (idx x) ++ labels (idx y)) xys
   | LocalGet x | LocalSet x | LocalTee x -> locals (idx x)
   | GlobalGet x | GlobalSet x -> globals (idx x)
   | TableGet x | TableSet x | TableSize x | TableGrow x | TableFill x ->

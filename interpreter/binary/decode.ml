@@ -135,6 +135,12 @@ let sized f s =
 
 open Types
 
+let var_type s =
+  let pos = pos s in
+  match vs33 s with
+  | i when i >= 0l -> SynVar i
+  | _ -> error s pos "malformed type index"
+
 let num_type s =
   match vs7 s with
   | -0x01 -> I32Type
@@ -174,6 +180,11 @@ let func_type s =
     FuncType (ins, out)
   | _ -> error s (pos s - 1) "malformed function type"
 
+let cont_type s =
+  match vs7 s with
+  | -0x21 -> ContType (var_type s)
+  | _ -> error s (pos s - 1) "malformed continuation type"
+
 let limits vu s =
   let has_max = bool s in
   let min = vu s in
@@ -212,7 +223,11 @@ let global_type s =
   GlobalType (t, mut)
 
 let def_type s =
-  FuncDefType (func_type s)
+  match peek s with
+  | Some 0x60 -> FuncDefType (func_type s)
+  | Some 0x61 -> ContDefType (cont_type s)
+  | None -> ignore (vs7 s); assert false  (* force error *)
+  | _ -> error s (pos s) "malformed type definition"
 
 
 (* Decode instructions *)
@@ -237,6 +252,11 @@ let block_type s =
   | Some 0x40 -> skip 1 s; ValBlockType None
   | Some b when b land 0xc0 = 0x40 -> ValBlockType (Some (value_type s))
   | _ -> VarBlockType (SynVar (vs33 s))
+
+let var_pair s =
+  let x = at var s in
+  let y = at var s in
+  x, y
 
 let local s =
   let n = vu32 s in
@@ -531,6 +551,11 @@ let rec instr s =
   | 0xd2 -> ref_func (at var s)
   | 0xd3 -> ref_as_non_null
   | 0xd4 -> br_on_null (at var s)
+
+  | 0xe0 -> cont_new (at var s)
+  | 0xe1 -> cont_suspend (at var s)
+  | 0xe2 -> cont_throw (at var s)
+  | 0xe3 -> cont_resume (vec var_pair s)
 
   | 0xfc as b ->
     (match vu32 s with

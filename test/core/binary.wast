@@ -170,7 +170,7 @@
     "\e0\7f"                  ;; Malformed functype, -0x20 in signed LEB128 encoding
     "\00\00"
   )
-  "integer representation too long"
+  "malformed type definition"
 )
 
 ;; Unsigned LEB128 must not be overlong

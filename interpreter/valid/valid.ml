@@ -56,6 +56,13 @@ let label (c : context) x = lookup "label" c.labels x
 let func_type (c : context) x =
   match type_ c x with
   | FuncDefType ft -> ft
+  | _ -> error x.at ("non-function type " ^ Int32.to_string x.it)
+
+let cont_type (c : context) x =
+  match type_ c x with
+  | ContDefType ct -> ct
+  | _ -> error x.at ("non-continuation type " ^ Int32.to_string x.it)
+
 
 let func (c : context) x = func_type c (func_var c x @@ x.at)
 
@@ -84,8 +91,8 @@ let check_num_type (c : context) (t : num_type) at =
 let check_heap_type (c : context) (t : heap_type) at =
   match t with
   | FuncHeapType | ExternHeapType -> ()
-  | DefHeapType (SynVar x) -> ignore (func_type c (x @@ at))
-  | DefHeapType (SemVar _) | BotHeapType -> assert false
+  | DefHeapType x -> ignore (type_ c (as_syn_var x @@ at))
+  | BotHeapType -> assert false
 
 let check_ref_type (c : context) (t : ref_type) at =
   match t with
@@ -101,6 +108,10 @@ let check_func_type (c : context) (ft : func_type) at =
   let FuncType (ts1, ts2) = ft in
   List.iter (fun t -> check_value_type c t at) ts1;
   List.iter (fun t -> check_value_type c t at) ts2
+
+let check_cont_type (c : context) (ct : cont_type) at =
+  let ContType x = ct in
+  ignore (func_type c (as_syn_var x @@ at))
 
 let check_table_type (c : context) (tt : table_type) at =
   let TableType (lim, t) = tt in
@@ -126,6 +137,7 @@ let check_global_type (c : context) (gt : global_type) at =
 let check_def_type (c : context) (dt : def_type) at =
   match dt with
   | FuncDefType ft -> check_func_type c ft at
+  | ContDefType ct -> check_cont_type c ct at
 
 
 let check_type (c : context) (t : type_) =
@@ -386,10 +398,10 @@ let rec check_instr (c : context) (e : instr) (s : infer_stack_type) : op_type =
 
   | CallRef ->
     (match peek_ref 0 s e.at with
-    | (nul, DefHeapType (SynVar x)) ->
+    | nul, DefHeapType (SynVar x) ->
       let FuncType (ts1, ts2) = func_type c (x @@ e.at) in
       (ts1 @ [RefType (nul, DefHeapType (SynVar x))]) --> ts2
-    | (_, BotHeapType) ->
+    | _, BotHeapType ->
       [] -->... []
     | _ -> assert false
     )
@@ -404,21 +416,21 @@ let rec check_instr (c : context) (e : instr) (s : infer_stack_type) : op_type =
 
   | ReturnCallRef ->
     (match peek_ref 0 s e.at with
-    | (nul, DefHeapType (SynVar x)) ->
+    | nul, DefHeapType (SynVar x) ->
       let FuncType (ts1, ts2) = func_type c (x @@ e.at) in
       require (match_stack_type c.types [] ts2 c.results) e.at
         ("type mismatch: current function requires result type " ^
          string_of_stack_type c.results ^
          " but callee returns " ^ string_of_stack_type ts2);
       (ts1 @ [RefType (nul, DefHeapType (SynVar x))]) -->... []
-    | (_, BotHeapType) ->
+    | _, BotHeapType ->
       [] -->... []
     | _ -> assert false
     )
 
   | FuncBind x ->
     (match peek_ref 0 s e.at with
-    | (nul, DefHeapType (SynVar y)) ->
+    | nul, DefHeapType (SynVar y) ->
       let FuncType (ts1, ts2) = func_type c (y @@ e.at) in
       let FuncType (ts1', _) as ft' = func_type c x in
       require (List.length ts1 >= List.length ts1') x.at
@@ -428,8 +440,49 @@ let rec check_instr (c : context) (e : instr) (s : infer_stack_type) : op_type =
         "type mismatch in function type";
       (ts11 @ [RefType (nul, DefHeapType (SynVar y))]) -->
         [RefType (NonNullable, DefHeapType (SynVar x.it))]
-    | (_, BotHeapType) ->
+    | _, BotHeapType ->
       [] -->... [RefType (NonNullable, DefHeapType (SynVar x.it))]
+    | _ -> assert false
+    )
+
+  | ContNew x ->
+    let ContType y = cont_type c x in
+    [RefType (NonNullable, DefHeapType y)] -->
+    [RefType (NonNullable, DefHeapType (SynVar x.it))]
+
+  | ContSuspend x ->
+    let EventType (FuncType (ts1, ts2), res) = event c x in
+    require (res = Resumable) e.at "suspending with a non-resumable event";
+    ts1 --> ts2
+
+  | ContThrow x ->
+    let EventType (FuncType (ts0, _), res) = event c x in
+    require (res = Terminal) e.at "throwing a non-exception event";
+    (match peek_ref 0 s e.at with
+    | nul, DefHeapType (SynVar y) ->
+      let ContType z = cont_type c (y @@ e.at) in
+      let FuncType (ts1, ts2) = func_type c (as_syn_var z @@ e.at) in
+      (ts0 @ [RefType (nul, DefHeapType (SynVar y))]) --> ts2
+    | _, BotHeapType ->
+      [] -->... []
+    | _ -> assert false
+    )
+
+  | ContResume xys ->
+    (match peek_ref 0 s e.at with
+    | nul, DefHeapType (SynVar y) ->
+      let ContType z = cont_type c (y @@ e.at) in
+      let FuncType (ts1, ts2) = func_type c (as_syn_var z @@ e.at) in
+      List.iter (fun (x1, x2) ->
+        let EventType (FuncType (ts3, ts4), res) = event c x1 in
+        require (res = Resumable) x1.at "handling a non-resumable event";
+        (* TODO: check label; problem: we don't have a type idx to produce here
+        check_stack c (ts3 @ [RefType (NonNullable, DefHeapType (SynVar ?))]) (label c x2) x2.at
+        *)
+      ) xys;
+      (ts1 @ [RefType (nul, DefHeapType (SynVar y))]) --> ts2
+    | _, BotHeapType ->
+      [] -->... []
     | _ -> assert false
     )
 

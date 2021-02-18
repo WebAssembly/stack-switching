@@ -15,7 +15,8 @@ and heap_type =
 and value_type = NumType of num_type | RefType of ref_type | BotType
 and stack_type = value_type list
 and func_type = FuncType of stack_type * stack_type
-and def_type = FuncDefType of func_type
+and cont_type = ContType of var
+and def_type = FuncDefType of func_type | ContDefType of cont_type
 
 type 'a limits = {min : 'a; max : 'a option}
 type mutability = Immutable | Mutable
@@ -76,9 +77,14 @@ let defaultable_value_type = function
 
 (* Projections *)
 
+let as_syn_var = function
+  | SynVar x -> x
+  | SemVar _ -> assert false
+
 let as_func_def_type (dt : def_type) : func_type =
   match dt with
   | FuncDefType ft -> ft
+  | _ -> assert false
 
 let extern_type_of_import_type (ImportType (et, _, _)) = et
 let extern_type_of_export_type (ExportType (et, _)) = et
@@ -145,6 +151,9 @@ let sem_global_type c (GlobalType (t, mut)) =
 let sem_func_type c (FuncType (ins, out)) =
   FuncType (sem_stack_type c ins, sem_stack_type c out)
 
+let sem_cont_type c (ContType x) =
+  ContType (sem_var_type c x)
+
 let sem_event_type c (EventType (ft, res)) =
   EventType (sem_func_type c ft, res)
 
@@ -158,6 +167,7 @@ let sem_extern_type c = function
 
 let sem_def_type c = function
   | FuncDefType ft -> FuncDefType (sem_func_type c ft)
+  | ContDefType ct -> ContDefType (sem_cont_type c ct)
 
 
 let sem_export_type c (ExportType (et, name)) =
@@ -237,8 +247,12 @@ and string_of_func_type = function
   | FuncType (ins, out) ->
     string_of_stack_type ins ^ " -> " ^ string_of_stack_type out
 
+and string_of_cont_type = function
+  | ContType x -> string_of_var x
+
 and string_of_def_type = function
   | FuncDefType ft -> "func " ^ string_of_func_type ft
+  | ContDefType ct -> "cont " ^ string_of_cont_type ct
 
 
 let string_of_limits {min; max} =
