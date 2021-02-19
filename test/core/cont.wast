@@ -3,7 +3,7 @@
   (event $e2)
 
   (type $f1 (func))
-  (type $k1 (cont (type $f1)))
+  (type $k1 (cont $f1))
 
   (func $f1 (export "unhandled-1")
     (cont.suspend $e1)
@@ -36,7 +36,7 @@
   (event $set (param i32) (result i32))
 
   (type $f (func (param i32) (result i32)))
-  (type $k (cont (type $f)))
+  (type $k (cont $f))
 
   (func $runner (param $s i32) (param $k (ref $k)) (result i32)
     (loop $loop

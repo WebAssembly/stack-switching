@@ -318,6 +318,8 @@ cont_type :
   | cont_type_params
     /* TODO: the inline type is broken for now */
     { let at = at () in fun c -> inline_func_type c ($1 c) at }
+  | var  /* Sugar */
+    { fun c -> $1 c type_ }
 
 cont_type_params :
   | LPAR PARAM value_type_list RPAR cont_type_params
