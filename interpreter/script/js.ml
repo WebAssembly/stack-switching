@@ -143,6 +143,14 @@ function assert_exception(action) {
   throw new Error("Wasm exception expected");
 }
 
+function assert_suspension(action) {
+  try { action() } catch (e) {
+    /* TODO: Not clear how to observe form JS */
+    return;
+  }
+  throw new Error("Wasm exception expected");
+}
+
 let StackOverflow;
 try { (function f() { 1 + f() })() } catch (e) { StackOverflow = e.constructor }
 
@@ -536,6 +544,8 @@ let of_assertion mods ass =
     of_assertion' mods act "assert_trap" [] None
   | AssertException (act, _) ->
     of_assertion' mods act "assert_exception" [] None
+  | AssertSuspension (act, _) ->
+    of_assertion' mods act "assert_suspension" [] None
   | AssertExhaustion (act, _) ->
     of_assertion' mods act "assert_exhaustion" [] None
 

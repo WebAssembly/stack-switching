@@ -564,10 +564,12 @@ let assertion mode ass =
     [Node ("assert_return", action mode act :: List.map (result mode) results)]
   | AssertTrap (act, re) ->
     [Node ("assert_trap", [action mode act; Atom (string re)])]
-  | AssertExhaustion (act, re) ->
-    [Node ("assert_exhaustion", [action mode act; Atom (string re)])]
   | AssertException (act, re) ->
     [Node ("assert_exception", [action mode act; Atom (string re)])]
+  | AssertSuspension (act, re) ->
+    [Node ("assert_suspension", [action mode act; Atom (string re)])]
+  | AssertExhaustion (act, re) ->
+    [Node ("assert_exhaustion", [action mode act; Atom (string re)])]
 
 let command mode cmd =
   match cmd.it with

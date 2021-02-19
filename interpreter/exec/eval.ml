@@ -10,12 +10,14 @@ open Source
 module Link = Error.Make ()
 module Trap = Error.Make ()
 module Exception = Error.Make ()
+module Suspension = Error.Make ()
 module Exhaustion = Error.Make ()
 module Crash = Error.Make ()
 
 exception Link = Link.Error
 exception Trap = Trap.Error
 exception Exception = Exception.Error
+exception Suspension = Suspension.Error
 exception Exhaustion = Exhaustion.Error
 exception Crash = Crash.Error (* failure that cannot happen in valid code *)
 
@@ -66,7 +68,6 @@ and admin_instr' =
   | Frame of int * frame * code
   | Catch of int * event_inst option * instr list * code
   | Resume of (event_inst * idx) list * code
-
   | Trapping of string
   | Throwing of event_inst * value stack
   | Suspending of event_inst * value stack * ctxt
@@ -83,7 +84,8 @@ let plain e = Plain e.it @@ e.at
 
 let is_jumping e =
   match e.it with
-  | Trapping _ | Throwing _ | Returning _ | ReturningInvoke _ | Breaking _ ->
+  | Trapping _ | Throwing _ | Suspending _
+  | Returning _ | ReturningInvoke _ | Breaking _ ->
     true
   | _ -> false
 
@@ -745,7 +747,7 @@ let rec eval (c : config) : value stack =
     (match e.it with
     | Trapping msg ->  Trap.error e.at msg
     | Throwing _ -> Exception.error e.at "unhandled exception"
-    | Suspending _ -> Exception.error e.at "unhandled event"
+    | Suspending _ -> Suspension.error e.at "unhandled event"
     | Returning _ | ReturningInvoke _ -> Crash.error e.at "undefined frame"
     | Breaking _ -> Crash.error e.at "undefined label"
     | _ -> assert false

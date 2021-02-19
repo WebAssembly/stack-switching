@@ -167,6 +167,7 @@ rule token = parse
   | "funcref" { FUNCREF }
   | (nxx as t) { NUM_TYPE (num_type t) }
   | "mut" { MUT }
+  | "cont" { CONT }
 
   | (nxx as t)".const"
     { let open Source in
@@ -213,6 +214,11 @@ rule token = parse
   | "do" { DO }
   | "catch" { CATCH }
   | "catch_all" { CATCH_ALL }
+
+  | "cont.new" { CONT_NEW }
+  | "cont.suspend" { CONT_SUSPEND }
+  | "cont.throw" { CONT_THROW }
+  | "cont.resume" { CONT_RESUME }
 
   | "local.get" { LOCAL_GET }
   | "local.set" { LOCAL_SET }
@@ -395,6 +401,7 @@ rule token = parse
   | "assert_return" { ASSERT_RETURN }
   | "assert_trap" { ASSERT_TRAP }
   | "assert_exception" { ASSERT_EXCEPTION }
+  | "assert_suspension" { ASSERT_SUSPENSION }
   | "assert_exhaustion" { ASSERT_EXHAUSTION }
   | "nan:canonical" { NAN Script.CanonicalNan }
   | "nan:arithmetic" { NAN Script.ArithmeticNan }

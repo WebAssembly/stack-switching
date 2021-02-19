@@ -213,10 +213,11 @@ let inline_func_type_explicit (c : context) x ft at =
 
 %token LPAR RPAR
 %token NAT INT FLOAT STRING VAR
-%token NUM_TYPE FUNCREF EXTERNREF REF EXTERN NULL MUT
+%token NUM_TYPE FUNCREF EXTERNREF REF EXTERN NULL MUT CONT
 %token UNREACHABLE NOP DROP SELECT
 %token BLOCK END IF THEN ELSE LOOP LET
 %token THROW TRY DO CATCH CATCH_ALL
+%token CONT_NEW CONT_SUSPEND CONT_THROW CONT_RESUME
 %token BR BR_IF BR_TABLE BR_ON_NULL
 %token CALL CALL_REF CALL_INDIRECT RETURN RETURN_CALL_REF FUNC_BIND
 %token LOCAL_GET LOCAL_SET LOCAL_TEE GLOBAL_GET GLOBAL_SET
@@ -231,7 +232,7 @@ let inline_func_type_explicit (c : context) x ft at =
 %token MODULE BIN QUOTE
 %token SCRIPT REGISTER INVOKE GET
 %token ASSERT_MALFORMED ASSERT_INVALID ASSERT_SOFT_INVALID ASSERT_UNLINKABLE
-%token ASSERT_RETURN ASSERT_TRAP ASSERT_EXCEPTION ASSERT_EXHAUSTION
+%token ASSERT_RETURN ASSERT_TRAP ASSERT_EXCEPTION ASSERT_SUSPENSION ASSERT_EXHAUSTION
 %token NAN
 %token INPUT OUTPUT
 %token EOF
@@ -305,6 +306,32 @@ global_type :
 
 def_type :
   | LPAR FUNC func_type RPAR { fun c -> FuncDefType ($3 c) }
+  | LPAR CONT cont_type RPAR { fun c -> ContDefType (ContType (SynVar ($3 c).it)) }
+
+cont_type :
+  | type_use cont_type_params
+    { let at1 = ati 1 in
+      fun c ->
+      match $2 c with
+      | FuncType ([], []) -> $1 c type_
+      | ft -> inline_func_type_explicit c ($1 c type_) ft at1 }
+  | cont_type_params
+    /* TODO: the inline type is broken for now */
+    { let at = at () in fun c -> inline_func_type c ($1 c) at }
+
+cont_type_params :
+  | LPAR PARAM value_type_list RPAR cont_type_params
+    { fun c -> let FuncType (ts1, ts2) = $5 c in
+      FuncType (snd $3 c @ ts1, ts2) }
+  | cont_type_results
+    { fun c -> FuncType ([], $1 c) }
+
+cont_type_results :
+  | LPAR RESULT value_type_list RPAR cont_type_results
+    { fun c -> snd $3 c @ $5 c }
+  | /* empty */
+    { fun c -> [] }
+
 
 func_type :
   | /* empty */
@@ -398,6 +425,7 @@ instr :
   | plain_instr { let at = at () in fun c -> [$1 c @@ at] }
   | select_instr_instr { fun c -> let e, es = $1 c in e :: es }
   | call_instr_instr { fun c -> let e, es = $1 c in e :: es }
+  | resume_instr_instr { fun c -> let e, es = $1 c in e :: es }
   | block_instr { let at = at () in fun c -> [$1 c @@ at] }
   | expr { $1 } /* Sugar */
 
@@ -416,6 +444,9 @@ plain_instr :
   | CALL var { fun c -> call ($2 c func) }
   | CALL_REF { fun c -> call_ref }
   | RETURN_CALL_REF { fun c -> return_call_ref }
+  | CONT_NEW LPAR TYPE var RPAR { fun c -> cont_new ($4 c type_) }
+  | CONT_SUSPEND var { fun c -> cont_suspend ($2 c event) }
+  | CONT_THROW var { fun c -> cont_throw ($2 c event) }
   | LOCAL_GET var { fun c -> local_get ($2 c local) }
   | LOCAL_SET var { fun c -> local_set ($2 c local) }
   | LOCAL_TEE var { fun c -> local_tee ($2 c local) }
@@ -550,6 +581,29 @@ call_instr_results_instr :
     { fun c -> [], $1 c }
 
 
+resume_instr :
+  | CONT_RESUME resume_instr_handler
+    { let at = at () in fun c -> cont_resume ($2 c) @@ at }
+
+resume_instr_handler :
+  | LPAR EVENT var var RPAR resume_instr_handler
+    { fun c -> ($3 c event, $4 c label) :: $6 c }
+  | /* empty */
+    { fun c -> [] }
+
+
+resume_instr_instr :
+  | CONT_RESUME resume_instr_handler_instr
+    { let at1 = ati 1 in
+      fun c -> let hs, es = $2 c in cont_resume hs @@ at1, es }
+
+resume_instr_handler_instr :
+  | LPAR EVENT var var RPAR resume_instr_handler_instr
+    { fun c -> let hs, es = $6 c in ($3 c event, $4 c label) :: hs, es }
+  | instr
+    { fun c -> [], $1 c }
+
+
 block_instr :
   | BLOCK labeling_opt block END labeling_end_opt
     { fun c -> let c' = $2 c $5 in let bt, es = $3 c' in block bt es }
@@ -663,6 +717,8 @@ expr1 :  /* Sugar */
       fun c -> let x, es = $2 c in es, call_indirect (0l @@ at1) x }
   | FUNC_BIND call_expr_type
     { fun c -> let x, es = $2 c in es, func_bind x }
+  | CONT_RESUME resume_expr_handler
+    { fun c -> let hs, es = $2 c in es, cont_resume hs }
   | BLOCK labeling_opt block
     { fun c -> let c' = $2 c [] in let bt, es = $3 c' in [], block bt es }
   | LOOP labeling_opt block
@@ -708,6 +764,13 @@ call_expr_results :
     { fun c -> let ts, es = $5 c in snd $3 c @ ts, es }
   | expr_list
     { fun c -> [], $1 c }
+
+resume_expr_handler :
+  | LPAR EVENT var var RPAR resume_expr_handler
+    { fun c -> let hs, es = $6 c in ($3 c event, $4 c label) :: hs, es }
+  | expr_list
+    { fun c -> [], $1 c }
+
 
 
 try_block :
@@ -790,6 +853,7 @@ instr_list :
   | /* empty */ { fun c -> [] }
   | select_instr { fun c -> [$1 c] }
   | call_instr { fun c -> [$1 c] }
+  | resume_instr { fun c -> [$1 c] }
   | instr instr_list { fun c -> $1 c @ $2 c }
 
 expr_list :
@@ -1269,6 +1333,7 @@ assertion :
   | LPAR ASSERT_RETURN action result_list RPAR { AssertReturn ($3, $4) @@ at () }
   | LPAR ASSERT_TRAP action STRING RPAR { AssertTrap ($3, $4) @@ at () }
   | LPAR ASSERT_EXCEPTION action STRING RPAR { AssertException ($3, $4) @@ at () }
+  | LPAR ASSERT_SUSPENSION action STRING RPAR { AssertSuspension ($3, $4) @@ at () }
   | LPAR ASSERT_EXHAUSTION action STRING RPAR { AssertExhaustion ($3, $4) @@ at () }
 
 cmd :
