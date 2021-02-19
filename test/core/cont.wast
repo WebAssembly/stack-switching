@@ -345,9 +345,9 @@
   (event $spawn (import "scheduler" "spawn") (param (ref $proc)))
   (func $scheduler (import "scheduler" "scheduler") (param $main (ref $proc)))
 
-  (type $hook (func (param i64)))
-  (func $sum (import "generator" "sum") (param i64 i64) (result i64))
-  (global $hook (import "generator" "hook") (mut (ref $hook)))
+  (type $ghook (func (param i64)))
+  (func $gsum (import "generator" "sum") (param i64 i64) (result i64))
+  (global $ghook (import "generator" "hook") (mut (ref $ghook)))
 
   (global $result (mut i64) (i64.const 0))
   (global $done (mut i32) (i32.const 0))
@@ -371,8 +371,8 @@
 
   (func $main (param $i i64) (param $j i64)
     (cont.suspend $spawn (ref.func $bg-thread))
-    (global.set $hook (ref.func $syield))
-    (global.set $result (call $sum (local.get $i) (local.get $j)))
+    (global.set $ghook (ref.func $syield))
+    (global.set $result (call $gsum (local.get $i) (local.get $j)))
     (global.set $done (i32.const 1))
   )
 
