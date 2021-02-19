@@ -120,14 +120,20 @@
 
   (event $yield (param i64) (result i32))
 
-  (elem declare func $gen)
-  (func $gen (param $i i64)
+  ;; Hook for logging purposes
+  (global $hook (export "hook") (mut (ref $gen)) (ref.func $dummy))
+  (func $dummy (param i64))
+
+  (func $gen (export "start") (param $i i64)
     (loop $l
       (br_if 1 (cont.suspend $yield (local.get $i)))
+      (call_ref (local.get $i) (global.get $hook))
       (local.set $i (i64.add (local.get $i) (i64.const 1)))
       (br $l)
     )
   )
+
+  (elem declare func $gen)
 
   (func (export "sum") (param $i i64) (param $j i64) (result i64)
     (local $sum i64)
@@ -149,6 +155,8 @@
   )
 )
 
+(register "generator")
+
 (assert_return (invoke "sum" (i64.const 0) (i64.const 0)) (i64.const 0))
 (assert_return (invoke "sum" (i64.const 2) (i64.const 2)) (i64.const 2))
 (assert_return (invoke "sum" (i64.const 0) (i64.const 3)) (i64.const 6))
@@ -165,6 +173,7 @@
   (event $yield (export "yield"))
   (event $spawn (export "spawn") (param (ref $proc)))
 
+  ;; Table as simple queue (keeping it simple, no ring buffer)
   (table $queue 0 (ref null $cont))
   (global $qdelta i32 (i32.const 10))
   (global $qback (mut i32) (i32.const 0))
@@ -175,42 +184,39 @@
   )
 
   (func $dequeue (result (ref null $cont))
-    (local $k (ref null $cont))
-    ;; Check if queue is empty
+    (local $i i32)
     (if (call $queue-empty)
       (then (return (ref.null $cont)))
     )
-    (local.set $k (table.get $queue (global.get $qfront)))
-    (global.set $qfront (i32.add (global.get $qfront) (i32.const 1)))
-    (local.get $k)
+    (local.set $i (global.get $qfront))
+    (global.set $qfront (i32.add (local.get $i) (i32.const 1)))
+    (table.get $queue (local.get $i))
   )
 
   (func $enqueue (param $k (ref $cont))
-    (local $qlen i32)
     ;; Check if queue is full
     (if (i32.eq (global.get $qback) (table.size $queue))
       (then
         ;; Check if there is enough space in the front to compact
         (if (i32.lt_u (global.get $qfront) (global.get $qdelta))
           (then
-            ;; Not enough room, grow table
+            ;; Space is below threshold, grow table instead
             (drop (table.grow $queue (ref.null $cont) (global.get $qdelta)))
           )
           (else
-            ;; Enough room, move entries down
-            (local.set $qlen (i32.sub (global.get $qback) (global.get $qfront)))
+            ;; Enough space, move entries up to head of table
+            (global.set $qback (i32.sub (global.get $qback) (global.get $qfront)))
             (table.copy $queue $queue
-              (i32.const 0)
-              (global.get $qfront)
-              (local.get $qlen)
+              (i32.const 0)         ;; dest = new front = 0
+              (global.get $qfront)  ;; src = old front
+              (global.get $qback)   ;; len = new back = old back - old front
             )
-            (table.fill $queue
-              (local.get $qlen)
-              (ref.null $cont)
-              (global.get $qfront)
+            (table.fill $queue      ;; null out old entries to avoid leaks
+              (global.get $qback)   ;; start = new back
+              (ref.null $cont)      ;; init value
+              (global.get $qfront)  ;; len = old front = old front - new front
             )
             (global.set $qfront (i32.const 0))
-            (global.set $qback (local.get $qlen))
           )
         )
       )
@@ -328,3 +334,57 @@
 (assert_return (invoke "run" (i32.const 1) (i32.const 0)))
 (assert_return (invoke "run" (i32.const 1) (i32.const 1)))
 (assert_return (invoke "run" (i32.const 3) (i32.const 4)))
+
+
+;; Nested example: generator in a thread
+
+(module $concurrent-generator
+  (func $log (import "spectest" "print_i64") (param i64))
+
+  (event $syield (import "scheduler" "yield"))
+  (event $spawn (import "scheduler" "spawn") (param (ref $proc)))
+  (func $scheduler (import "scheduler" "scheduler") (param $main (ref $proc)))
+
+  (type $hook (func (param i64)))
+  (func $sum (import "generator" "sum") (param i64 i64) (result i64))
+  (global $hook (import "generator" "hook") (mut (ref $hook)))
+
+  (global $result (mut i64) (i64.const 0))
+  (global $done (mut i32) (i32.const 0))
+
+  (elem declare func $main $bg-thread $syield)
+
+  (func $syield (param $i i64)
+    (call $log (local.get $i))
+    (cont.suspend $syield)
+  )
+
+  (func $bg-thread
+    (call $log (i64.const -10))
+    (loop $l
+      (call $log (i64.const -11))
+      (cont.suspend $syield)
+      (br_if $l (i32.eqz (global.get $done)))
+    )
+    (call $log (i64.const -12))
+  )
+
+  (func $main (param $i i64) (param $j i64)
+    (cont.suspend $spawn (ref.func $bg-thread))
+    (global.set $hook (ref.func $syield))
+    (global.set $result (call $sum (local.get $i) (local.get $j)))
+    (global.set $done (i32.const 1))
+  )
+
+  (type $proc (func))
+  (func (export "sum") (param $i i64) (param $j i64) (result i64)
+    (call $log (i64.const -1))
+    (call $scheduler
+      (func.bind (type $proc) (local.get $i) (local.get $j) (ref.func $main))
+    )
+    (call $log (i64.const -2))
+    (global.get $result)
+  )
+)
+
+(assert_return (invoke "sum" (i64.const 10) (i64.const 20)) (i64.const 165))
