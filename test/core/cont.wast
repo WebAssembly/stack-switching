@@ -1,4 +1,5 @@
 (module
+  (exception $exn)
   (event $e1)
   (event $e2)
 
@@ -24,11 +25,34 @@
     )
     (drop)
   )
+
+  (elem declare func $f2)
+  (func $f2
+    (throw $exn)
+  )
+
+  (func (export "uncaught-1")
+    (block $h (result (ref $k1))
+      (cont.resume (event $e1 $h) (cont.new (type $k1) (ref.func $f2)))
+      (unreachable)
+    )
+    (drop)
+  )
+
+  (func (export "uncaught-2")
+    (block $h (result (ref $k1))
+      (cont.resume (event $e1 $h) (cont.new (type $k1) (ref.func $f1)))
+      (unreachable)
+    )
+    (cont.throw $exn)
+  )
 )
 
 (assert_suspension (invoke "unhandled-1") "unhandled")
 (assert_suspension (invoke "unhandled-2") "unhandled")
 (assert_return (invoke "handled"))
+(assert_exception (invoke "uncaught-1") "unhandled")
+(assert_exception (invoke "uncaught-2") "unhandled")
 
 
 (module $state
