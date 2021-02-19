@@ -720,6 +720,10 @@ let rec step (c : config) : config =
       [Ref (ContRef (List.length ts, ctxt'))] @ vs1 @ vs,
       [Plain (Br (List.assq evt hs)) @@ e.at]
 
+    | Resume (hs, (vs', {it = Suspending (evt, vs1, ctxt); at} :: es')), vs ->
+      let ctxt' code = [], [Resume (hs, compose (ctxt code) (vs', es')) @@ e.at] in
+      vs, [Suspending (evt, vs1, ctxt') @@ at]
+
     | Resume (hs, (vs', e' :: es')), vs when is_jumping e' ->
       vs, [e']
 
