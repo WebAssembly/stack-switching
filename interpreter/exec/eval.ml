@@ -77,8 +77,20 @@ and admin_instr' =
 
 and ctxt = code -> code
 
-type cont = int * ctxt
+type cont = int * ctxt  (* TODO: represent type properly *)
 type ref_ += ContRef of cont
+
+let () =
+  let type_of_ref' = !Value.type_of_ref' in
+  Value.type_of_ref' := function
+    | ContRef _ -> BotHeapType  (* TODO *)
+    | r -> type_of_ref' r
+
+let () =
+  let string_of_ref' = !Value.string_of_ref' in
+  Value.string_of_ref' := function
+    | ContRef _ -> "cont"
+    | r -> string_of_ref' r
 
 let plain e = Plain e.it @@ e.at
 
