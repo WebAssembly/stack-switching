@@ -110,6 +110,52 @@
 (assert_return (invoke "run") (i32.const 19))
 
 
+;; Simple generator example
+
+(module $generator
+  (type $gen (func (param i64)))
+  (type $geny (func (param i32)))
+  (type $cont0 (cont $gen))
+  (type $cont (cont $geny))
+
+  (event $yield (param i64) (result i32))
+
+  (elem declare func $gen)
+  (func $gen (param $i i64)
+    (loop $l
+      (br_if 1 (cont.suspend $yield (local.get $i)))
+      (local.set $i (i64.add (local.get $i) (i64.const 1)))
+      (br $l)
+    )
+  )
+
+  (func (export "sum") (param $i i64) (param $j i64) (result i64)
+    (local $sum i64)
+    (local.get $i)
+    (cont.new (type $cont0) (ref.func $gen))
+    (block $on_first_yield (param i64 (ref $cont0)) (result i64 (ref $cont))
+      (cont.resume (event $yield $on_first_yield))
+      (unreachable)
+    )
+    (loop $on_yield (param i64) (param (ref $cont))
+      (let (result i32 (ref $cont))
+        (local $n i64) (local $k (ref $cont))
+        (local.set $sum (i64.add (local.get $sum) (local.get $n)))
+        (i64.eq (local.get $n) (local.get $j)) (local.get $k)
+      )
+      (cont.resume (event $yield $on_yield))
+    )
+    (return (local.get $sum))
+  )
+)
+
+(assert_return (invoke "sum" (i64.const 0) (i64.const 0)) (i64.const 0))
+(assert_return (invoke "sum" (i64.const 2) (i64.const 2)) (i64.const 2))
+(assert_return (invoke "sum" (i64.const 0) (i64.const 3)) (i64.const 6))
+(assert_return (invoke "sum" (i64.const 1) (i64.const 10)) (i64.const 55))
+(assert_return (invoke "sum" (i64.const 100) (i64.const 2000)) (i64.const 1_996_050))
+
+
 ;; Simple scheduler example
 
 (module $scheduler
@@ -208,13 +254,16 @@
 
   (func $log (import "spectest" "print_i32") (param i32))
 
+  (global $width (mut i32) (i32.const 0))
+  (global $depth (mut i32) (i32.const 0))
+
   (elem declare func $main $thread1 $thread2 $thread3)
 
   (func $main
     (call $log (i32.const 0))
     (cont.suspend $spawn (ref.func $thread1))
     (call $log (i32.const 1))
-    (cont.suspend $spawn (ref.func $thread2))
+    (cont.suspend $spawn (func.bind (type $proc) (global.get $depth) (ref.func $thread2)))
     (call $log (i32.const 2))
     (cont.suspend $spawn (ref.func $thread3))
     (call $log (i32.const 3))
@@ -230,10 +279,31 @@
     (call $log (i32.const 13))
   )
 
-  (func $thread2
+  (func $thread2 (param $d i32)
+    (local $w i32)
+    (local.set $w (global.get $width))
     (call $log (i32.const 20))
-    (cont.suspend $yield)
+    (br_if 0 (i32.eqz (local.get $d)))
     (call $log (i32.const 21))
+    (loop $l
+      (if (local.get $w)
+        (then
+          (call $log (i32.const 22))
+          (cont.suspend $yield)
+          (call $log (i32.const 23))
+          (cont.suspend $spawn
+            (func.bind (type $proc)
+              (i32.sub (local.get $d) (i32.const 1))
+              (ref.func $thread2)
+            )
+          )
+          (call $log (i32.const 24))
+          (local.set $w (i32.sub (local.get $w) (i32.const 1)))
+          (br $l)
+        )
+      )
+    )
+    (call $log (i32.const 25))
   )
 
   (func $thread3
@@ -244,11 +314,17 @@
     (call $log (i32.const 32))
   )
 
-  (func (export "run")
+  (func (export "run") (param $width i32) (param $depth i32)
+    (global.set $depth (local.get $depth))
+    (global.set $width (local.get $width))
     (call $log (i32.const -1))
     (call $scheduler (ref.func $main))
     (call $log (i32.const -2))
   )
 )
 
-(assert_return (invoke "run"))
+(assert_return (invoke "run" (i32.const 0) (i32.const 0)))
+(assert_return (invoke "run" (i32.const 0) (i32.const 1)))
+(assert_return (invoke "run" (i32.const 1) (i32.const 0)))
+(assert_return (invoke "run" (i32.const 1) (i32.const 1)))
+(assert_return (invoke "run" (i32.const 3) (i32.const 4)))
