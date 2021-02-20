@@ -217,7 +217,7 @@ let inline_func_type_explicit (c : context) x ft at =
 %token UNREACHABLE NOP DROP SELECT
 %token BLOCK END IF THEN ELSE LOOP LET
 %token THROW TRY DO CATCH CATCH_ALL
-%token CONT_NEW CONT_SUSPEND CONT_THROW CONT_RESUME
+%token CONT_NEW SUSPEND RESUME RESUME_THROW GUARD
 %token BR BR_IF BR_TABLE BR_ON_NULL
 %token CALL CALL_REF CALL_INDIRECT RETURN RETURN_CALL_REF FUNC_BIND
 %token LOCAL_GET LOCAL_SET LOCAL_TEE GLOBAL_GET GLOBAL_SET
@@ -447,8 +447,8 @@ plain_instr :
   | CALL_REF { fun c -> call_ref }
   | RETURN_CALL_REF { fun c -> return_call_ref }
   | CONT_NEW LPAR TYPE var RPAR { fun c -> cont_new ($4 c type_) }
-  | CONT_SUSPEND var { fun c -> cont_suspend ($2 c event) }
-  | CONT_THROW var { fun c -> cont_throw ($2 c event) }
+  | SUSPEND var { fun c -> suspend ($2 c event) }
+  | RESUME_THROW var { fun c -> resume_throw ($2 c event) }
   | LOCAL_GET var { fun c -> local_get ($2 c local) }
   | LOCAL_SET var { fun c -> local_set ($2 c local) }
   | LOCAL_TEE var { fun c -> local_tee ($2 c local) }
@@ -584,8 +584,8 @@ call_instr_results_instr :
 
 
 resume_instr :
-  | CONT_RESUME resume_instr_handler
-    { let at = at () in fun c -> cont_resume ($2 c) @@ at }
+  | RESUME resume_instr_handler
+    { let at = at () in fun c -> resume ($2 c) @@ at }
 
 resume_instr_handler :
   | LPAR EVENT var var RPAR resume_instr_handler
@@ -595,9 +595,9 @@ resume_instr_handler :
 
 
 resume_instr_instr :
-  | CONT_RESUME resume_instr_handler_instr
+  | RESUME resume_instr_handler_instr
     { let at1 = ati 1 in
-      fun c -> let hs, es = $2 c in cont_resume hs @@ at1, es }
+      fun c -> let hs, es = $2 c in resume hs @@ at1, es }
 
 resume_instr_handler_instr :
   | LPAR EVENT var var RPAR resume_instr_handler_instr
@@ -620,6 +620,14 @@ block_instr :
     { let at = at () in
       fun c -> let c' = enter_let ($2 c $5) at in
       let ts, ls, es = $3 c c' in let_ ts ls es }
+  | TRY labeling_opt block CATCH_ALL labeling_end_opt instr_list END labeling_end_opt
+    { fun c -> let c' = $2 c ($5 @ $8) in
+      let ts, es1 = $3 c' in try_ ts es1 None ($6 c') }
+  | TRY labeling_opt block CATCH labeling_end_opt LPAR EXCEPTION var RPAR instr_list END labeling_end_opt
+    { fun c -> let c' = $2 c ($5 @ $12) in
+      let ts, es1 = $3 c' in try_ ts es1 (Some ($8 c' event)) ($10 c') }
+  | GUARD labeling_opt block END labeling_end_opt
+    { fun c -> let c' = $2 c $5 in let bt, es = $3 c' in guard bt es }
 
 block :
   | type_use block_param_body
@@ -719,8 +727,8 @@ expr1 :  /* Sugar */
       fun c -> let x, es = $2 c in es, call_indirect (0l @@ at1) x }
   | FUNC_BIND call_expr_type
     { fun c -> let x, es = $2 c in es, func_bind x }
-  | CONT_RESUME resume_expr_handler
-    { fun c -> let hs, es = $2 c in es, cont_resume hs }
+  | RESUME resume_expr_handler
+    { fun c -> let hs, es = $2 c in es, resume hs }
   | BLOCK labeling_opt block
     { fun c -> let c' = $2 c [] in let bt, es = $3 c' in [], block bt es }
   | LOOP labeling_opt block
@@ -736,6 +744,8 @@ expr1 :  /* Sugar */
     { fun c ->
       let bt, (es1, xo, es2) = $2 c in
       [], try_ bt es1 xo es2 }
+  | GUARD labeling_opt block
+    { fun c -> let c' = $2 c [] in let bt, es = $3 c' in [], guard bt es }
 
 select_expr_results :
   | LPAR RESULT value_type_list RPAR select_expr_results
@@ -807,8 +817,8 @@ try_block_result_body :
       let out' = snd $3 c in
       FuncType (ins, out' @ out), es }
 try_ :
- | LPAR DO instr_list RPAR LPAR CATCH var instr_list RPAR
-   { fun c -> $3 c, Some ($7 c event), $8 c }
+ | LPAR DO instr_list RPAR LPAR CATCH LPAR EXCEPTION var RPAR instr_list RPAR
+   { fun c -> $3 c, Some ($9 c event), $11 c }
  | LPAR DO instr_list RPAR LPAR CATCH_ALL instr_list RPAR
    { fun c -> $3 c, None, $7 c }
 

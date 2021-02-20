@@ -41,7 +41,7 @@
   (func (export "catch-4") (result i32)
     (try (result i32)
       (do (throw $e1 (i32.const 66)) (i32.const 0))
-      (catch $e1)
+      (catch (exception $e1))
     )
   )
 
@@ -71,7 +71,7 @@
   (func (export "uncaught-2") (result i32)
     (try (result i32)
       (do (throw $e0) (i32.const 0))
-      (catch $e1)
+      (catch (exception $e1))
     )
   )
 )

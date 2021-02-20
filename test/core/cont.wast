@@ -1,4 +1,4 @@
-;; Unhandled events
+;; Unhandled events & guards
 
 (module
   (exception $exn)
@@ -9,12 +9,12 @@
   (type $k1 (cont $f1))
 
   (func $f1 (export "unhandled-1")
-    (cont.suspend $e1)
+    (suspend $e1)
   )
 
   (func (export "unhandled-2")
     (block $h (result (ref $k1))
-      (cont.resume (event $e2 $h) (cont.new (type $k1) (ref.func $f1)))
+      (resume (event $e2 $h) (cont.new (type $k1) (ref.func $f1)))
       (unreachable)
     )
     (drop)
@@ -22,7 +22,7 @@
 
   (func (export "handled")
     (block $h (result (ref $k1))
-      (cont.resume (event $e1 $h) (cont.new (type $k1) (ref.func $f1)))
+      (resume (event $e1 $h) (cont.new (type $k1) (ref.func $f1)))
       (unreachable)
     )
     (drop)
@@ -35,7 +35,7 @@
 
   (func (export "uncaught-1")
     (block $h (result (ref $k1))
-      (cont.resume (event $e1 $h) (cont.new (type $k1) (ref.func $f2)))
+      (resume (event $e1 $h) (cont.new (type $k1) (ref.func $f2)))
       (unreachable)
     )
     (drop)
@@ -43,10 +43,26 @@
 
   (func (export "uncaught-2")
     (block $h (result (ref $k1))
-      (cont.resume (event $e1 $h) (cont.new (type $k1) (ref.func $f1)))
+      (resume (event $e1 $h) (cont.new (type $k1) (ref.func $f1)))
       (unreachable)
     )
-    (cont.throw $exn)
+    (resume_throw $exn)
+  )
+
+  (elem declare func $f3)
+  (func $f3
+    (guard (call $f4))
+  )
+  (func $f4
+    (suspend $e1)
+  )
+
+  (func (export "guarded")
+    (block $h (result (ref $k1))
+      (resume (event $e1 $h) (cont.new (type $k1) (ref.func $f3)))
+      (unreachable)
+    )
+    (resume_throw $exn)
   )
 )
 
@@ -70,7 +86,7 @@
     (loop $loop
       (block $on_get (result (ref $k))
         (block $on_set (result i32 (ref $k))
-          (cont.resume (event $get $on_get) (event $set $on_set)
+          (resume (event $get $on_get) (event $set $on_set)
             (local.get $s) (local.get $k)
           )
           (return)
@@ -88,14 +104,14 @@
   )
 
   (func $f (param i32) (result i32)
-    (drop (cont.suspend $set (i32.const 7)))
+    (drop (suspend $set (i32.const 7)))
     (i32.add
-      (cont.suspend $get)
+      (suspend $get)
       (i32.mul
         (i32.const 2)
         (i32.add
-          (cont.suspend $set (i32.const 3))
-          (cont.suspend $get)
+          (suspend $set (i32.const 3))
+          (suspend $get)
         )
       )
     )
@@ -126,7 +142,7 @@
 
   (func $gen (export "start") (param $i i64)
     (loop $l
-      (br_if 1 (cont.suspend $yield (local.get $i)))
+      (br_if 1 (suspend $yield (local.get $i)))
       (call_ref (local.get $i) (global.get $hook))
       (local.set $i (i64.add (local.get $i) (i64.const 1)))
       (br $l)
@@ -140,7 +156,7 @@
     (local.get $i)
     (cont.new (type $cont0) (ref.func $gen))
     (block $on_first_yield (param i64 (ref $cont0)) (result i64 (ref $cont))
-      (cont.resume (event $yield $on_first_yield))
+      (resume (event $yield $on_first_yield))
       (unreachable)
     )
     (loop $on_yield (param i64) (param (ref $cont))
@@ -149,7 +165,7 @@
         (local.set $sum (i64.add (local.get $sum) (local.get $n)))
         (i64.eq (local.get $n) (local.get $j)) (local.get $k)
       )
-      (cont.resume (event $yield $on_yield))
+      (resume (event $yield $on_yield))
     )
     (return (local.get $sum))
   )
@@ -231,7 +247,7 @@
       (if (call $queue-empty) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_spawn (result (ref $proc) (ref $cont))
-          (cont.resume (event $yield $on_yield) (event $spawn $on_spawn)
+          (resume (event $yield $on_yield) (event $spawn $on_spawn)
             (call $dequeue)
           )
           (br $l)  ;; thread terminated
@@ -267,21 +283,21 @@
 
   (func $main
     (call $log (i32.const 0))
-    (cont.suspend $spawn (ref.func $thread1))
+    (suspend $spawn (ref.func $thread1))
     (call $log (i32.const 1))
-    (cont.suspend $spawn (func.bind (type $proc) (global.get $depth) (ref.func $thread2)))
+    (suspend $spawn (func.bind (type $proc) (global.get $depth) (ref.func $thread2)))
     (call $log (i32.const 2))
-    (cont.suspend $spawn (ref.func $thread3))
+    (suspend $spawn (ref.func $thread3))
     (call $log (i32.const 3))
   )
 
   (func $thread1
     (call $log (i32.const 10))
-    (cont.suspend $yield)
+    (suspend $yield)
     (call $log (i32.const 11))
-    (cont.suspend $yield)
+    (suspend $yield)
     (call $log (i32.const 12))
-    (cont.suspend $yield)
+    (suspend $yield)
     (call $log (i32.const 13))
   )
 
@@ -295,9 +311,9 @@
       (if (local.get $w)
         (then
           (call $log (i32.const 22))
-          (cont.suspend $yield)
+          (suspend $yield)
           (call $log (i32.const 23))
-          (cont.suspend $spawn
+          (suspend $spawn
             (func.bind (type $proc)
               (i32.sub (local.get $d) (i32.const 1))
               (ref.func $thread2)
@@ -314,9 +330,9 @@
 
   (func $thread3
     (call $log (i32.const 30))
-    (cont.suspend $yield)
+    (suspend $yield)
     (call $log (i32.const 31))
-    (cont.suspend $yield)
+    (suspend $yield)
     (call $log (i32.const 32))
   )
 
@@ -356,21 +372,21 @@
 
   (func $syield (param $i i64)
     (call $log (local.get $i))
-    (cont.suspend $syield)
+    (suspend $syield)
   )
 
   (func $bg-thread
     (call $log (i64.const -10))
     (loop $l
       (call $log (i64.const -11))
-      (cont.suspend $syield)
+      (suspend $syield)
       (br_if $l (i32.eqz (global.get $done)))
     )
     (call $log (i64.const -12))
   )
 
   (func $main (param $i i64) (param $j i64)
-    (cont.suspend $spawn (ref.func $bg-thread))
+    (suspend $spawn (ref.func $bg-thread))
     (global.set $ghook (ref.func $syield))
     (global.set $result (call $gsum (local.get $i) (local.get $j)))
     (global.set $done (i32.const 1))

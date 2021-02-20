@@ -225,7 +225,7 @@ let global_type s =
 let def_type s =
   match peek s with
   | Some 0x60 -> FuncDefType (func_type s)
-  | Some 0x61 -> ContDefType (cont_type s)
+  | Some 0x5f -> ContDefType (cont_type s)
   | None -> ignore (vs7 s); assert false  (* force error *)
   | _ -> error s (pos s) "malformed type definition"
 
@@ -553,9 +553,14 @@ let rec instr s =
   | 0xd4 -> br_on_null (at var s)
 
   | 0xe0 -> cont_new (at var s)
-  | 0xe1 -> cont_suspend (at var s)
-  | 0xe2 -> cont_throw (at var s)
-  | 0xe3 -> cont_resume (vec var_pair s)
+  | 0xe1 -> suspend (at var s)
+  | 0xe2 -> resume (vec var_pair s)
+  | 0xe3 -> resume_throw (at var s)
+  | 0xe4 ->
+    let bt = block_type s in
+    let es' = instr_block s in
+    end_ s;
+    guard bt es'
 
   | 0xfc as b ->
     (match vu32 s with
@@ -656,6 +661,7 @@ let import_desc s =
   | 0x01 -> TableImport (table_type s)
   | 0x02 -> MemoryImport (memory_type s)
   | 0x03 -> GlobalImport (global_type s)
+  | 0x04 -> EventImport (event_type s)
   | _ -> error s (pos s - 1) "malformed import kind"
 
 let import s =
@@ -723,6 +729,7 @@ let export_desc s =
   | 0x01 -> TableExport (at var s)
   | 0x02 -> MemoryExport (at var s)
   | 0x03 -> GlobalExport (at var s)
+  | 0x04 -> EventExport (at var s)
   | _ -> error s (pos s - 1) "malformed export kind"
 
 let export s =

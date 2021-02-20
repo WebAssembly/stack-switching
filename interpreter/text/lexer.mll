@@ -216,9 +216,10 @@ rule token = parse
   | "catch_all" { CATCH_ALL }
 
   | "cont.new" { CONT_NEW }
-  | "cont.suspend" { CONT_SUSPEND }
-  | "cont.throw" { CONT_THROW }
-  | "cont.resume" { CONT_RESUME }
+  | "suspend" { SUSPEND }
+  | "resume" { RESUME }
+  | "resume_throw" { RESUME_THROW }
+  | "guard" { GUARD }
 
   | "local.get" { LOCAL_GET }
   | "local.set" { LOCAL_SET }
