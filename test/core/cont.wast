@@ -69,8 +69,11 @@
 (assert_suspension (invoke "unhandled-1") "unhandled")
 (assert_suspension (invoke "unhandled-2") "unhandled")
 (assert_return (invoke "handled"))
+
 (assert_exception (invoke "uncaught-1") "unhandled")
 (assert_exception (invoke "uncaught-2") "unhandled")
+
+(assert_trap (invoke "guarded") "guard suspended")
 
 
 ;; Simple state example
