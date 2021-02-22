@@ -154,7 +154,7 @@ and match_global_type c a (GlobalType (t1, mut1)) (GlobalType (t2, mut2)) =
   | Mutable -> eq_value_type c [] t1 t2
 
 and match_event_type c a (EventType (ft1, res1)) (EventType (ft2, res2)) =
-  eq_resumability c [] res1 res2 && match_func_type c [] ft1 ft2
+  eq_resumability c [] res1 res2 && match_func_type c a ft1 ft2
 
 and match_extern_type c a et1 et2 =
   match et1, et2 with
