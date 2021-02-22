@@ -67,8 +67,7 @@ and admin_instr' =
   | Local of int * value list * code
   | Frame of int * frame * code
   | Catch of int * event_inst option * instr list * code
-  | Handle of (event_inst * idx) list * code
-  | Guarded of int * code
+  | Handle of (event_inst * idx) list option * code
   | Trapping of string
   | Throwing of event_inst * value stack
   | Suspending of event_inst * value stack * ctxt
@@ -329,7 +328,7 @@ let rec step (c : config) : config =
       | Resume xls, Ref (ContRef (n, ctxt)) :: vs ->
         let hs = List.map (fun (x, l) -> event c.frame.inst x, l) xls in
         let args, vs' = split n vs e.at in
-        vs', [Handle (hs, ctxt (args, [])) @@ e.at]
+        vs', [Handle (Some hs, ctxt (args, [])) @@ e.at]
 
       | ResumeThrow x, Ref (NullRef _) :: vs ->
         vs, [Trapping "null continuation reference" @@ e.at]
@@ -342,10 +341,10 @@ let rec step (c : config) : config =
         vs1' @ vs', es1'
 
       | Guard (bt, es'), vs ->
-        let FuncType (ts1, ts2) = block_type c.frame.inst bt e.at in
+        let FuncType (ts1, _) = block_type c.frame.inst bt e.at in
         let args, vs' = split (List.length ts1) vs e.at in
         vs', [
-          Guarded (List.length ts2,
+          Handle (None,
             (args, [Plain (Block (bt, es')) @@ e.at])
           ) @@ e.at
         ]
@@ -732,39 +731,29 @@ let rec step (c : config) : config =
       let c' = step {c with code = code'} in
       vs, [Catch (n, exno, es0, c'.code) @@ e.at]
 
-    | Handle (hs, (vs', [])), vs ->
+    | Handle (hso, (vs', [])), vs ->
       vs' @ vs, []
 
-    | Handle (hs, (vs', {it = Suspending (evt, vs1, ctxt); at} :: es')), vs
+    | Handle (None, (vs', {it = Suspending _; at} :: es')), vs ->
+      vs, [Trapping "guard suspended" @@ at]
+
+    | Handle (Some hs, (vs', {it = Suspending (evt, vs1, ctxt); at} :: es')), vs
       when List.mem_assq evt hs ->
       let EventType (FuncType (_, ts), _) = Event.type_of evt in
       let ctxt' code = compose (ctxt code) (vs', es') in
       [Ref (ContRef (List.length ts, ctxt'))] @ vs1 @ vs,
       [Plain (Br (List.assq evt hs)) @@ e.at]
 
-    | Handle (hs, (vs', {it = Suspending (evt, vs1, ctxt); at} :: es')), vs ->
-      let ctxt' code = [], [Handle (hs, compose (ctxt code) (vs', es')) @@ e.at] in
+    | Handle (hso, (vs', {it = Suspending (evt, vs1, ctxt); at} :: es')), vs ->
+      let ctxt' code = [], [Handle (hso, compose (ctxt code) (vs', es')) @@ e.at] in
       vs, [Suspending (evt, vs1, ctxt') @@ at]
 
-    | Handle (hs, (vs', e' :: es')), vs when is_jumping e' ->
+    | Handle (hso, (vs', e' :: es')), vs when is_jumping e' ->
       vs, [e']
 
-    | Handle (hs, code'), vs ->
+    | Handle (hso, code'), vs ->
       let c' = step {c with code = code'} in
-      vs, [Handle (hs, c'.code) @@ e.at]
-
-    | Guarded (n, (vs', [])), vs ->
-      vs' @ vs, []
-
-    | Guarded (n, (vs', {it = Suspending _; at} :: es')), vs ->
-      vs, [Trapping "guard suspended" @@ at]
-
-    | Guarded (n, (vs', e' :: es')), vs when is_jumping e' ->
-      vs, [e']
-
-    | Guarded (n, code'), vs ->
-      let c' = step {c with code = code'} in
-      vs, [Guarded (n, c'.code) @@ e.at]
+      vs, [Handle (hso, c'.code) @@ e.at]
 
     | Trapping _, _
     | Throwing _, _
