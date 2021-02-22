@@ -13,6 +13,10 @@
   )
 
   (func (export "unhandled-2")
+    (resume (cont.new (type $k1) (ref.func $f1)))
+  )
+
+  (func (export "unhandled-3")
     (block $h (result (ref $k1))
       (resume (event $e2 $h) (cont.new (type $k1) (ref.func $f1)))
       (unreachable)
@@ -68,6 +72,7 @@
 
 (assert_suspension (invoke "unhandled-1") "unhandled")
 (assert_suspension (invoke "unhandled-2") "unhandled")
+(assert_suspension (invoke "unhandled-3") "unhandled")
 (assert_return (invoke "handled"))
 
 (assert_exception (invoke "uncaught-1") "unhandled")
