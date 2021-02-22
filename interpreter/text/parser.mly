@@ -217,7 +217,7 @@ let inline_func_type_explicit (c : context) x ft at =
 %token UNREACHABLE NOP DROP SELECT
 %token BLOCK END IF THEN ELSE LOOP LET
 %token THROW TRY DO CATCH CATCH_ALL
-%token CONT_NEW SUSPEND RESUME RESUME_THROW GUARD
+%token CONT_NEW SUSPEND RESUME RESUME_THROW BARRIER
 %token BR BR_IF BR_TABLE BR_ON_NULL
 %token CALL CALL_REF CALL_INDIRECT RETURN RETURN_CALL_REF FUNC_BIND
 %token LOCAL_GET LOCAL_SET LOCAL_TEE GLOBAL_GET GLOBAL_SET
@@ -626,8 +626,8 @@ block_instr :
   | TRY labeling_opt block CATCH labeling_end_opt LPAR EXCEPTION var RPAR instr_list END labeling_end_opt
     { fun c -> let c' = $2 c ($5 @ $12) in
       let ts, es1 = $3 c' in try_ ts es1 (Some ($8 c' event)) ($10 c') }
-  | GUARD labeling_opt block END labeling_end_opt
-    { fun c -> let c' = $2 c $5 in let bt, es = $3 c' in guard bt es }
+  | BARRIER labeling_opt block END labeling_end_opt
+    { fun c -> let c' = $2 c $5 in let bt, es = $3 c' in barrier bt es }
 
 block :
   | type_use block_param_body
@@ -744,8 +744,8 @@ expr1 :  /* Sugar */
     { fun c ->
       let bt, (es1, xo, es2) = $2 c in
       [], try_ bt es1 xo es2 }
-  | GUARD labeling_opt block
-    { fun c -> let c' = $2 c [] in let bt, es = $3 c' in [], guard bt es }
+  | BARRIER labeling_opt block
+    { fun c -> let c' = $2 c [] in let bt, es = $3 c' in [], barrier bt es }
 
 select_expr_results :
   | LPAR RESULT value_type_list RPAR select_expr_results

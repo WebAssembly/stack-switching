@@ -109,7 +109,7 @@ let rec instr (e : instr) =
   | RefNull t -> heap_type t
   | RefFunc x -> funcs (idx x)
   | Const _ | Test _ | Compare _ | Unary _ | Binary _ | Convert _ -> empty
-  | Block (bt, es) | Loop (bt, es) | Guard (bt, es) -> block_type bt ++ block es
+  | Block (bt, es) | Loop (bt, es) | Barrier (bt, es) -> block_type bt ++ block es
   | If (bt, es1, es2) -> block_type bt ++ block es1 ++ block es2
   | Let (bt, ts, es) ->
     let free = block_type bt ++ block es in
