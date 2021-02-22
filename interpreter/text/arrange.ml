@@ -255,10 +255,13 @@ let rec instr e =
       "let", block_type bt @ decls "local" (List.map Source.it locals) @
         list instr es
     | Try (bt, es1, xo, es2) ->
-      let catch =
-        match xo with Some x -> "catch " ^ var x | None -> "catch_all" in
+      let catch, exn =
+        match xo with
+        | Some x -> "catch", [Node ("exception " ^ var x, [])]
+        | None -> "catch_all", []
+      in
       "try", block_type bt @
-        [Node ("do", list instr es1); Node (catch, list instr es2)]
+        [Node ("do", list instr es1); Node (catch, exn @ list instr es2)]
     | Throw x -> "throw " ^ var x, []
     | Br x -> "br " ^ var x, []
     | BrIf x -> "br_if " ^ var x, []
@@ -273,11 +276,12 @@ let rec instr e =
     | ReturnCallRef -> "return_call_ref", []
     | FuncBind x -> "func.bind", [Node ("type " ^ var x, [])]
     | ContNew x -> "cont.new", [Node ("type " ^ var x, [])]
-    | ContResume xys ->
-      "cont.resume",
-      List.map (fun (x, y) -> [Node ("event " ^ var x ^ " " ^ var y, [])]) xys
-    | ContSuspend x -> "cont.suspend", [Node ("event" ^ var x, [])]
-    | ContThrow x -> "cont.throw", [Node ("exception" ^ var x, [])]
+    | Suspend x -> "suspend " ^ var x, []
+    | Resume xys ->
+      "resume",
+      List.map (fun (x, y) -> Node ("event " ^ var x ^ " " ^ var y, [])) xys
+    | ResumeThrow x -> "resume_throw " ^ var x, []
+    | Guard (bt, es) -> "guard", block_type bt @ list instr es
     | LocalGet x -> "local.get " ^ var x, []
     | LocalSet x -> "local.set " ^ var x, []
     | LocalTee x -> "local.tee " ^ var x, []
@@ -564,10 +568,12 @@ let assertion mode ass =
     [Node ("assert_return", action mode act :: List.map (result mode) results)]
   | AssertTrap (act, re) ->
     [Node ("assert_trap", [action mode act; Atom (string re)])]
-  | AssertExhaustion (act, re) ->
-    [Node ("assert_exhaustion", [action mode act; Atom (string re)])]
   | AssertException (act, re) ->
     [Node ("assert_exception", [action mode act; Atom (string re)])]
+  | AssertSuspension (act, re) ->
+    [Node ("assert_suspension", [action mode act; Atom (string re)])]
+  | AssertExhaustion (act, re) ->
+    [Node ("assert_exhaustion", [action mode act; Atom (string re)])]
 
 let command mode cmd =
   match cmd.it with

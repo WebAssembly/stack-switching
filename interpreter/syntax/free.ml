@@ -109,21 +109,21 @@ let rec instr (e : instr) =
   | RefNull t -> heap_type t
   | RefFunc x -> funcs (idx x)
   | Const _ | Test _ | Compare _ | Unary _ | Binary _ | Convert _ -> empty
-  | Block (bt, es) | Loop (bt, es) -> block_type bt ++ block es
+  | Block (bt, es) | Loop (bt, es) | Guard (bt, es) -> block_type bt ++ block es
   | If (bt, es1, es2) -> block_type bt ++ block es1 ++ block es2
   | Let (bt, ts, es) ->
     let free = block_type bt ++ block es in
     {free with locals = Lib.Fun.repeat (List.length ts) shift free.locals}
   | Try (bt, es1, xo, es2) ->
     block_type bt ++ block es1 ++ opt (fun x -> events (idx x)) xo ++ block es2
-  | Throw x | ContThrow x | ContSuspend x -> events (idx x)
+  | Throw x | ResumeThrow x | Suspend x -> events (idx x)
   | Br x | BrIf x | BrOnNull x -> labels (idx x)
   | BrTable (xs, x) -> list (fun x -> labels (idx x)) (x::xs)
   | Return | CallRef | ReturnCallRef -> empty
   | Call x -> funcs (idx x)
   | CallIndirect (x, y) -> tables (idx x) ++ types (idx y)
   | FuncBind x | ContNew x -> types (idx x)
-  | ContResume xys -> list (fun (x, y) -> events (idx x) ++ labels (idx y)) xys
+  | Resume xys -> list (fun (x, y) -> events (idx x) ++ labels (idx y)) xys
   | LocalGet x | LocalSet x | LocalTee x -> locals (idx x)
   | GlobalGet x | GlobalSet x -> globals (idx x)
   | TableGet x | TableSet x | TableSize x | TableGrow x | TableFill x ->

@@ -450,25 +450,12 @@ let rec check_instr (c : context) (e : instr) (s : infer_stack_type) : op_type =
     [RefType (NonNullable, DefHeapType y)] -->
     [RefType (NonNullable, DefHeapType (SynVar x.it))]
 
-  | ContSuspend x ->
+  | Suspend x ->
     let EventType (FuncType (ts1, ts2), res) = event c x in
     require (res = Resumable) e.at "suspending with a non-resumable event";
     ts1 --> ts2
 
-  | ContThrow x ->
-    let EventType (FuncType (ts0, _), res) = event c x in
-    require (res = Terminal) e.at "throwing a non-exception event";
-    (match peek_ref 0 s e.at with
-    | nul, DefHeapType (SynVar y) ->
-      let ContType z = cont_type c (y @@ e.at) in
-      let FuncType (ts1, ts2) = func_type c (as_syn_var z @@ e.at) in
-      (ts0 @ [RefType (nul, DefHeapType (SynVar y))]) --> ts2
-    | _, BotHeapType ->
-      [] -->... []
-    | _ -> assert false
-    )
-
-  | ContResume xys ->
+  | Resume xys ->
     (match peek_ref 0 s e.at with
     | nul, DefHeapType (SynVar y) ->
       let ContType z = cont_type c (y @@ e.at) in
@@ -485,6 +472,24 @@ let rec check_instr (c : context) (e : instr) (s : infer_stack_type) : op_type =
       [] -->... []
     | _ -> assert false
     )
+
+  | ResumeThrow x ->
+    let EventType (FuncType (ts0, _), res) = event c x in
+    require (res = Terminal) e.at "throwing a non-exception event";
+    (match peek_ref 0 s e.at with
+    | nul, DefHeapType (SynVar y) ->
+      let ContType z = cont_type c (y @@ e.at) in
+      let FuncType (ts1, ts2) = func_type c (as_syn_var z @@ e.at) in
+      (ts0 @ [RefType (nul, DefHeapType (SynVar y))]) --> ts2
+    | _, BotHeapType ->
+      [] -->... []
+    | _ -> assert false
+    )
+
+  | Guard (bt, es) ->
+    let FuncType (ts1, ts2) as ft = check_block_type c bt e.at in
+    check_block {c with labels = ts2 :: c.labels} es ft e.at;
+    ts1 --> ts2
 
   | LocalGet x ->
     [] --> [local c x]

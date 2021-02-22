@@ -39,9 +39,10 @@ let return_call_ref = ReturnCallRef
 let func_bind x = FuncBind x
 
 let cont_new x = ContNew x
-let cont_suspend x = ContSuspend x
-let cont_throw x = ContThrow x
-let cont_resume xys = ContResume xys
+let suspend x = Suspend x
+let resume xys = Resume xys
+let resume_throw x = ResumeThrow x
+let guard bt es = Guard (bt, es)
 
 let local_get x = LocalGet x
 let local_set x = LocalSet x

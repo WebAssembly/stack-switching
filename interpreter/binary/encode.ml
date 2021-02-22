@@ -215,9 +215,10 @@ let encode m =
       | FuncBind x -> op 0x16; var x
 
       | ContNew x -> op 0xe0; var x
-      | ContSuspend x -> op 0xe1; var x
-      | ContThrow x -> op 0xe2; var x
-      | ContResume xls -> op 0xe3; vec var_pair xls
+      | Suspend x -> op 0xe1; var x
+      | Resume xls -> op 0xe2; vec var_pair xls
+      | ResumeThrow x -> op 0xe3; var x
+      | Guard (bt, es) -> op 0xe4; block_type bt; list instr es; end_ ()
 
       | Drop -> op 0x1a
       | Select None -> op 0x1b

@@ -1284,7 +1284,7 @@
       "\02\04\01"                           ;; import section with single entry
       "\00"                                 ;; string length 0
       "\00"                                 ;; string length 0
-      "\04"                                 ;; malformed import kind
+      "\05"                                 ;; malformed import kind
   )
   "malformed import kind"
 )
@@ -1294,7 +1294,7 @@
       "\02\05\01"                           ;; import section with single entry
       "\00"                                 ;; string length 0
       "\00"                                 ;; string length 0
-      "\04"                                 ;; malformed import kind
+      "\05"                                 ;; malformed import kind
       "\00"                                 ;; dummy byte
   )
   "malformed import kind"
