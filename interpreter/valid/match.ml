@@ -141,6 +141,9 @@ and match_stack_type c a ts1 ts2 =
 and match_func_type c a ft1 ft2 =
   eq_func_type c [] ft1 ft2
 
+and match_cont_type c a (ContType x1) (ContType x2) =
+  match_var_type c a x1 x2
+
 and match_table_type c a (TableType (lim1, t1)) (TableType (lim2, t2)) =
   match_limits c a lim1 lim2 && eq_ref_type c [] t1 t2
 
@@ -166,7 +169,10 @@ and match_extern_type c a et1 et2 =
   | _, _ -> false
 
 and match_def_type c a dt1 dt2 =
-  eq_def_type c [] dt1 dt2
+  match dt1, dt2 with
+  | FuncDefType ft1, FuncDefType ft2 -> match_func_type c a ft1 ft2
+  | ContDefType ct1, ContDefType ct2 -> match_cont_type c a ct1 ct2
+  | _, _ -> false
 
 and match_var_type c a x1 x2 =
   equal_var x1 x2 || assuming a (x1, x2) ||

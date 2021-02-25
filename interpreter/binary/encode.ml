@@ -119,11 +119,14 @@ let encode m =
       | BotType -> assert false
 
     let func_type = function
-      | FuncType (ts1, ts2) ->
-        vs7 (-0x20); vec value_type ts1; vec value_type ts2
+      | FuncType (ts1, ts2) -> vec value_type ts1; vec value_type ts2
 
     let cont_type = function
-      | ContType x -> vs7 (-0x21); var_type x
+      | ContType x -> var_type x
+
+    let def_type = function
+      | FuncDefType ft -> vs7 (-0x20); func_type ft
+      | ContDefType ct -> vs7 (-0x21); cont_type ct
 
     let limits vu {min; max} =
       bool (max <> None); vu min; opt vu max
@@ -147,10 +150,6 @@ let encode m =
 
     let global_type = function
       | GlobalType (t, mut) -> value_type t; mutability mut
-
-    let def_type = function
-      | FuncDefType ft -> func_type ft
-      | ContDefType ct -> cont_type ct
 
 
     (* Expressions *)
