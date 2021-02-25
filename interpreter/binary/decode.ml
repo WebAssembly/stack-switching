@@ -560,7 +560,7 @@ let rec instr s =
     let bt = block_type s in
     let es' = instr_block s in
     end_ s;
-    guard bt es'
+    barrier bt es'
 
   | 0xfc as b ->
     (match vu32 s with

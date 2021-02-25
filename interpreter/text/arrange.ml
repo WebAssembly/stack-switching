@@ -281,7 +281,7 @@ let rec instr e =
       "resume",
       List.map (fun (x, y) -> Node ("event " ^ var x ^ " " ^ var y, [])) xys
     | ResumeThrow x -> "resume_throw " ^ var x, []
-    | Guard (bt, es) -> "guard", block_type bt @ list instr es
+    | Barrier (bt, es) -> "barrier", block_type bt @ list instr es
     | LocalGet x -> "local.get " ^ var x, []
     | LocalSet x -> "local.set " ^ var x, []
     | LocalTee x -> "local.tee " ^ var x, []

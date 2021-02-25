@@ -100,7 +100,7 @@ and instr' =
   | Suspend of idx                    (* suspend continuation *)
   | Resume of (idx * idx) list        (* resume continuation *)
   | ResumeThrow of idx                (* abort continuation *)
-  | Guard of block_type * instr list  (* guard against suspension *)
+  | Barrier of block_type * instr list  (* guard against suspension *)
   | LocalGet of idx                   (* read local idxiable *)
   | LocalSet of idx                   (* write local idxiable *)
   | LocalTee of idx                   (* write local idxiable and keep value *)

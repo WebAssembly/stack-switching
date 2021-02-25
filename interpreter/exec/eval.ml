@@ -78,7 +78,7 @@ and admin_instr' =
 and ctxt = code -> code
 
 type cont = int * ctxt  (* TODO: represent type properly *)
-type ref_ += ContRef of cont
+type ref_ += ContRef of cont option ref
 
 let () =
   let type_of_ref' = !Value.type_of_ref' in
@@ -314,7 +314,7 @@ let rec step (c : config) : config =
       | ContNew x, Ref (FuncRef f) :: vs ->
         let FuncType (ts, _) = Func.type_of f in
         let ctxt code = compose code ([], [Invoke f @@ e.at]) in
-        Ref (ContRef (List.length ts, ctxt)) :: vs, []
+        Ref (ContRef (ref (Some (List.length ts, ctxt)))) :: vs, []
 
       | Suspend x, vs ->
         let evt = event c.frame.inst x in
@@ -325,22 +325,30 @@ let rec step (c : config) : config =
       | Resume xls, Ref (NullRef _) :: vs ->
         vs, [Trapping "null continuation reference" @@ e.at]
 
-      | Resume xls, Ref (ContRef (n, ctxt)) :: vs ->
+      | Resume xls, Ref (ContRef {contents = None}) :: vs ->
+        vs, [Trapping "continuation resumed twice" @@ e.at]
+
+      | Resume xls, Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
         let hs = List.map (fun (x, l) -> event c.frame.inst x, l) xls in
         let args, vs' = split n vs e.at in
+        cont := None;
         vs', [Handle (Some hs, ctxt (args, [])) @@ e.at]
 
       | ResumeThrow x, Ref (NullRef _) :: vs ->
         vs, [Trapping "null continuation reference" @@ e.at]
 
-      | ResumeThrow x, Ref (ContRef (n, ctxt)) :: vs ->
+      | ResumeThrow x, Ref (ContRef {contents = None}) :: vs ->
+        vs, [Trapping "continuation resumed twice" @@ e.at]
+
+      | ResumeThrow x, Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
         let evt = event c.frame.inst x in
         let EventType (FuncType (ts, _), _) = Event.type_of evt in
         let args, vs' = split (List.length ts) vs e.at in
         let vs1', es1' = ctxt (args, [Plain (Throw x) @@ e.at]) in
+        cont := None;
         vs1' @ vs', es1'
 
-      | Guard (bt, es'), vs ->
+      | Barrier (bt, es'), vs ->
         let FuncType (ts1, _) = block_type c.frame.inst bt e.at in
         let args, vs' = split (List.length ts1) vs e.at in
         vs', [
@@ -735,13 +743,13 @@ let rec step (c : config) : config =
       vs' @ vs, []
 
     | Handle (None, (vs', {it = Suspending _; at} :: es')), vs ->
-      vs, [Trapping "guard suspended" @@ at]
+      vs, [Trapping "barrier hit by suspension" @@ at]
 
     | Handle (Some hs, (vs', {it = Suspending (evt, vs1, ctxt); at} :: es')), vs
       when List.mem_assq evt hs ->
       let EventType (FuncType (_, ts), _) = Event.type_of evt in
       let ctxt' code = compose (ctxt code) (vs', es') in
-      [Ref (ContRef (List.length ts, ctxt'))] @ vs1 @ vs,
+      [Ref (ContRef (ref (Some (List.length ts, ctxt'))))] @ vs1 @ vs,
       [Plain (Br (List.assq evt hs)) @@ e.at]
 
     | Handle (hso, (vs', {it = Suspending (evt, vs1, ctxt); at} :: es')), vs ->

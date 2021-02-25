@@ -486,7 +486,7 @@ let rec check_instr (c : context) (e : instr) (s : infer_stack_type) : op_type =
     | _ -> assert false
     )
 
-  | Guard (bt, es) ->
+  | Barrier (bt, es) ->
     let FuncType (ts1, ts2) as ft = check_block_type c bt e.at in
     check_block {c with labels = ts2 :: c.labels} es ft e.at;
     ts1 --> ts2

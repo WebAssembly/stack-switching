@@ -219,7 +219,7 @@ rule token = parse
   | "suspend" { SUSPEND }
   | "resume" { RESUME }
   | "resume_throw" { RESUME_THROW }
-  | "guard" { GUARD }
+  | "barrier" { BARRIER }
 
   | "local.get" { LOCAL_GET }
   | "local.set" { LOCAL_SET }
