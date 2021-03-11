@@ -219,7 +219,9 @@ let inline_func_type_explicit (c : context) x ft at =
 %token THROW TRY DO CATCH CATCH_ALL
 %token CONT_NEW SUSPEND RESUME RESUME_THROW BARRIER
 %token BR BR_IF BR_TABLE BR_ON_NULL
-%token CALL CALL_REF CALL_INDIRECT RETURN RETURN_CALL_REF FUNC_BIND
+%token CALL CALL_REF CALL_INDIRECT
+%token RETURN RETURN_CALL RETURN_CALL_REF RETURN_CALL_INDIRECT
+%token FUNC_BIND
 %token LOCAL_GET LOCAL_SET LOCAL_TEE GLOBAL_GET GLOBAL_SET
 %token TABLE_GET TABLE_SET
 %token TABLE_SIZE TABLE_GROW TABLE_FILL TABLE_COPY TABLE_INIT ELEM_DROP
@@ -445,6 +447,7 @@ plain_instr :
   | RETURN { fun c -> return }
   | CALL var { fun c -> call ($2 c func) }
   | CALL_REF { fun c -> call_ref }
+  | RETURN_CALL var { fun c -> return_call ($2 c func) }
   | RETURN_CALL_REF { fun c -> return_call_ref }
   | CONT_NEW LPAR TYPE var RPAR { fun c -> cont_new ($4 c type_) }
   | SUSPEND var { fun c -> suspend ($2 c event) }
@@ -520,6 +523,10 @@ call_instr :
     { let at = at () in fun c -> call_indirect ($2 c table) ($3 c) @@ at }
   | CALL_INDIRECT call_instr_type  /* Sugar */
     { let at = at () in fun c -> call_indirect (0l @@ at) ($2 c) @@ at }
+  | RETURN_CALL_INDIRECT var call_instr_type
+    { let at = at () in fun c -> return_call_indirect ($2 c table) ($3 c) @@ at }
+  | RETURN_CALL_INDIRECT call_instr_type  /* Sugar */
+    { let at = at () in fun c -> return_call_indirect (0l @@ at) ($2 c) @@ at }
   | FUNC_BIND call_instr_type
     { let at = at () in fun c -> func_bind ($2 c) @@ at }
 
@@ -554,6 +561,12 @@ call_instr_instr :
   | CALL_INDIRECT call_instr_type_instr  /* Sugar */
     { let at1 = ati 1 in
       fun c -> let x, es = $2 c in call_indirect (0l @@ at1) x @@ at1, es }
+  | RETURN_CALL_INDIRECT var call_instr_type_instr
+    { let at1 = ati 1 in
+      fun c -> let x, es = $3 c in return_call_indirect ($2 c table) x @@ at1, es }
+  | RETURN_CALL_INDIRECT call_instr_type_instr  /* Sugar */
+    { let at1 = ati 1 in
+      fun c -> let x, es = $2 c in return_call_indirect (0l @@ at1) x @@ at1, es }
   | FUNC_BIND call_instr_type_instr
     { let at1 = ati 1 in
       fun c -> let x, es = $2 c in func_bind x @@ at1, es }
@@ -725,6 +738,11 @@ expr1 :  /* Sugar */
   | CALL_INDIRECT call_expr_type  /* Sugar */
     { let at1 = ati 1 in
       fun c -> let x, es = $2 c in es, call_indirect (0l @@ at1) x }
+  | RETURN_CALL_INDIRECT var call_expr_type
+    { fun c -> let x, es = $3 c in es, return_call_indirect ($2 c table) x }
+  | RETURN_CALL_INDIRECT call_expr_type  /* Sugar */
+    { let at1 = ati 1 in
+      fun c -> let x, es = $2 c in es, return_call_indirect (0l @@ at1) x }
   | FUNC_BIND call_expr_type
     { fun c -> let x, es = $2 c in es, func_bind x }
   | RESUME resume_expr_handler

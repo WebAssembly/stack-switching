@@ -33,7 +33,9 @@ let return = Return
 let call x = Call x
 let call_ref = CallRef
 let call_indirect x y = CallIndirect (x, y)
+let return_call x = ReturnCall x
 let return_call_ref = ReturnCallRef
+let return_call_indirect x y = ReturnCallIndirect (x, y)
 let func_bind x = FuncBind x
 
 let cont_new x = ContNew x

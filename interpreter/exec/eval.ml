@@ -357,6 +357,21 @@ let rec step (c : config) : config =
           ) @@ e.at
         ]
 
+      | ReturnCall x, vs ->
+        (match (step {c with code = (vs, [Plain (Call x) @@ e.at])}).code with
+        | vs', [{it = Invoke a; at}] -> vs', [ReturningInvoke (vs', a) @@ at]
+        | _ -> assert false
+        )
+
+      | ReturnCallIndirect (x, y), vs ->
+        (match
+          (step {c with code = (vs, [Plain (CallIndirect (x, y)) @@ e.at])}).code
+        with
+        | vs', [{it = Invoke a; at}] -> vs', [ReturningInvoke (vs', a) @@ at]
+        | vs', [{it = Trapping s; at}] -> vs', [Trapping s @@ at]
+        | _ -> assert false
+        )
+
       | Drop, v :: vs' ->
         vs', []
 
@@ -639,6 +654,9 @@ let rec step (c : config) : config =
     | Label (n, es0, (vs', {it = Suspending (evt, vs1, ctxt); at} :: es')), vs ->
       let ctxt' code = [], [Label (n, es0, compose (ctxt code) (vs', es')) @@ e.at] in
       vs, [Suspending (evt, vs1, ctxt') @@ at]
+
+    | Label (n, es0, (vs', {it = ReturningInvoke (vs0, f); at} :: es')), vs ->
+      vs, [ReturningInvoke (vs0, f) @@ at]
 
     | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es')), vs ->
       take n vs0 e.at @ vs, List.map plain es0

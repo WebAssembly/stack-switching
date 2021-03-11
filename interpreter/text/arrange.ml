@@ -273,7 +273,10 @@ let rec instr e =
     | CallRef -> "call_ref", []
     | CallIndirect (x, y) ->
       "call_indirect " ^ var x, [Node ("type " ^ var y, [])]
+    | ReturnCall x -> "return_call " ^ var x, []
     | ReturnCallRef -> "return_call_ref", []
+    | ReturnCallIndirect (x, y) ->
+      "return_call_indirect " ^ var x, [Node ("type " ^ var y, [])]
     | FuncBind x -> "func.bind", [Node ("type " ^ var x, [])]
     | ContNew x -> "cont.new", [Node ("type " ^ var x, [])]
     | Suspend x -> "suspend " ^ var x, []
