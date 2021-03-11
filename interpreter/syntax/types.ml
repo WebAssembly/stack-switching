@@ -13,8 +13,8 @@ and heap_type =
   FuncHeapType | ExternHeapType | DefHeapType of var | BotHeapType
 
 and value_type = NumType of num_type | RefType of ref_type | BotType
-and stack_type = value_type list
-and func_type = FuncType of stack_type * stack_type
+and result_type = value_type list
+and func_type = FuncType of result_type * result_type
 and cont_type = ContType of var
 and def_type = FuncDefType of func_type | ContDefType of cont_type
 
@@ -203,7 +203,7 @@ let string_of_name n =
 let rec string_of_var =
   let inner = ref false in
   function
-  | SynVar x -> Int32.to_string x
+  | SynVar x -> I32.to_string_u x
   | SemVar x ->
     if !inner then "..." else
     ( inner := true;
@@ -227,7 +227,7 @@ and string_of_heap_type = function
   | FuncHeapType -> "func"
   | ExternHeapType -> "extern"
   | DefHeapType x -> string_of_var x
-  | BotHeapType -> "unreachable"
+  | BotHeapType -> "something"
 
 and string_of_ref_type = function
   | (nul, t) ->
@@ -236,16 +236,14 @@ and string_of_ref_type = function
 and string_of_value_type = function
   | NumType t -> string_of_num_type t
   | RefType t -> string_of_ref_type t
-  | BotType -> "(unreachable)"
+  | BotType -> "(something)"
 
-and string_of_stack_type = function
-  | [t] -> string_of_value_type t
-  | ts -> "[" ^ String.concat " " (List.map string_of_value_type ts) ^ "]"
-
+and string_of_result_type ts =
+  "[" ^ String.concat " " (List.map string_of_value_type ts) ^ "]"
 
 and string_of_func_type = function
   | FuncType (ins, out) ->
-    string_of_stack_type ins ^ " -> " ^ string_of_stack_type out
+    string_of_result_type ins ^ " -> " ^ string_of_result_type out
 
 and string_of_cont_type = function
   | ContType x -> string_of_var x

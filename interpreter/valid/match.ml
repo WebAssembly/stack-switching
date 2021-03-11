@@ -51,12 +51,12 @@ and eq_value_type c a t1 t2 =
   | RefType t1', RefType t2' -> eq_ref_type c a t1' t2'
   | _, _ -> false
 
-and eq_stack_type c a ts1 ts2 =
+and eq_result_type c a ts1 ts2 =
   List.length ts1 = List.length ts2 &&
   List.for_all2 (eq_value_type c a) ts1 ts2
 
 and eq_func_type c a (FuncType (ts11, ts12)) (FuncType (ts21, ts22)) =
-  eq_stack_type c a ts11 ts21 && eq_stack_type c a ts12 ts22
+  eq_result_type c a ts11 ts21 && eq_result_type c a ts12 ts22
 
 and eq_cont_type c a (ContType x1) (ContType x2) =
   eq_var_type c a x1 x2
@@ -134,7 +134,7 @@ and match_value_type c a t1 t2 =
   | BotType, _ -> true
   | _, _ -> false
 
-and match_stack_type c a ts1 ts2 =
+and match_result_type c a ts1 ts2 =
   List.length ts1 = List.length ts2 &&
   List.for_all2 (match_value_type c a) ts1 ts2
 

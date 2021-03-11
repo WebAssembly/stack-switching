@@ -70,10 +70,6 @@ let var_type = function
   | SynVar x -> types (idx' x)
   | SemVar _ -> assert false
 
-let block_type = function
-  | VarBlockType x -> var_type x
-  | ValBlockType _ -> empty
-
 let num_type = function
   | I32Type | I64Type | F32Type | F64Type -> empty
 
@@ -100,6 +96,10 @@ let event_type (EventType (ft, _res)) = func_type ft
 let def_type = function
   | FuncDefType ft -> func_type ft
   | ContDefType ct -> cont_type ct
+
+let block_type = function
+  | VarBlockType x -> var_type x
+  | ValBlockType _ -> empty
 
 let rec instr (e : instr) =
   match e.it with
