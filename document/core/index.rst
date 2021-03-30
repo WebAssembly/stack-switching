@@ -3,7 +3,7 @@ WebAssembly Specification
 
 .. only:: html
 
-   | Release |release| (Draft, |today|)
+   | Release |release| + stack-switching (Draft, |today|)
 
    | Editor: Andreas Rossberg
 
