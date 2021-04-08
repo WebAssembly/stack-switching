@@ -68,7 +68,7 @@ logo = 'static/webassembly.png'
 repo = 'continuations'
 
 # The name of the proposal it represents, if any
-proposal = 'function-references + tail-calls + continuations'
+proposal = 'function-references + tail-call + continuations'
 
 # The draft version string (clear out for release cuts)
 draft = ' (Draft ' + date.today().strftime("%Y-%m-%d") + ')'
