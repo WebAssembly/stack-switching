@@ -332,7 +332,7 @@ let rec step (c : config) : config =
         in
         cont := None;
         let ctxt' code = ctxt (compose (args, []) code) in
-        Ref (ContRef (ref (Some (n - List.length args, ctxt')))) :: vs, []
+        Ref (ContRef (ref (Some (n - List.length args, ctxt')))) :: vs', []
 
       | Suspend x, vs ->
         let evt = event c.frame.inst x in
