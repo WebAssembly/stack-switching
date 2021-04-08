@@ -279,6 +279,7 @@ let rec instr e =
       "return_call_indirect " ^ var x, [Node ("type " ^ var y, [])]
     | FuncBind x -> "func.bind", [Node ("type " ^ var x, [])]
     | ContNew x -> "cont.new", [Node ("type " ^ var x, [])]
+    | ContBind x -> "cont.bind", [Node ("type " ^ var x, [])]
     | Suspend x -> "suspend " ^ var x, []
     | Resume xys ->
       "resume",

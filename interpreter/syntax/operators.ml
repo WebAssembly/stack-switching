@@ -39,6 +39,7 @@ let return_call_indirect x y = ReturnCallIndirect (x, y)
 let func_bind x = FuncBind x
 
 let cont_new x = ContNew x
+let cont_bind x = ContBind x
 let suspend x = Suspend x
 let resume xys = Resume xys
 let resume_throw x = ResumeThrow x

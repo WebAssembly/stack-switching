@@ -553,10 +553,11 @@ let rec instr s =
   | 0xd4 -> br_on_null (at var s)
 
   | 0xe0 -> cont_new (at var s)
-  | 0xe1 -> suspend (at var s)
-  | 0xe2 -> resume (vec var_pair s)
-  | 0xe3 -> resume_throw (at var s)
-  | 0xe4 ->
+  | 0xe1 -> cont_bind (at var s)
+  | 0xe2 -> suspend (at var s)
+  | 0xe3 -> resume (vec var_pair s)
+  | 0xe4 -> resume_throw (at var s)
+  | 0xe5 ->
     let bt = block_type s in
     let es' = instr_block s in
     end_ s;

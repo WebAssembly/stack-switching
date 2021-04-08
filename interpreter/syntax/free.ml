@@ -123,7 +123,7 @@ let rec instr (e : instr) =
   | Call x | ReturnCall x -> funcs (idx x)
   | CallIndirect (x, y) | ReturnCallIndirect (x, y) ->
     tables (idx x) ++ types (idx y)
-  | FuncBind x | ContNew x -> types (idx x)
+  | FuncBind x | ContNew x | ContBind x -> types (idx x)
   | Resume xys -> list (fun (x, y) -> events (idx x) ++ labels (idx y)) xys
   | LocalGet x | LocalSet x | LocalTee x -> locals (idx x)
   | GlobalGet x | GlobalSet x -> globals (idx x)

@@ -71,13 +71,13 @@
 
   (elem declare func $r0 $r1)
   (func $r0)
-  (func $r1 (suspend $e1))
+  (func $r1 (suspend $e1) (suspend $e1))
 
-  (func $nl0 (param $k (ref $k1))
+  (func $nl1 (param $k (ref $k1))
     (resume (local.get $k))
     (resume (local.get $k))
   )
-  (func $nl1 (param $k (ref $k1))
+  (func $nl2 (param $k (ref $k1))
     (block $h (result (ref $k1))
       (resume (event $e1 $h) (local.get $k))
       (unreachable)
@@ -85,7 +85,7 @@
     (resume (local.get $k))
     (unreachable)
   )
-  (func $nl2 (param $k (ref $k1))
+  (func $nl3 (param $k (ref $k1))
     (block $h1 (result (ref $k1))
       (resume (event $e1 $h1) (local.get $k))
       (unreachable)
@@ -99,15 +99,22 @@
       (unreachable)
     )
   )
+  (func $nl4 (param $k (ref $k1))
+    (drop (cont.bind (type $k1) (local.get $k)))
+    (resume (local.get $k))
+  )
 
   (func (export "non-linear-1")
-    (call $nl0 (cont.new (type $k1) (ref.func $r0)))
+    (call $nl1 (cont.new (type $k1) (ref.func $r0)))
   )
   (func (export "non-linear-2")
-    (call $nl1 (cont.new (type $k1) (ref.func $r1)))
+    (call $nl2 (cont.new (type $k1) (ref.func $r1)))
   )
   (func (export "non-linear-3")
-    (call $nl1 (cont.new (type $k1) (ref.func $r1)))
+    (call $nl3 (cont.new (type $k1) (ref.func $r1)))
+  )
+  (func (export "non-linear-4")
+    (call $nl4 (cont.new (type $k1) (ref.func $r1)))
   )
 )
 
@@ -121,9 +128,10 @@
 
 (assert_trap (invoke "barrier") "barrier")
 
-(assert_trap (invoke "non-linear-1") "continuation resumed twice")
-(assert_trap (invoke "non-linear-2") "continuation resumed twice")
-(assert_trap (invoke "non-linear-3") "continuation resumed twice")
+(assert_trap (invoke "non-linear-1") "continuation already consumed")
+(assert_trap (invoke "non-linear-2") "continuation already consumed")
+(assert_trap (invoke "non-linear-3") "continuation already consumed")
+(assert_trap (invoke "non-linear-4") "continuation already consumed")
 
 
 ;; Simple state example

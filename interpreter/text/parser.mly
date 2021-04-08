@@ -217,7 +217,7 @@ let inline_func_type_explicit (c : context) x ft at =
 %token UNREACHABLE NOP DROP SELECT
 %token BLOCK END IF THEN ELSE LOOP LET
 %token THROW TRY DO CATCH CATCH_ALL
-%token CONT_NEW SUSPEND RESUME RESUME_THROW BARRIER
+%token CONT_NEW CONT_BIND SUSPEND RESUME RESUME_THROW BARRIER
 %token BR BR_IF BR_TABLE BR_ON_NULL
 %token CALL CALL_REF CALL_INDIRECT
 %token RETURN RETURN_CALL RETURN_CALL_REF RETURN_CALL_INDIRECT
@@ -450,6 +450,7 @@ plain_instr :
   | RETURN_CALL var { fun c -> return_call ($2 c func) }
   | RETURN_CALL_REF { fun c -> return_call_ref }
   | CONT_NEW LPAR TYPE var RPAR { fun c -> cont_new ($4 c type_) }
+  | CONT_BIND LPAR TYPE var RPAR { fun c -> cont_bind ($4 c type_) }
   | SUSPEND var { fun c -> suspend ($2 c event) }
   | RESUME_THROW var { fun c -> resume_throw ($2 c event) }
   | LOCAL_GET var { fun c -> local_get ($2 c local) }

@@ -480,6 +480,28 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : op_type 
     [RefType (NonNullable, DefHeapType y)] -->
     [RefType (NonNullable, DefHeapType (SynVar x.it))]
 
+  | ContBind x ->
+    (match peek_ref 0 s e.at with
+    | nul, DefHeapType (SynVar y) ->
+      let ContType z = cont_type c (y @@ e.at) in
+      let FuncType (ts1, ts2) = func_type c (as_syn_var z @@ e.at) in
+      let ContType z' = cont_type c x in
+      let FuncType (ts1', _) as ft' = func_type c (as_syn_var z' @@ x.at) in
+      require (List.length ts1 >= List.length ts1') x.at
+        "type mismatch in continuation arguments";
+      let ts11, ts12 = Lib.List.split (List.length ts1 - List.length ts1') ts1 in
+      require (match_func_type c.types [] (FuncType (ts12, ts2)) ft') e.at
+        "type mismatch in continuation type";
+      (ts11 @ [RefType (nul, DefHeapType (SynVar y))]) -->
+        [RefType (NonNullable, DefHeapType (SynVar x.it))]
+    | (_, BotHeapType) as rt ->
+      [RefType rt] -->.. [RefType (NonNullable, DefHeapType (SynVar x.it))]
+    | rt ->
+      error e.at
+        ("type mismatch: instruction requires continuation reference type" ^
+         " but stack has " ^ string_of_value_type (RefType rt))
+    )
+
   | Suspend x ->
     let EventType (FuncType (ts1, ts2), res) = event c x in
     require (res = Resumable) e.at "suspending with a non-resumable event";
@@ -493,9 +515,17 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : op_type 
       List.iter (fun (x1, x2) ->
         let EventType (FuncType (ts3, ts4), res) = event c x1 in
         require (res = Resumable) x1.at "handling a non-resumable event";
-        (* TODO: check label; problem: we don't have a type idx to produce here
-        check_stack c (ts3 @ [RefType (NonNullable, DefHeapType (SynVar ?))]) (label c x2) x2.at
-        *)
+        match Lib.List.last_opt (label c x2) with
+        | Some (RefType (NonNullable, DefHeapType (SynVar y'))) ->
+          let ContType z' = cont_type c (y' @@ x2.at) in
+          let FuncType (ts1', ts2') = func_type c (as_syn_var z' @@ x2.at) in
+          check_stack c ts4 ts1' x2.at;
+          check_stack c ts2 ts2' x2.at;
+          check_stack c (ts3 @ [RefType (NonNullable, DefHeapType (SynVar y'))]) (label c x2) x2.at
+        | _ ->
+         error e.at
+           ("type mismatch: instruction requires continuation reference type" ^
+            " but label has " ^ string_of_result_type (label c x2))
       ) xys;
       (ts1 @ [RefType (nul, DefHeapType (SynVar y))]) --> ts2
     | _, BotHeapType ->

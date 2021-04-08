@@ -218,6 +218,7 @@ rule token = parse
   | "catch_all" { CATCH_ALL }
 
   | "cont.new" { CONT_NEW }
+  | "cont.bind" { CONT_BIND }
   | "suspend" { SUSPEND }
   | "resume" { RESUME }
   | "resume_throw" { RESUME_THROW }
