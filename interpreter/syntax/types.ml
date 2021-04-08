@@ -92,7 +92,7 @@ let as_func_def_type (dt : def_type) : func_type =
 
 let as_cont_def_type (dt : def_type) : cont_type =
   match dt with
-  | ContDefType x -> x
+  | ContDefType ct -> ct
   | _ -> assert false
 
 let extern_type_of_import_type (ImportType (et, _, _)) = et
