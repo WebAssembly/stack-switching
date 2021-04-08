@@ -99,6 +99,7 @@ and instr' =
   | ReturnCallIndirect of idx * idx   (* tail-call function through table *)
   | FuncBind of idx                   (* create closure *)
   | ContNew of idx                    (* create continuation *)
+  | ContBind of idx                   (* bind continuation arguments *)
   | Suspend of idx                    (* suspend continuation *)
   | Resume of (idx * idx) list        (* resume continuation *)
   | ResumeThrow of idx                (* abort continuation *)

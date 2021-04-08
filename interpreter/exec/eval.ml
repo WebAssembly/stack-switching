@@ -131,6 +131,7 @@ let data (inst : module_inst) x = lookup "data segment" inst.datas x
 let local (frame : frame) x = lookup "local" frame.locals x
 
 let func_type (inst : module_inst) x = as_func_def_type (def_of (type_ inst x))
+let cont_type (inst : module_inst) x = as_cont_def_type (def_of (type_ inst x))
 
 let any_ref inst x i at =
   try Table.load (table inst x) i with Table.Bounds ->
@@ -316,6 +317,23 @@ let rec step (c : config) : config =
         let ctxt code = compose code ([], [Invoke f @@ e.at]) in
         Ref (ContRef (ref (Some (List.length ts, ctxt)))) :: vs, []
 
+      | ContBind x, Ref (NullRef _) :: vs ->
+        vs, [Trapping "null continuation reference" @@ e.at]
+
+      | ContBind x, Ref (ContRef {contents = None}) :: vs ->
+        vs, [Trapping "continuation already consumed" @@ e.at]
+
+      | ContBind x, Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
+        let ContType z = cont_type c.frame.inst x in
+        let FuncType (ts', _) = as_func_def_type (def_of (as_sem_var z)) in
+        let args, vs' =
+          try split (n - List.length ts') vs e.at
+          with Failure _ -> Crash.error e.at "type mismatch at continuation bind"
+        in
+        cont := None;
+        let ctxt' code = ctxt (compose (args, []) code) in
+        Ref (ContRef (ref (Some (n - List.length args, ctxt')))) :: vs', []
+
       | Suspend x, vs ->
         let evt = event c.frame.inst x in
         let EventType (FuncType (ts, _), _) = Event.type_of evt in
@@ -326,7 +344,7 @@ let rec step (c : config) : config =
         vs, [Trapping "null continuation reference" @@ e.at]
 
       | Resume xls, Ref (ContRef {contents = None}) :: vs ->
-        vs, [Trapping "continuation resumed twice" @@ e.at]
+        vs, [Trapping "continuation already consumed" @@ e.at]
 
       | Resume xls, Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
         let hs = List.map (fun (x, l) -> event c.frame.inst x, l) xls in
@@ -338,7 +356,7 @@ let rec step (c : config) : config =
         vs, [Trapping "null continuation reference" @@ e.at]
 
       | ResumeThrow x, Ref (ContRef {contents = None}) :: vs ->
-        vs, [Trapping "continuation resumed twice" @@ e.at]
+        vs, [Trapping "continuation already consumed" @@ e.at]
 
       | ResumeThrow x, Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
         let evt = event c.frame.inst x in

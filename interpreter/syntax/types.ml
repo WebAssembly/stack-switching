@@ -81,9 +81,18 @@ let as_syn_var = function
   | SynVar x -> x
   | SemVar _ -> assert false
 
+let as_sem_var = function
+  | SynVar _ -> assert false
+  | SemVar x -> x
+
 let as_func_def_type (dt : def_type) : func_type =
   match dt with
   | FuncDefType ft -> ft
+  | _ -> assert false
+
+let as_cont_def_type (dt : def_type) : cont_type =
+  match dt with
+  | ContDefType ct -> ct
   | _ -> assert false
 
 let extern_type_of_import_type (ImportType (et, _, _)) = et
