@@ -331,11 +331,7 @@ let rec step (c : config) : config =
           with Failure _ -> Crash.error e.at "type mismatch at continuation bind"
         in
         cont := None;
-        let ctxt' (vs, es) =
-          let vs', vs'' =
-            try split (n - List.length args) vs e.at
-            with Failure _ -> Crash.error e.at "type mismatch after continuation bind" in
-          ctxt (compose (vs' @ args, []) (vs'', es)) in
+        let ctxt' code = ctxt (compose code (args, [])) in
         Ref (ContRef (ref (Some (n - List.length args, ctxt')))) :: vs', []
 
       | Suspend x, vs ->
