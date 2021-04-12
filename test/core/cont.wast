@@ -465,3 +465,76 @@
 )
 
 (assert_return (invoke "sum" (i64.const 10) (i64.const 20)) (i64.const 165))
+
+
+;; cont.bind
+
+(module
+  (type $f2 (func (param i32 i32) (result i32 i32 i32 i32 i32 i32)))
+  (type $f4 (func (param i32 i32 i32 i32) (result i32 i32 i32 i32 i32 i32)))
+  (type $f6 (func (param i32 i32 i32 i32 i32 i32) (result i32 i32 i32 i32 i32 i32)))
+
+  (type $k2 (cont $f2))
+  (type $k4 (cont $f4))
+  (type $k6 (cont $f6))
+
+  (elem declare func $f)
+  (func $f (param i32 i32 i32 i32 i32 i32) (result i32 i32 i32 i32 i32 i32)
+    (local.get 0) (local.get 1) (local.get 2)
+    (local.get 3) (local.get 4) (local.get 5)
+  )
+
+  (func (export "run") (result i32 i32 i32 i32 i32 i32)
+    (local $k6 (ref null $k6))
+    (local $k4 (ref null $k4))
+    (local $k2 (ref null $k2))
+    (local.set $k6 (cont.new (type $k6) (ref.func $f)))
+    (local.set $k4 (cont.bind (type $k4) (i32.const 1) (i32.const 2) (local.get $k6)))
+    (local.set $k2 (cont.bind (type $k2) (i32.const 3) (i32.const 4) (local.get $k4)))
+    (resume (i32.const 5) (i32.const 6) (local.get $k2))
+  )
+)
+
+(assert_return (invoke "run")
+  (i32.const 1) (i32.const 2) (i32.const 3)
+  (i32.const 4) (i32.const 5) (i32.const 6)
+)
+
+
+(module
+  (event $e (result i32 i32 i32 i32 i32 i32))
+
+  (type $f0 (func (result i32 i32 i32 i32 i32 i32 i32)))
+  (type $f2 (func (param i32 i32) (result i32 i32 i32 i32 i32 i32 i32)))
+  (type $f4 (func (param i32 i32 i32 i32) (result i32 i32 i32 i32 i32 i32 i32)))
+  (type $f6 (func (param i32 i32 i32 i32 i32 i32) (result i32 i32 i32 i32 i32 i32 i32)))
+
+  (type $k0 (cont $f0))
+  (type $k2 (cont $f2))
+  (type $k4 (cont $f4))
+  (type $k6 (cont $f6))
+
+  (elem declare func $f)
+  (func $f (result i32 i32 i32 i32 i32 i32 i32)
+    (i32.const 0) (suspend $e)
+  )
+
+  (func (export "run") (result i32 i32 i32 i32 i32 i32 i32)
+    (local $k6 (ref null $k6))
+    (local $k4 (ref null $k4))
+    (local $k2 (ref null $k2))
+    (block $l (result (ref $k6))
+      (resume (event $e $l) (cont.new (type $k0) (ref.func $f)))
+      (unreachable)
+    )
+    (local.set $k6)
+    (local.set $k4 (cont.bind (type $k4) (i32.const 1) (i32.const 2) (local.get $k6)))
+    (local.set $k2 (cont.bind (type $k2) (i32.const 3) (i32.const 4) (local.get $k4)))
+    (resume (i32.const 5) (i32.const 6) (local.get $k2))
+  )
+)
+
+(assert_return (invoke "run")
+  (i32.const 0) (i32.const 1) (i32.const 2) (i32.const 3)
+  (i32.const 4) (i32.const 5) (i32.const 6)
+)
