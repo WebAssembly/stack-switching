@@ -516,12 +516,12 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : op_type 
         let EventType (FuncType (ts3, ts4), res) = event c x1 in
         require (res = Resumable) x1.at "handling a non-resumable event";
         match Lib.List.last_opt (label c x2) with
-        | Some (RefType (NonNullable, DefHeapType (SynVar y'))) ->
+        | Some (RefType (nul', DefHeapType (SynVar y'))) ->
           let ContType z' = cont_type c (y' @@ x2.at) in
-          let FuncType (ts1', ts2') = func_type c (as_syn_var z' @@ x2.at) in
-          check_stack c ts4 ts1' x2.at;
-          check_stack c ts2 ts2' x2.at;
-          check_stack c (ts3 @ [RefType (NonNullable, DefHeapType (SynVar y'))]) (label c x2) x2.at
+          let ft' = func_type c (as_syn_var z' @@ x2.at) in
+          require (match_func_type c.types [] (FuncType (ts4, ts2)) ft') x2.at
+            "type mismatch in continuation type";
+          check_stack c (ts3 @ [RefType (nul', DefHeapType (SynVar y'))]) (label c x2) x2.at
         | _ ->
          error e.at
            ("type mismatch: instruction requires continuation reference type" ^
