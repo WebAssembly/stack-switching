@@ -6,7 +6,7 @@ Capabilities to permit Wasm applications to safely and efficiently implement com
 ## Critical Use Cases
 * Async/await
 * Green Threads
-* (Yield-style generators)
+* First class continuations (e.g., Scheme, react-style programming over large trees)
 
 ## Critical Success Factors
 * Must respect browser implementation constraints
