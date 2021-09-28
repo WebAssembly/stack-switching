@@ -553,12 +553,18 @@
   (event $resume (export "resume") (param (ref null $cont)))
 
   ;; Table as simple queue (keeping it simple, no ring buffer)
-  (table $curr_proc 0 (ref null $cont))
   (table $queue 0 (ref null $cont))
 
-  (global $qdelta i32 (i32.const 10))
-  (global $qback (mut i32) (i32.const 0))
-  (global $qfront (mut i32) (i32.const 0))
+  ;; Holds the continuation which will be resumed next
+  (table $curr_proc 0 (ref null $cont))
+
+  ;; Queue variables
+  (global $qdelta i32 (i32.const 10))       ;; Threshold for allocating more space in the queue table
+                                            ;; If front > threshold, entries are moved instead
+  (global $qback (mut i32) (i32.const 0))   ;; Index of front of queue
+  (global $qfront (mut i32) (i32.const 0))  ;; Index of back of queue
+
+  ;; Holds the status of curr_proc (1 -> Set, 0 -> Not set)
   (global $curr_status (mut i32) (i32.const 0))
 
   (func $queue-empty (result i32)
@@ -607,6 +613,7 @@
     (global.set $qback (i32.add (global.get $qback) (i32.const 1)))
   )
 
+  ;; Check if curr_proc is set or not. Return 1 if not set.
   (func $curr-empty (result i32)
     (i32.eqz (global.get $curr_status))
   )
@@ -628,11 +635,18 @@
   )
 
   (func $scheduler (export "scheduler") (param $main (ref $proc))
+    ;; Allocate space for curr_proc
     (drop (table.grow $curr_proc (ref.null $cont) (i32.const 1)))
+
+    ;; Add the function to process queue
     (call $curr_set (cont.new (type $cont) (local.get $main)))
+
     (loop $l
       (if (call $curr-empty) 
-        (then 
+        (then
+          ;; curr_proc not set
+          ;; If process queue is empty, no more processes to execute
+          ;; Else set curr_proc to the front of the queue
           (if (call $queue-empty)
             (then (return))
             (else
@@ -683,9 +697,12 @@
 
   ;; Table as simple queue (keeping it simple, no ring buffer)
   (table $queue 0 (ref null $cont))
-  (global $qdelta i32 (i32.const 10))
-  (global $qback (mut i32) (i32.const 0))
-  (global $qfront (mut i32) (i32.const 0))
+
+  ;; Queue variables
+  (global $qdelta i32 (i32.const 10))       ;; Threshold for allocating more space in the queue table
+                                            ;; If front > threshold, entries are moved instead
+  (global $qback (mut i32) (i32.const 0))   ;; Index of front of queue
+  (global $qfront (mut i32) (i32.const 0))  ;; Index of back of queue
 
   (func $queue-empty (export "queue-empty") (result i32)
     (i32.eq (global.get $qfront) (global.get $qback))
@@ -744,9 +761,12 @@
 
   ;; Table as simple queue (keeping it simple, no ring buffer)
   (table $queue 0 (ref null $cont))
-  (global $qdelta i32 (i32.const 10))
-  (global $qback (mut i32) (i32.const 0))
-  (global $qfront (mut i32) (i32.const 0))
+
+  ;; Queue variables
+  (global $qdelta i32 (i32.const 10))       ;; Threshold for allocating more space in the queue table
+                                            ;; If front > threshold, entries are moved instead
+  (global $qback (mut i32) (i32.const 0))   ;; Index of front of queue
+  (global $qfront (mut i32) (i32.const 0))  ;; Index of back of queue
 
   (func $queue-empty (export "queue-empty") (result i32)
     (i32.eq (global.get $qfront) (global.get $qback))
@@ -830,10 +850,12 @@
   
   (elem declare func $prod_susp_fn $cons_susp_fn)
 
+  ;; Producer suspension function
   (func $prod_susp_fn (param $k (ref null $cont))
     (call $pq-enqueue (local.get $k))
   )
 
+  ;; Consumer suspension function
   (func $cons_susp_fn (param $k (ref null $cont))
     (call $cq-enqueue (local.get $k))
   )
