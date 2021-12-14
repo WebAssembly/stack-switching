@@ -2,17 +2,20 @@
 
 ;; interface to lightweight threads
 (module $lwt
-  (type $func (func))
-  (event $yield (export "yield"))
-  (event $fork (export "fork") (param (ref $func)))
+  (type $func (func))       ;; [] -> []
+  (type $cont (cont $func)) ;; cont ([] -> [])
+
+  (tag $yield (export "yield"))                   ;; [] -> []
+  (tag $fork (export "fork") (param (ref $cont))) ;; [cont ([] -> [])] -> []
 )
 (register "lwt")
 
 (module $example
-  (type $func (func))
-  (type $cont (cont $func))
-  (event $yield (import "lwt" "yield"))
-  (event $fork (import "lwt" "fork") (param (ref $func)))
+  (type $func (func))       ;; [] -> []
+  (type $cont (cont $func)) ;; cont ([] -> [])
+
+  (tag $yield (import "lwt" "yield"))                   ;; [] -> []
+  (tag $fork (import "lwt" "fork") (param (ref $cont))) ;; [cont ([] -> [])] -> []
 
   (func $log (import "spectest" "print_i32") (param i32))
 
@@ -20,11 +23,11 @@
 
   (func $main (export "main")
     (call $log (i32.const 0))
-    (suspend $fork (ref.func $thread1))
+    (suspend $fork (cont.new (type $cont) (ref.func $thread1)))
     (call $log (i32.const 1))
-    (suspend $fork (ref.func $thread2))
+    (suspend $fork (cont.new (type $cont) (ref.func $thread2)))
     (call $log (i32.const 2))
-    (suspend $fork (ref.func $thread3))
+    (suspend $fork (cont.new (type $cont) (ref.func $thread3)))
     (call $log (i32.const 3))
   )
 
@@ -55,8 +58,8 @@
 (register "example")
 
 (module $queue
-  (type $func (func))
-  (type $cont (cont $func))
+  (type $func (func))       ;; [] -> []
+  (type $cont (cont $func)) ;; cont ([] -> [])
 
   ;; Table as simple queue (keeping it simple, no ring buffer)
   (table $queue 0 (ref null $cont))
@@ -112,125 +115,132 @@
 )
 (register "queue")
 
-(module $schedulers
-  (type $func (func))
-  (type $cont (cont $func))
+(module $scheduler
+  (type $func (func))       ;; [] -> []
+  (type $cont (cont $func)) ;; cont ([] -> [])
 
-  (event $yield (import "lwt" "yield"))
-  (event $fork (import "lwt" "fork") (param (ref $func)))
+  (tag $yield (import "lwt" "yield"))                   ;; [] -> []
+  (tag $fork (import "lwt" "fork") (param (ref $cont))) ;; [cont ([] -> [])] -> []
 
   (func $queue-empty (import "queue" "queue-empty") (result i32))
   (func $dequeue (import "queue" "dequeue") (result (ref null $cont)))
   (func $enqueue (import "queue" "enqueue") (param $k (ref $cont)))
 
+  ;; synchronous scheduler (run current thread to completion without
+  ;; yielding)
+  (func $sync (export "sync") (param $nextk (ref null $cont))
+    (if (ref.is_null (local.get $nextk)) (then (return)))
+    (block $on_yield (result (ref $cont))
+      (block $on_fork (result (ref $cont) (ref $cont))
+        (resume
+          (tag $yield $on_yield)
+          (tag $fork $on_fork)
+          (local.get $nextk)
+        )
+        (return_call $sync (call $dequeue))
+      ) ;;   $on_fork (result (ref $func) (ref $cont))
+      (let (param (ref $cont)) (result (ref $cont)) (local $nextk (ref $cont))
+      (call $enqueue)
+      (return_call $sync (local.get $nextk)))
+    ) ;;   $on_yield (result (ref $cont))
+    (return_call $sync)
+  )
+
   ;; four different schedulers:
-  ;;   * lwt-kt and lwt-tk don't yield on encountering a fork
-  ;;     1) lwt-kt runs the continuation, queuing up the new thread for later
-  ;;     2) lwt-tk runs the new thread first, queuing up the continuation for later
-  ;;   * lwt-ykt and lwt-ytk do yield on encountering a fork
-  ;;     3) lwt-ykt runs the continuation, queuing up the new thread for later
-  ;;     4) lwt-ytk runs the new thread first, queuing up the continuation for later
+  ;;   * kt and tk don't yield on encountering a fork
+  ;;     1) kt runs the continuation, queuing up the new thread for later
+  ;;     2) tk runs the new thread first, queuing up the continuation for later
+  ;;   * ykt and ytk do yield on encountering a fork
+  ;;     3) ykt runs the continuation, queuing up the new thread for later
+  ;;     4) ytk runs the new thread first, queuing up the continuation for later
 
   ;; no yield on fork, continuation first
-  (func $lwt-kt (param $r (ref null $cont))
-    (if (ref.is_null (local.get $r)) (then (return)))
+  (func $kt (export "kt") (param $nextk (ref null $cont))
+    (if (ref.is_null (local.get $nextk)) (then (return)))
     (block $on_yield (result (ref $cont))
-      (block $on_fork (result (ref $func) (ref $cont))
-        (resume (event $yield $on_yield) (event $fork $on_fork) (local.get $r))
-        (call $dequeue)
-        (return_call $lwt-tk)
+      (block $on_fork (result (ref $cont) (ref $cont))
+        (resume
+          (tag $yield $on_yield)
+          (tag $fork $on_fork)
+          (local.get $nextk)
+        )
+        (return_call $tk (call $dequeue))
       ) ;;   $on_fork (result (ref $func) (ref $cont))
-      (let (param (ref $func)) (result (ref $cont)) (local $r (ref $cont))
-      (cont.new (type $cont))
+      (let (param (ref $cont)) (result (ref $cont)) (local $nextk (ref $cont))
       (call $enqueue)
-      (return_call $lwt-tk (local.get $r)))
+      (return_call $tk (local.get $nextk)))
     ) ;;   $on_yield (result (ref $cont))
     (call $enqueue)
-    (call $dequeue)
-    (return_call $lwt-tk)
+    (return_call $tk (call $dequeue))
   )
 
   ;; no yield on fork, new thread first
-  (func $lwt-tk (param $r (ref null $cont))
-    (if (ref.is_null (local.get $r)) (then (return)))
+  (func $tk (export "tk") (param $nextk (ref null $cont))
+    (if (ref.is_null (local.get $nextk)) (then (return)))
     (block $on_yield (result (ref $cont))
-      (block $on_fork (result (ref $func) (ref $cont))
-        (resume (event $yield $on_yield) (event $fork $on_fork) (local.get $r))
-        (call $dequeue)
-        (return_call $lwt-kt)
-      ) ;;   $on_fork (result (ref $func) (ref $cont))
-      (call $enqueue)
-      (return_call $lwt-kt (cont.new (type $cont)))
+      (block $on_fork (result (ref $cont) (ref $cont))
+        (resume
+          (tag $yield $on_yield)
+          (tag $fork $on_fork)
+          (local.get $nextk))
+        (return_call $kt (call $dequeue))
+      ) ;;   $on_fork (result (ref $cont) (ref $cont))
+      (return_call $kt (call $enqueue))
     ) ;;   $on_yield (result (ref $cont))
     (call $enqueue)
-    (call $dequeue)
-    (return_call $lwt-kt)
+    (return_call $kt (call $dequeue))
   )
 
   ;; yield on fork, continuation first
-  (func $lwt-ykt (param $r (ref null $cont))
-    (if (ref.is_null (local.get $r)) (then (return)))
+  (func $ykt (export "ykt") (param $nextk (ref null $cont))
+    (if (ref.is_null (local.get $nextk)) (then (return)))
     (block $on_yield (result (ref $cont))
-      (block $on_fork (result (ref $func) (ref $cont))
-        (resume (event $yield $on_yield) (event $fork $on_fork) (local.get $r))
-        (call $dequeue)
-        (return_call $lwt-ykt)
-      ) ;;   $on_fork (result (ref $func) (ref $cont))
+      (block $on_fork (result (ref $cont) (ref $cont))
+        (resume
+          (tag $yield $on_yield)
+          (tag $fork $on_fork)
+          (local.get $nextk)
+        )
+        (return_call $ykt (call $dequeue))
+      ) ;;   $on_fork (result (ref $cont) (ref $cont))
       (call $enqueue)
-      (cont.new (type $cont))
       (call $enqueue)
-      (return_call $lwt-ykt (call $dequeue))
+      (return_call $ykt (call $dequeue))
     ) ;;   $on_yield (result (ref $cont))
     (call $enqueue)
-    (call $dequeue)
-    (return_call $lwt-ykt)
+    (return_call $ykt (call $dequeue))
   )
 
   ;; yield on fork, new thread first
-  (func $lwt-ytk (param $r (ref null $cont))
-    (if (ref.is_null (local.get $r)) (then (return)))
+  (func $ytk (export "ytk") (param $nextk (ref null $cont))
+    (if (ref.is_null (local.get $nextk)) (then (return)))
     (block $on_yield (result (ref $cont))
-      (block $on_fork (result (ref $func) (ref $cont))
-        (resume (event $yield $on_yield) (event $fork $on_fork) (local.get $r))
-        (call $dequeue)
-        (return_call $lwt-ytk)
-      ) ;;   $on_fork (result (ref $func) (ref $cont))
-      (let (param (ref $func)) (local $k (ref $cont))
-        (cont.new (type $cont))
+      (block $on_fork (result (ref $cont) (ref $cont))
+        (resume (tag $yield $on_yield) (tag $fork $on_fork) (local.get $nextk))
+        (return_call $ytk (call $dequeue))
+      ) ;;   $on_fork (result (ref $cont) (ref $cont))
+      (let (param (ref $cont)) (local $k (ref $cont))
         (call $enqueue)
         (call $enqueue (local.get $k))
       )
-      (return_call $lwt-ytk (call $dequeue))
+      (return_call $ytk (call $dequeue))
     ) ;;   $on_yield (result (ref $cont))
     (call $enqueue)
-    (call $dequeue)
-    (return_call $lwt-ytk)
-  )
-
-  (func $scheduler1 (export "scheduler1") (param $main (ref $func))
-     (call $lwt-kt (cont.new (type $cont) (local.get $main)))
-  )
-  (func $scheduler2 (export "scheduler2") (param $main (ref $func))
-     (call $lwt-tk (cont.new (type $cont) (local.get $main)))
-  )
-  (func $scheduler3 (export "scheduler3") (param $main (ref $func))
-     (call $lwt-ykt (cont.new (type $cont) (local.get $main)))
-  )
-  (func $scheduler4 (export "scheduler4") (param $main (ref $func))
-     (call $lwt-ytk (cont.new (type $cont) (local.get $main)))
+    (return_call $ytk (call $dequeue))
   )
 )
 
-(register "schedulers")
+(register "scheduler")
 
 (module
-  (type $func (func))
-  (type $cont (cont $func))
+  (type $func (func))       ;; [] -> []
+  (type $cont (cont $func)) ;; cont ([] -> [])
 
-  (func $scheduler1 (import "schedulers" "scheduler1") (param $main (ref $func)))
-  (func $scheduler2 (import "schedulers" "scheduler2") (param $main (ref $func)))
-  (func $scheduler3 (import "schedulers" "scheduler3") (param $main (ref $func)))
-  (func $scheduler4 (import "schedulers" "scheduler4") (param $main (ref $func)))
+  (func $scheduler-sync (import "scheduler" "sync") (param $nextk (ref null $cont)))
+  (func $scheduler-kt (import "scheduler" "kt") (param $nextk (ref null $cont)))
+  (func $schedule-tk (import "scheduler" "tk") (param $nextk (ref null $cont)))
+  (func $scheduler-ykt (import "scheduler" "ykt") (param $nextk (ref null $cont)))
+  (func $scheduler-ytk (import "scheduler" "ytk") (param $nextk (ref null $cont)))
 
   (func $log (import "spectest" "print_i32") (param i32))
 
@@ -240,14 +250,16 @@
 
   (func (export "run")
     (call $log (i32.const -1))
-    (call $scheduler1 (ref.func $main))
+    (call $scheduler-sync (cont.new (type $cont) (ref.func $main)))
     (call $log (i32.const -2))
-    (call $scheduler2 (ref.func $main))
+    (call $scheduler-kt (cont.new (type $cont) (ref.func $main)))
     (call $log (i32.const -3))
-    (call $scheduler3 (ref.func $main))
+    (call $schedule-tk (cont.new (type $cont) (ref.func $main)))
     (call $log (i32.const -4))
-    (call $scheduler4 (ref.func $main))
+    (call $scheduler-ykt (cont.new (type $cont) (ref.func $main)))
     (call $log (i32.const -5))
+    (call $scheduler-ytk (cont.new (type $cont) (ref.func $main)))
+    (call $log (i32.const -6))
   )
 )
 

@@ -7,11 +7,16 @@
   ;;
   ;; Given a suitable asynchronous I/O API, they needn't be exposed to
   ;; user code.
-  (event $yield (export "yield"))
-  (event $fulfill (export "fulfill") (param i32) (param i32))
+  ;;
+  ;; yield : [] -> []
+  ;; fulfill : [i32] -> [i32]
+  (tag $yield (export "yield"))
+  (tag $fulfill (export "fulfill") (param i32) (param i32))
 
-  (event $async (export "async") (param (ref $i-cont)) (result i32))
-  (event $await (export "await") (param i32) (result i32))
+  ;; async : [cont ([i32] -> [])] -> [i32]
+  ;; await : [i32] -> [i32]
+  (tag $async (export "async") (param (ref $i-cont)) (result i32))
+  (tag $await (export "await") (param i32) (result i32))
 )
 (register "async-await")
 
@@ -22,10 +27,14 @@
   (type $iii-fun (func (param i32 i32 i32)))
   (type $iii-cont (cont $iii-fun))
 
-  (event $yield (import "async-await" "yield"))
-  (event $fulfill (import "async-await" "fulfill") (param i32) (param i32))
-  (event $async (import "async-await" "async") (param (ref $i-cont)) (result i32))
-  (event $await (import "async-await" "await") (param i32) (result i32))
+  ;; yield : [] -> []
+  ;; fulfill : [i32] -> [i32]
+  ;; async : [cont ([i32] -> [])] -> [i32]
+  ;; await : [i32] -> [i32]
+  (tag $yield (import "async-await" "yield"))
+  (tag $fulfill (import "async-await" "fulfill") (param i32) (param i32))
+  (tag $async (import "async-await" "async") (param (ref $i-cont)) (result i32))
+  (tag $await (import "async-await" "await") (param i32) (result i32))
 
   (func $log (import "spectest" "print_i32") (param i32))
 
@@ -222,10 +231,15 @@
   (type $i-cont (cont $i-func))
 
   ;; async-await interface
-  (event $yield (import "async-await" "yield"))
-  (event $fulfill (import "async-await" "fulfill") (param i32) (param i32))
-  (event $async (import "async-await" "async") (param (ref $i-cont)) (result i32))
-  (event $await (import "async-await" "await") (param i32) (result i32))
+  ;;
+  ;; yield : [] -> []
+  ;; fulfill : [i32] -> [i32]
+  ;; async : [cont ([i32] -> [])] -> [i32]
+  ;; await : [i32] -> [i32]
+  (tag $yield (import "async-await" "yield"))
+  (tag $fulfill (import "async-await" "fulfill") (param i32) (param i32))
+  (tag $async (import "async-await" "async") (param (ref $i-cont)) (result i32))
+  (tag $await (import "async-await" "await") (param i32) (result i32))
 
   ;; queue interface
   (func $queue-empty (import "queue" "queue-empty") (result i32))
@@ -246,10 +260,10 @@
         (block $on_fulfill (result i32 i32 (ref $cont))
           (block $on_async (result (ref $i-cont) (ref $i-cont))
             (block $on_await (result i32 (ref $i-cont))
-              (resume (event $yield $on_yield)
-                      (event $fulfill $on_fulfill)
-                      (event $async $on_async)
-                      (event $await $on_await)
+              (resume (tag $yield $on_yield)
+                      (tag $fulfill $on_fulfill)
+                      (tag $async $on_async)
+                      (tag $await $on_await)
                       (local.get $nextk)
               )
               (local.set $nextk (call $dequeue))

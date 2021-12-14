@@ -87,7 +87,7 @@ let empty_types () = {space = empty (); list = []}
 
 type context =
   { types : types;
-    tables : space; memories : space; events : space;
+    tables : space; memories : space; tags : space;
     funcs : space; locals : space; globals : space;
     datas : space; elems : space; labels : space;
     deferred_locals : (unit -> unit) list ref
@@ -95,7 +95,7 @@ type context =
 
 let empty_context () =
   { types = empty_types ();
-    tables = empty (); memories = empty (); events = empty ();
+    tables = empty (); memories = empty (); tags = empty ();
     funcs = empty (); locals = empty (); globals = empty ();
     datas = empty (); elems = empty (); labels = empty ();
     deferred_locals = ref []
@@ -136,7 +136,7 @@ let local (c : context) x = lookup "local" c.locals x
 let global (c : context) x = lookup "global" c.globals x
 let table (c : context) x = lookup "table" c.tables x
 let memory (c : context) x = lookup "memory" c.memories x
-let event (c : context) x = lookup "event" c.events x
+let tag (c : context) x = lookup "tag" c.tags x
 let elem (c : context) x = lookup "elem segment" c.elems x
 let data (c : context) x = lookup "data segment" c.datas x
 let label (c : context) x = lookup "label " c.labels x
@@ -166,7 +166,7 @@ let bind_local (c : context) x = force_locals c; bind_abs "local" c.locals x
 let bind_global (c : context) x = bind_abs "global" c.globals x
 let bind_table (c : context) x = bind_abs "table" c.tables x
 let bind_memory (c : context) x = bind_abs "memory" c.memories x
-let bind_event (c : context) x = bind_abs "event" c.events x
+let bind_tag (c : context) x = bind_abs "tag" c.tags x
 let bind_elem (c : context) x = bind_abs "elem segment" c.elems x
 let bind_data (c : context) x = bind_abs "data segment" c.datas x
 let bind_label (c : context) x = bind_rel "label" c.labels x
@@ -183,7 +183,7 @@ let anon_locals (c : context) n at =
 let anon_global (c : context) at = bind "global" c.globals 1l at
 let anon_table (c : context) at = bind "table" c.tables 1l at
 let anon_memory (c : context) at = bind "memory" c.memories 1l at
-let anon_event (c : context) at = bind "event" c.events 1l at
+let anon_tag (c : context) at = bind "tag" c.tags 1l at
 let anon_elem (c : context) at = bind "elem segment" c.elems 1l at
 let anon_data (c : context) at = bind "data segment" c.datas 1l at
 let anon_label (c : context) at = bind "label" c.labels 1l at
@@ -229,7 +229,7 @@ let inline_func_type_explicit (c : context) x ft at =
 %token LOAD STORE OFFSET_EQ_NAT ALIGN_EQ_NAT
 %token CONST UNARY BINARY TEST COMPARE CONVERT
 %token REF_NULL REF_FUNC REF_EXTERN REF_IS_NULL REF_AS_NON_NULL
-%token FUNC START TYPE PARAM RESULT LOCAL GLOBAL EVENT EXCEPTION
+%token FUNC START TYPE PARAM RESULT LOCAL GLOBAL TAG EXCEPTION
 %token TABLE ELEM MEMORY DATA DECLARE OFFSET ITEM IMPORT EXPORT
 %token MODULE BIN QUOTE
 %token SCRIPT REGISTER INVOKE GET
@@ -351,11 +351,11 @@ func_type :
     { fun c -> let FuncType (ins, out) = $6 c in
       FuncType ($4 c :: ins, out) }
 
-event_type :
+tag_type :
   | func_type
-    { fun c -> EventType ($1 c, Resumable) }
+    { fun c -> TagType ($1 c, Resumable) }
   | EXCEPTION func_type
-    { fun c -> EventType ($2 c, Terminal) }
+    { fun c -> TagType ($2 c, Terminal) }
 
 table_type :
   | limits ref_type { fun c -> TableType ($1, $2 c) }
@@ -437,7 +437,7 @@ plain_instr :
   | UNREACHABLE { fun c -> unreachable }
   | NOP { fun c -> nop }
   | DROP { fun c -> drop }
-  | THROW var { fun c -> throw ($2 c event) }
+  | THROW var { fun c -> throw ($2 c tag) }
   | BR var { fun c -> br ($2 c label) }
   | BR_IF var { fun c -> br_if ($2 c label) }
   | BR_TABLE var var_list
@@ -451,8 +451,8 @@ plain_instr :
   | RETURN_CALL_REF { fun c -> return_call_ref }
   | CONT_NEW LPAR TYPE var RPAR { fun c -> cont_new ($4 c type_) }
   | CONT_BIND LPAR TYPE var RPAR { fun c -> cont_bind ($4 c type_) }
-  | SUSPEND var { fun c -> suspend ($2 c event) }
-  | RESUME_THROW var { fun c -> resume_throw ($2 c event) }
+  | SUSPEND var { fun c -> suspend ($2 c tag) }
+  | RESUME_THROW var { fun c -> resume_throw ($2 c tag) }
   | LOCAL_GET var { fun c -> local_get ($2 c local) }
   | LOCAL_SET var { fun c -> local_set ($2 c local) }
   | LOCAL_TEE var { fun c -> local_tee ($2 c local) }
@@ -602,8 +602,8 @@ resume_instr :
     { let at = at () in fun c -> resume ($2 c) @@ at }
 
 resume_instr_handler :
-  | LPAR EVENT var var RPAR resume_instr_handler
-    { fun c -> ($3 c event, $4 c label) :: $6 c }
+  | LPAR TAG var var RPAR resume_instr_handler
+    { fun c -> ($3 c tag, $4 c label) :: $6 c }
   | /* empty */
     { fun c -> [] }
 
@@ -614,8 +614,8 @@ resume_instr_instr :
       fun c -> let hs, es = $2 c in resume hs @@ at1, es }
 
 resume_instr_handler_instr :
-  | LPAR EVENT var var RPAR resume_instr_handler_instr
-    { fun c -> let hs, es = $6 c in ($3 c event, $4 c label) :: hs, es }
+  | LPAR TAG var var RPAR resume_instr_handler_instr
+    { fun c -> let hs, es = $6 c in ($3 c tag, $4 c label) :: hs, es }
   | instr
     { fun c -> [], $1 c }
 
@@ -639,7 +639,7 @@ block_instr :
       let ts, es1 = $3 c' in try_ ts es1 None ($6 c') }
   | TRY labeling_opt block CATCH labeling_end_opt LPAR EXCEPTION var RPAR instr_list END labeling_end_opt
     { fun c -> let c' = $2 c ($5 @ $12) in
-      let ts, es1 = $3 c' in try_ ts es1 (Some ($8 c' event)) ($10 c') }
+      let ts, es1 = $3 c' in try_ ts es1 (Some ($8 c' tag)) ($10 c') }
   | BARRIER labeling_opt block END labeling_end_opt
     { fun c -> let c' = $2 c $5 in let bt, es = $3 c' in barrier bt es }
 
@@ -797,8 +797,8 @@ call_expr_results :
     { fun c -> [], $1 c }
 
 resume_expr_handler :
-  | LPAR EVENT var var RPAR resume_expr_handler
-    { fun c -> let hs, es = $6 c in ($3 c event, $4 c label) :: hs, es }
+  | LPAR TAG var var RPAR resume_expr_handler
+    { fun c -> let hs, es = $6 c in ($3 c tag, $4 c label) :: hs, es }
   | expr_list
     { fun c -> [], $1 c }
 
@@ -837,7 +837,7 @@ try_block_result_body :
       FuncType (ins, out' @ out), es }
 try_ :
  | LPAR DO instr_list RPAR LPAR CATCH LPAR EXCEPTION var RPAR instr_list RPAR
-   { fun c -> $3 c, Some ($9 c event), $11 c }
+   { fun c -> $3 c, Some ($9 c tag), $11 c }
  | LPAR DO instr_list RPAR LPAR CATCH_ALL instr_list RPAR
    { fun c -> $3 c, None, $7 c }
 
@@ -974,7 +974,7 @@ func_body :
       {f with locals = $4 c :: f.locals} }
 
 
-/* Tables, Memories, Globals, Events */
+/* Tables, Memories, Globals, Tags */
 
 table_use :
   | LPAR TABLE var RPAR { fun c -> $3 c }
@@ -1136,39 +1136,39 @@ global_fields :
     { fun c x at -> let globs, ims, exs = $2 c x at in
       globs, ims, $1 (GlobalExport x) c :: exs }
 
-event :
-  | LPAR EVENT bind_var_opt event_fields RPAR
+tag :
+  | LPAR TAG bind_var_opt tag_fields RPAR
     { let at = at () in
-      fun c -> let x = $3 c anon_event bind_event @@ at in
+      fun c -> let x = $3 c anon_tag bind_tag @@ at in
       fun () -> $4 c x at }
   | LPAR EXCEPTION bind_var_opt exception_fields RPAR  /* Sugar */
     { let at = at () in
-      fun c -> let x = $3 c anon_event bind_event @@ at in
+      fun c -> let x = $3 c anon_tag bind_tag @@ at in
       fun () -> $4 c x at }
 
-event_fields :
-  | event_type
-    { fun c x at -> [{evtype = $1 c} @@ at], [], [] }
-  | inline_import event_type  /* Sugar */
+tag_fields :
+  | tag_type
+    { fun c x at -> [{tagtype = $1 c} @@ at], [], [] }
+  | inline_import tag_type  /* Sugar */
     { fun c x at ->
       [],
       [{ module_name = fst $1; item_name = snd $1;
-         idesc = EventImport ($2 c) @@ at } @@ at], [] }
-  | inline_export event_fields  /* Sugar */
+         idesc = TagImport ($2 c) @@ at } @@ at], [] }
+  | inline_export tag_fields  /* Sugar */
     { fun c x at -> let evts, ims, exs = $2 c x at in
-      evts, ims, $1 (EventExport x) c :: exs }
+      evts, ims, $1 (TagExport x) c :: exs }
 
 exception_fields :  /* Sugar */
   | func_type
-    { fun c x at -> [{evtype = EventType ($1 c, Terminal)} @@ at], [], [] }
+    { fun c x at -> [{tagtype = TagType ($1 c, Terminal)} @@ at], [], [] }
   | inline_import func_type
     { fun c x at ->
       [],
       [{ module_name = fst $1; item_name = snd $1;
-         idesc = EventImport (EventType ($2 c, Terminal)) @@ at } @@ at], [] }
+         idesc = TagImport (TagType ($2 c, Terminal)) @@ at } @@ at], [] }
   | inline_export exception_fields
     { fun c x at -> let evts, ims, exs = $2 c x at in
-      evts, ims, $1 (EventExport x) c :: exs }
+      evts, ims, $1 (TagExport x) c :: exs }
 
 
 /* Imports & Exports */
@@ -1190,12 +1190,12 @@ import_desc :
   | LPAR GLOBAL bind_var_opt global_type RPAR
     { fun c -> ignore ($3 c anon_global bind_global);
       fun () -> GlobalImport ($4 c) }
-  | LPAR EVENT bind_var_opt event_type RPAR
-    { fun c -> ignore ($3 c anon_event bind_event);
-      fun () -> EventImport ($4 c) }
+  | LPAR TAG bind_var_opt tag_type RPAR
+    { fun c -> ignore ($3 c anon_tag bind_tag);
+      fun () -> TagImport ($4 c) }
   | LPAR EXCEPTION bind_var_opt func_type RPAR  /* Sugar */
-    { fun c -> ignore ($3 c anon_event bind_event);
-      fun () -> EventImport (EventType ($4 c, Terminal)) }
+    { fun c -> ignore ($3 c anon_tag bind_tag);
+      fun () -> TagImport (TagType ($4 c, Terminal)) }
 
 import :
   | LPAR IMPORT name name import_desc RPAR
@@ -1211,8 +1211,8 @@ export_desc :
   | LPAR TABLE var RPAR { fun c -> TableExport ($3 c table) }
   | LPAR MEMORY var RPAR { fun c -> MemoryExport ($3 c memory) }
   | LPAR GLOBAL var RPAR { fun c -> GlobalExport ($3 c global) }
-  | LPAR EVENT var RPAR { fun c -> EventExport ($3 c event) }
-  | LPAR EXCEPTION var RPAR { fun c -> EventExport ($3 c event) }  /* Sugar */
+  | LPAR TAG var RPAR { fun c -> TagExport ($3 c tag) }
+  | LPAR EXCEPTION var RPAR { fun c -> TagExport ($3 c tag) }  /* Sugar */
 
 export :
   | LPAR EXPORT name export_desc RPAR
@@ -1273,13 +1273,13 @@ module_fields1 :
         error (List.hd m.imports).at "import after memory definition";
       { m with memories = mems @ m.memories; datas = data @ m.datas;
         imports = ims @ m.imports; exports = exs @ m.exports } }
-  | event module_fields
+  | tag module_fields
     { fun c -> let ef = $1 c in let mff = $2 c in
       fun () -> let mf = mff () in
       fun () -> let evts, ims, exs = ef () in let m = mf () in
       if evts <> [] && m.imports <> [] then
-        error (List.hd m.imports).at "import after event definition";
-      { m with events = evts @ m.events;
+        error (List.hd m.imports).at "import after tag definition";
+      { m with tags = evts @ m.tags;
         imports = ims @ m.imports; exports = exs @ m.exports } }
   | func module_fields
     { fun c -> let ff = $1 c in let mff = $2 c in

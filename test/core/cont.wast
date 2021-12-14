@@ -1,9 +1,9 @@
-;; Unhandled events & guards
+;; Unhandled tags & guards
 
 (module
   (exception $exn)
-  (event $e1)
-  (event $e2)
+  (tag $e1)
+  (tag $e2)
 
   (type $f1 (func))
   (type $k1 (cont $f1))
@@ -18,7 +18,7 @@
 
   (func (export "unhandled-3")
     (block $h (result (ref $k1))
-      (resume (event $e2 $h) (cont.new (type $k1) (ref.func $f1)))
+      (resume (tag $e2 $h) (cont.new (type $k1) (ref.func $f1)))
       (unreachable)
     )
     (drop)
@@ -26,7 +26,7 @@
 
   (func (export "handled")
     (block $h (result (ref $k1))
-      (resume (event $e1 $h) (cont.new (type $k1) (ref.func $f1)))
+      (resume (tag $e1 $h) (cont.new (type $k1) (ref.func $f1)))
       (unreachable)
     )
     (drop)
@@ -39,7 +39,7 @@
 
   (func (export "uncaught-1")
     (block $h (result (ref $k1))
-      (resume (event $e1 $h) (cont.new (type $k1) (ref.func $f2)))
+      (resume (tag $e1 $h) (cont.new (type $k1) (ref.func $f2)))
       (unreachable)
     )
     (drop)
@@ -47,7 +47,7 @@
 
   (func (export "uncaught-2")
     (block $h (result (ref $k1))
-      (resume (event $e1 $h) (cont.new (type $k1) (ref.func $f1)))
+      (resume (tag $e1 $h) (cont.new (type $k1) (ref.func $f1)))
       (unreachable)
     )
     (resume_throw $exn)
@@ -63,7 +63,7 @@
 
   (func (export "barrier")
     (block $h (result (ref $k1))
-      (resume (event $e1 $h) (cont.new (type $k1) (ref.func $f3)))
+      (resume (tag $e1 $h) (cont.new (type $k1) (ref.func $f3)))
       (unreachable)
     )
     (resume_throw $exn)
@@ -79,7 +79,7 @@
   )
   (func $nl2 (param $k (ref $k1))
     (block $h (result (ref $k1))
-      (resume (event $e1 $h) (local.get $k))
+      (resume (tag $e1 $h) (local.get $k))
       (unreachable)
     )
     (resume (local.get $k))
@@ -87,12 +87,12 @@
   )
   (func $nl3 (param $k (ref $k1))
     (block $h1 (result (ref $k1))
-      (resume (event $e1 $h1) (local.get $k))
+      (resume (tag $e1 $h1) (local.get $k))
       (unreachable)
     )
     (let (local $k' (ref $k1))
       (block $h2 (result (ref $k1))
-        (resume (event $e1 $h2) (local.get $k'))
+        (resume (tag $e1 $h2) (local.get $k'))
         (unreachable)
       )
       (resume (local.get $k'))
@@ -137,8 +137,8 @@
 ;; Simple state example
 
 (module $state
-  (event $get (result i32))
-  (event $set (param i32) (result i32))
+  (tag $get (result i32))
+  (tag $set (param i32) (result i32))
 
   (type $f (func (param i32) (result i32)))
   (type $k (cont $f))
@@ -147,7 +147,7 @@
     (loop $loop
       (block $on_get (result (ref $k))
         (block $on_set (result i32 (ref $k))
-          (resume (event $get $on_get) (event $set $on_set)
+          (resume (tag $get $on_get) (tag $set $on_set)
             (local.get $s) (local.get $k)
           )
           (return)
@@ -195,7 +195,7 @@
   (type $cont0 (cont $gen))
   (type $cont (cont $geny))
 
-  (event $yield (param i64) (result i32))
+  (tag $yield (param i64) (result i32))
 
   ;; Hook for logging purposes
   (global $hook (export "hook") (mut (ref $gen)) (ref.func $dummy))
@@ -217,7 +217,7 @@
     (local.get $i)
     (cont.new (type $cont0) (ref.func $gen))
     (block $on_first_yield (param i64 (ref $cont0)) (result i64 (ref $cont))
-      (resume (event $yield $on_first_yield))
+      (resume (tag $yield $on_first_yield))
       (unreachable)
     )
     (loop $on_yield (param i64) (param (ref $cont))
@@ -226,7 +226,7 @@
         (local.set $sum (i64.add (local.get $sum) (local.get $n)))
         (i64.eq (local.get $n) (local.get $j)) (local.get $k)
       )
-      (resume (event $yield $on_yield))
+      (resume (tag $yield $on_yield))
     )
     (return (local.get $sum))
   )
@@ -247,8 +247,8 @@
   (type $proc (func))
   (type $cont (cont $proc))
 
-  (event $yield (export "yield"))
-  (event $spawn (export "spawn") (param (ref $proc)))
+  (tag $yield (export "yield"))
+  (tag $spawn (export "spawn") (param (ref $proc)))
 
   ;; Table as simple queue (keeping it simple, no ring buffer)
   (table $queue 0 (ref null $cont))
@@ -308,7 +308,7 @@
       (if (call $queue-empty) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_spawn (result (ref $proc) (ref $cont))
-          (resume (event $yield $on_yield) (event $spawn $on_spawn)
+          (resume (tag $yield $on_yield) (tag $spawn $on_spawn)
             (call $dequeue)
           )
           (br $l)  ;; thread terminated
@@ -331,8 +331,8 @@
 (module
   (type $proc (func))
   (type $cont (cont $proc))
-  (event $yield (import "scheduler" "yield"))
-  (event $spawn (import "scheduler" "spawn") (param (ref $proc)))
+  (tag $yield (import "scheduler" "yield"))
+  (tag $spawn (import "scheduler" "spawn") (param (ref $proc)))
   (func $scheduler (import "scheduler" "scheduler") (param $main (ref $proc)))
 
   (func $log (import "spectest" "print_i32") (param i32))
@@ -418,8 +418,8 @@
 (module $concurrent-generator
   (func $log (import "spectest" "print_i64") (param i64))
 
-  (event $syield (import "scheduler" "yield"))
-  (event $spawn (import "scheduler" "spawn") (param (ref $proc)))
+  (tag $syield (import "scheduler" "yield"))
+  (tag $spawn (import "scheduler" "spawn") (param (ref $proc)))
   (func $scheduler (import "scheduler" "scheduler") (param $main (ref $proc)))
 
   (type $ghook (func (param i64)))
@@ -502,7 +502,7 @@
 
 
 (module
-  (event $e (result i32 i32 i32 i32 i32 i32))
+  (tag $e (result i32 i32 i32 i32 i32 i32))
 
   (type $f0 (func (result i32 i32 i32 i32 i32 i32 i32)))
   (type $f2 (func (param i32 i32) (result i32 i32 i32 i32 i32 i32 i32)))
@@ -524,7 +524,7 @@
     (local $k4 (ref null $k4))
     (local $k2 (ref null $k2))
     (block $l (result (ref $k6))
-      (resume (event $e $l) (cont.new (type $k0) (ref.func $f)))
+      (resume (tag $e $l) (cont.new (type $k0) (ref.func $f)))
       (unreachable)
     )
     (local.set $k6)

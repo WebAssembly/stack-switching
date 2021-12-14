@@ -148,8 +148,8 @@ struct
   let global_type = function
     | GlobalType (t, mut) -> value_type t; mutability mut
 
-  let event_type = function
-    | EventType (ft, res) -> resumability res; func_type ft  (* TODO *)
+  let tag_type = function
+    | TagType (ft, res) -> resumability res; func_type ft  (* TODO *)
 
   (* Expressions *)
 
@@ -486,7 +486,7 @@ struct
     | TableImport t -> u8 0x01; table_type t
     | MemoryImport t -> u8 0x02; memory_type t
     | GlobalImport t -> u8 0x03; global_type t
-    | EventImport t -> u8 0x04; event_type t
+    | TagImport t -> u8 0x04; tag_type t
 
   let import im =
     let {module_name; item_name; idesc} = im.it in
@@ -525,13 +525,13 @@ struct
   let global_section gs =
     section 6 (vec global) gs (gs <> [])
 
-  (* Event section *)
-  let event evt =
-    let {evtype} = evt.it in
-    event_type evtype
+  (* Tag section *)
+  let tag tag =
+    let {tagtype} = tag.it in
+    tag_type tagtype
 
-  let event_section es =
-    section 13 (vec event) es (es <> [])
+  let tag_section ts =
+    section 13 (vec tag) ts (ts <> [])
 
   (* Export section *)
   let export_desc d =
@@ -540,7 +540,7 @@ struct
     | TableExport x -> u8 1; var x
     | MemoryExport x -> u8 2; var x
     | GlobalExport x -> u8 3; var x
-    | EventExport x -> u8 4; var x
+    | TagExport x -> u8 4; var x
 
   let export ex =
     let {name = n; edesc} = ex.it in
@@ -649,7 +649,7 @@ struct
     func_section m.it.funcs;
     table_section m.it.tables;
     memory_section m.it.memories;
-    event_section m.it.events;
+    tag_section m.it.tags;
     global_section m.it.globals;
     export_section m.it.exports;
     start_section m.it.start;

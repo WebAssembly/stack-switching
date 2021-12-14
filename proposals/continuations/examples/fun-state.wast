@@ -1,7 +1,7 @@
 ;; Simple state example - functional with heterogeneous continuations
 (module $state
-  (event $get (result i32))
-  (event $set (param i32))
+  (tag $get (result i32))
+  (tag $set (param i32))
 
   (type $gf (func (param i32) (result i32)))
   (type $sf (func (result i32)))
@@ -12,7 +12,7 @@
   (func $getting (param $k (ref $gk)) (param $s i32) (result i32)
      (block $on_get (result (ref $gk))
        (block $on_set (result i32 (ref $sk))
-          (resume (event $get $on_get) (event $set $on_set)
+          (resume (tag $get $on_get) (tag $set $on_set)
             (local.get $s) (local.get $k)
           )
           (return)
@@ -26,7 +26,7 @@
   (func $setting (param $s i32) (param $k (ref $sk)) (result i32)
      (block $on_get (result (ref $gk))
        (block $on_set (result i32 (ref $sk))
-          (resume (event $get $on_get) (event $set $on_set)
+          (resume (tag $get $on_get) (tag $set $on_set)
             (local.get $k)
           )
           (return)

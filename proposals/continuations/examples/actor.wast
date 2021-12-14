@@ -2,28 +2,36 @@
 
 ;; actor interface
 (module $actor
-  (type $func (func))
-  (type $cont (cont $func))
+  (type $func (func))       ;; [] -> []
+  (type $cont (cont $func)) ;; cont ([] -> [])
 
-  (event $self (export "self") (result i32))
-  (event $spawn (export "spawn") (param (ref $cont)) (result i32))
-  (event $send (export "send") (param i32 i32))
-  (event $recv (export "recv") (result i32))
+  ;; self : [i32] -> []
+  ;; spawn : [cont ([] -> [])] -> [i32]
+  ;; send : [i32 i32] -> []
+  ;; recv : [] -> [i32]
+  (tag $self (export "self") (result i32))
+  (tag $spawn (export "spawn") (param (ref $cont)) (result i32))
+  (tag $send (export "send") (param i32 i32))
+  (tag $recv (export "recv") (result i32))
 )
 (register "actor")
 
 ;; a simple example - pass a message through a chain of actors
 (module $chain
-  (type $func (func))
-  (type $cont (cont $func))
+  (type $func (func))       ;; [] -> []
+  (type $cont (cont $func)) ;; cont ([] -> [])
 
-  (type $i-func (func (param i32)))
-  (type $i-cont (cont $i-func))
+  (type $i-func (func (param i32))) ;; [i32] -> []
+  (type $i-cont (cont $i-func))     ;; cont ([i32] -> [])
 
-  (event $self (import "actor" "self") (result i32))
-  (event $spawn (import "actor" "spawn") (param (ref $cont)) (result i32))
-  (event $send (import "actor" "send") (param i32 i32))
-  (event $recv (import "actor" "recv") (result i32))
+  ;; self : [i32] -> []
+  ;; spawn : [cont ([] -> [])] -> [i32]
+  ;; send : [i32 i32] -> []
+  ;; recv : [] -> [i32]
+  (tag $self (import "actor" "self") (result i32))
+  (tag $spawn (import "actor" "spawn") (param (ref $cont)) (result i32))
+  (tag $send (import "actor" "send") (param i32 i32))
+  (tag $recv (import "actor" "recv") (result i32))
 
   (elem declare func $next)
 
@@ -56,8 +64,8 @@
 
 ;; queues of threads and mailboxes
 (module $queue
-  (type $func (func))
-  (type $cont (cont $func))
+  (type $func (func))       ;; [] -> []
+  (type $cont (cont $func)) ;; cont ([] -> [])
 
   (func $log (import "spectest" "print_i32") (param i32))
 
@@ -235,17 +243,16 @@
 
 ;; actors implemented directly
 (module $scheduler
-  (type $func (func))
-  (type $cont (cont $func))
+  (type $func (func))       ;; [] -> []
+  (type $cont (cont $func)) ;; cont ([] -> [])
 
   (func $log (import "spectest" "print_i32") (param i32))
 
-  (type $iproc (func (param i32)))
-  (type $icont (cont $iproc))
+  (type $i-func (func (param i32))) ;; [i32] -> []
+  (type $i-cont (cont $i-func))     ;; cont ([i32] -> [])
 
-  (type $icontfun (func (param (ref $icont))))
-  (type $icontcont (cont (param (ref $icont))))
-
+  (type $i-cont-func (func (param (ref $i-cont)))) ;; [(cont ([i32] -> []))] -> []
+  (type $i-cont-cont (cont $i-cont-func))          ;; cont ([(cont ([i32] -> []))] -> [])
 
   ;; mailbox interface
   (func $init (import "mailboxes" "init"))
@@ -261,10 +268,14 @@
   (func $enqueue-k (import "queue" "enqueue-k") (param (ref $cont)))
 
   ;; actor interface
-  (event $self (import "actor" "self") (result i32))
-  (event $spawn (import "actor" "spawn") (param (ref $cont)) (result i32))
-  (event $send (import "actor" "send") (param i32 i32))
-  (event $recv (import "actor" "recv") (result i32))
+  ;; self : [i32] -> []
+  ;; spawn : [cont ([] -> [])] -> [i32]
+  ;; send : [i32 i32] -> []
+  ;; recv : [] -> [i32]
+  (tag $self (import "actor" "self") (result i32))
+  (tag $spawn (import "actor" "spawn") (param (ref $cont)) (result i32))
+  (tag $send (import "actor" "send") (param i32 i32))
+  (tag $recv (import "actor" "recv") (result i32))
 
   (elem declare func $recv-againf)
 
@@ -277,18 +288,18 @@
   ;; instruction for composing or extending continuations be palatable
   ;; / desirable?
   ;;
-  ;; The resume_throw operation can be implemented with continuation
-  ;; composition.
+  ;; The resume_throw operation can be implemented (inefficiently)
+  ;; with continuation composition.
 
   ;; compose recv with an existing continuation
-  (func $recv-againf (param $ik (ref $icont))
+  (func $recv-againf (param $ik (ref $i-cont))
     (local $res i32)
     (suspend $recv)
     (local.set $res)
     (resume (local.get $res) (local.get $ik))
   )
-  (func $recv-again (param $ik (ref $icont)) (result (ref $cont))
-    (cont.bind (type $cont) (local.get $ik) (cont.new (type $icontcont) (ref.func $recv-againf)))
+  (func $recv-again (param $ik (ref $i-cont)) (result (ref $cont))
+    (cont.bind (type $cont) (local.get $ik) (cont.new (type $i-cont-cont) (ref.func $recv-againf)))
   )
 
   ;; There are multiple ways of avoiding the need for
@@ -310,21 +321,21 @@
     (local.set $mine (call $new-mb))
     (loop $l
       (if (ref.is_null (local.get $nextk)) (then (return)))
-      (block $on_self (result (ref $icont))
-        (block $on_spawn (result (ref $cont) (ref $icont))
+      (block $on_self (result (ref $i-cont))
+        (block $on_spawn (result (ref $cont) (ref $i-cont))
           (block $on_send (result i32 i32 (ref $cont))
-            (block $on_recv (result (ref $icont))
-               (resume (event $self $on_self)
-                       (event $spawn $on_spawn)
-                       (event $send $on_send)
-                       (event $recv $on_recv)
+            (block $on_recv (result (ref $i-cont))
+               (resume (tag $self $on_self)
+                       (tag $spawn $on_spawn)
+                       (tag $send $on_send)
+                       (tag $recv $on_recv)
                        (local.get $nextk)
                )
                (local.set $mine (call $dequeue-mb))
                (local.set $nextk (call $dequeue-k))
                (br $l)
-            ) ;;   $on_recv (result (ref $icont))
-            (let (local $ik (ref $icont))
+            ) ;;   $on_recv (result (ref $i-cont))
+            (let (local $ik (ref $i-cont))
               ;; block this thread until the mailbox is non-empty
               (if (call $empty-mb (local.get $mine))
                   (then (call $enqueue-mb (local.get $mine))
@@ -342,8 +353,8 @@
             (local.set $nextk (local.get $k))
           )
           (br $l)
-        ) ;;   $on_spawn (result (ref $cont) (ref $icont))
-        (let (local $you (ref $cont)) (local $ik (ref $icont))
+        ) ;;   $on_spawn (result (ref $cont) (ref $i-cont))
+        (let (local $you (ref $cont)) (local $ik (ref $i-cont))
           (call $new-mb)
           (let (local $yours i32)
             (call $enqueue-mb (local.get $yours))
@@ -352,8 +363,8 @@
           )
         )
         (br $l)
-      ) ;;   $on_self (result (ref $icont))
-      (let (local $ik (ref $icont))
+      ) ;;   $on_self (result (ref $i-cont))
+      (let (local $ik (ref $i-cont))
         (local.set $nextk (cont.bind (type $cont) (local.get $mine) (local.get $ik)))
       )
       (br $l)
@@ -363,11 +374,11 @@
 (register "scheduler")
 
 (module
-  (type $func (func))
-  (type $cont (cont $func))
+  (type $func (func))       ;; [] -> []
+  (type $cont (cont $func)) ;; cont ([] -> [])
 
-  (type $iproc (func (param i32)))
-  (type $icont (cont $iproc))
+  (type $i-func (func (param i32))) ;; [i32] -> []
+  (type $i-cont (cont $i-func))     ;; cont ([i32] -> [])
 
   (func $log (import "spectest" "print_i32") (param i32))
 
@@ -377,7 +388,7 @@
   (func $chain (import "chain" "chain") (param $n i32))
 
   (func $run-chain (export "run-chain") (param $n i32)
-    (call $act (cont.bind (type $cont) (local.get $n) (cont.new (type $icont) (ref.func $chain))))
+    (call $act (cont.bind (type $cont) (local.get $n) (cont.new (type $i-cont) (ref.func $chain))))
   )
 )
 

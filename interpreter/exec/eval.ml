@@ -66,11 +66,11 @@ and admin_instr' =
   | Label of int * instr list * code
   | Local of int * value list * code
   | Frame of int * frame * code
-  | Catch of int * event_inst option * instr list * code
-  | Handle of (event_inst * idx) list option * code
+  | Catch of int * tag_inst option * instr list * code
+  | Handle of (tag_inst * idx) list option * code
   | Trapping of string
-  | Throwing of event_inst * value stack
-  | Suspending of event_inst * value stack * ctxt
+  | Throwing of tag_inst * value stack
+  | Suspending of tag_inst * value stack * ctxt
   | Returning of value stack
   | ReturningInvoke of value stack * func_inst
   | Breaking of int32 * value stack
@@ -125,7 +125,7 @@ let func (inst : module_inst) x = lookup "function" inst.funcs x
 let table (inst : module_inst) x = lookup "table" inst.tables x
 let memory (inst : module_inst) x = lookup "memory" inst.memories x
 let global (inst : module_inst) x = lookup "global" inst.globals x
-let event (inst : module_inst) x = lookup "event" inst.events x
+let tag (inst : module_inst) x = lookup "tag" inst.tags x
 let elem (inst : module_inst) x = lookup "element segment" inst.elems x
 let data (inst : module_inst) x = lookup "data segment" inst.datas x
 let local (frame : frame) x = lookup "local" frame.locals x
@@ -233,14 +233,14 @@ let rec step (c : config) : config =
         let n1 = List.length ts1 in
         let n2 = List.length ts2 in
         let args, vs' = split n1 vs e.at in
-        let exno = Option.map (event c.frame.inst) xo in
+        let exno = Option.map (tag c.frame.inst) xo in
         vs', [Catch (n2, exno, es2, ([], [Label (n2, [], (args, List.map plain es1)) @@ e.at])) @@ e.at]
 
       | Throw x, vs ->
-        let evt = event c.frame.inst x in
-        let EventType (FuncType (ts, _), _) = Event.type_of evt in
+        let tagt = tag c.frame.inst x in
+        let TagType (FuncType (ts, _), _) = Tag.type_of tagt in
         let vs0, vs' = split (List.length ts) vs e.at in
-        vs', [Throwing (evt, vs0) @@ e.at]
+        vs', [Throwing (tagt, vs0) @@ e.at]
 
       | Br x, vs ->
         [], [Breaking (x.it, vs) @@ e.at]
@@ -335,10 +335,10 @@ let rec step (c : config) : config =
         Ref (ContRef (ref (Some (n - List.length args, ctxt')))) :: vs', []
 
       | Suspend x, vs ->
-        let evt = event c.frame.inst x in
-        let EventType (FuncType (ts, _), _) = Event.type_of evt in
+        let tagt = tag c.frame.inst x in
+        let TagType (FuncType (ts, _), _) = Tag.type_of tagt in
         let args, vs' = split (List.length ts) vs e.at in
-        vs', [Suspending (evt, args, fun code -> code) @@ e.at]
+        vs', [Suspending (tagt, args, fun code -> code) @@ e.at]
 
       | Resume xls, Ref (NullRef _) :: vs ->
         vs, [Trapping "null continuation reference" @@ e.at]
@@ -347,7 +347,7 @@ let rec step (c : config) : config =
         vs, [Trapping "continuation already consumed" @@ e.at]
 
       | Resume xls, Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
-        let hs = List.map (fun (x, l) -> event c.frame.inst x, l) xls in
+        let hs = List.map (fun (x, l) -> tag c.frame.inst x, l) xls in
         let args, vs' = split n vs e.at in
         cont := None;
         vs', [Handle (Some hs, ctxt (args, [])) @@ e.at]
@@ -359,8 +359,8 @@ let rec step (c : config) : config =
         vs, [Trapping "continuation already consumed" @@ e.at]
 
       | ResumeThrow x, Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
-        let evt = event c.frame.inst x in
-        let EventType (FuncType (ts, _), _) = Event.type_of evt in
+        let tagt = tag c.frame.inst x in
+        let TagType (FuncType (ts, _), _) = Tag.type_of tagt in
         let args, vs' = split (List.length ts) vs e.at in
         let vs1', es1' = ctxt (args, [Plain (Throw x) @@ e.at]) in
         cont := None;
@@ -669,9 +669,9 @@ let rec step (c : config) : config =
     | Label (n, es0, (vs', [])), vs ->
       vs' @ vs, []
 
-    | Label (n, es0, (vs', {it = Suspending (evt, vs1, ctxt); at} :: es')), vs ->
+    | Label (n, es0, (vs', {it = Suspending (tagt, vs1, ctxt); at} :: es')), vs ->
       let ctxt' code = [], [Label (n, es0, compose (ctxt code) (vs', es')) @@ e.at] in
-      vs, [Suspending (evt, vs1, ctxt') @@ at]
+      vs, [Suspending (tagt, vs1, ctxt') @@ at]
 
     | Label (n, es0, (vs', {it = ReturningInvoke (vs0, f); at} :: es')), vs ->
       vs, [ReturningInvoke (vs0, f) @@ at]
@@ -692,9 +692,9 @@ let rec step (c : config) : config =
     | Local (n, vs0, (vs', [])), vs ->
       vs' @ vs, []
 
-    | Local (n, vs0, (vs', {it = Suspending (evt, vs1, ctxt); at} :: es')), vs ->
+    | Local (n, vs0, (vs', {it = Suspending (tagt, vs1, ctxt); at} :: es')), vs ->
       let ctxt' code = [], [Local (n, vs0, compose (ctxt code) (vs', es')) @@ e.at] in
-      vs, [Suspending (evt, vs1, ctxt') @@ at]
+      vs, [Suspending (tagt, vs1, ctxt') @@ at]
 
     | Local (n, vs0, (vs', e' :: es')), vs when is_jumping e' ->
       vs, [e']
@@ -708,9 +708,9 @@ let rec step (c : config) : config =
     | Frame (n, frame', (vs', [])), vs ->
       vs' @ vs, []
 
-    | Frame (n, frame', (vs', {it = Suspending (evt, vs1, ctxt); at} :: es')), vs ->
+    | Frame (n, frame', (vs', {it = Suspending (tagt, vs1, ctxt); at} :: es')), vs ->
       let ctxt' code = [], [Frame (n, frame', compose (ctxt code) (vs', es')) @@ e.at] in
-      vs, [Suspending (evt, vs1, ctxt') @@ at]
+      vs, [Suspending (tagt, vs1, ctxt') @@ at]
 
     | Frame (n, frame', (vs', {it = Returning vs0; at} :: es')), vs ->
       take n vs0 e.at @ vs, []
@@ -757,9 +757,9 @@ let rec step (c : config) : config =
     | Catch (n, exno, es0, (vs', [])), vs ->
       vs' @ vs, []
 
-    | Catch (n, exno, es0, (vs', {it = Suspending (evt, vs1, ctxt); at} :: es')), vs ->
+    | Catch (n, exno, es0, (vs', {it = Suspending (tagt, vs1, ctxt); at} :: es')), vs ->
       let ctxt' code = [], [Catch (n, exno, es0, compose (ctxt code) (vs', es')) @@ e.at] in
-      vs, [Suspending (evt, vs1, ctxt') @@ at]
+      vs, [Suspending (tagt, vs1, ctxt') @@ at]
 
     | Catch (n, None, es0, (vs', {it = Throwing (exn, vs0); at} :: _)), vs ->
       vs, [Label (n, [], ([], List.map plain es0)) @@ e.at]
@@ -781,16 +781,16 @@ let rec step (c : config) : config =
     | Handle (None, (vs', {it = Suspending _; at} :: es')), vs ->
       vs, [Trapping "barrier hit by suspension" @@ at]
 
-    | Handle (Some hs, (vs', {it = Suspending (evt, vs1, ctxt); at} :: es')), vs
-      when List.mem_assq evt hs ->
-      let EventType (FuncType (_, ts), _) = Event.type_of evt in
+    | Handle (Some hs, (vs', {it = Suspending (tagt, vs1, ctxt); at} :: es')), vs
+      when List.mem_assq tagt hs ->
+      let TagType (FuncType (_, ts), _) = Tag.type_of tagt in
       let ctxt' code = compose (ctxt code) (vs', es') in
       [Ref (ContRef (ref (Some (List.length ts, ctxt'))))] @ vs1 @ vs,
-      [Plain (Br (List.assq evt hs)) @@ e.at]
+      [Plain (Br (List.assq tagt hs)) @@ e.at]
 
-    | Handle (hso, (vs', {it = Suspending (evt, vs1, ctxt); at} :: es')), vs ->
+    | Handle (hso, (vs', {it = Suspending (tagt, vs1, ctxt); at} :: es')), vs ->
       let ctxt' code = [], [Handle (hso, compose (ctxt code) (vs', es')) @@ e.at] in
-      vs, [Suspending (evt, vs1, ctxt') @@ at]
+      vs, [Suspending (tagt, vs1, ctxt') @@ at]
 
     | Handle (hso, (vs', e' :: es')), vs when is_jumping e' ->
       vs, [e']
@@ -819,7 +819,7 @@ let rec eval (c : config) : value stack =
     (match e.it with
     | Trapping msg ->  Trap.error e.at msg
     | Throwing _ -> Exception.error e.at "unhandled exception"
-    | Suspending _ -> Suspension.error e.at "unhandled event"
+    | Suspending _ -> Suspension.error e.at "unhandled tag"
     | Returning _ | ReturningInvoke _ -> Crash.error e.at "undefined frame"
     | Breaking _ -> Crash.error e.at "undefined label"
     | _ -> assert false
@@ -876,9 +876,9 @@ let create_global (inst : module_inst) (glob : global) : global_inst =
   let v = eval_const inst ginit in
   Global.alloc (Types.sem_global_type inst.types gtype) v
 
-let create_event (inst : module_inst) (evt : event) : event_inst =
-  let {evtype} = evt.it in
-  Event.alloc (Types.sem_event_type inst.types evtype)
+let create_tag (inst : module_inst) (tag : tag) : tag_inst =
+  let {tagtype} = tag.it in
+  Tag.alloc (Types.sem_tag_type inst.types tagtype)
 
 let create_export (inst : module_inst) (ex : export) : export_inst =
   let {name; edesc} = ex.it in
@@ -888,7 +888,7 @@ let create_export (inst : module_inst) (ex : export) : export_inst =
     | TableExport x -> ExternTable (table inst x)
     | MemoryExport x -> ExternMemory (memory inst x)
     | GlobalExport x -> ExternGlobal (global inst x)
-    | EventExport x -> ExternEvent (event inst x)
+    | TagExport x -> ExternTag (tag inst x)
   in (name, ext)
 
 let create_elem (inst : module_inst) (seg : elem_segment) : elem_inst =
@@ -916,7 +916,7 @@ let add_import (m : module_) (ext : extern) (im : import) (inst : module_inst)
   | ExternTable tab -> {inst with tables = tab :: inst.tables}
   | ExternMemory mem -> {inst with memories = mem :: inst.memories}
   | ExternGlobal glob -> {inst with globals = glob :: inst.globals}
-  | ExternEvent evt -> {inst with events = evt :: inst.events}
+  | ExternTag tag -> {inst with tags = tag :: inst.tags}
 
 
 let init_type (inst : module_inst) (type_ : type_) (x : type_inst) =
@@ -962,7 +962,7 @@ let run_start start =
 
 let init (m : module_) (exts : extern list) : module_inst =
   let
-    { types; imports; tables; memories; globals; funcs; events;
+    { types; imports; tables; memories; globals; funcs; tags;
       exports; elems; datas; start
     } = m.it
   in
@@ -978,7 +978,7 @@ let init (m : module_) (exts : extern list) : module_inst =
       tables = inst2.tables @ List.map (create_table inst2) tables;
       memories = inst2.memories @ List.map (create_memory inst2) memories;
       globals = inst2.globals @ List.map (create_global inst2) globals;
-      events = inst2.events @ List.map (create_event inst2) events;
+      tags = inst2.tags @ List.map (create_tag inst2) tags;
     }
   in
   let inst =

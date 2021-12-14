@@ -27,21 +27,21 @@ Based on [typed reference proposal](https://github.com/WebAssembly/function-refe
     - and `$ft' = [t3* t1'*] -> [t2'*]`
     - and `[t1'*] -> [t2'*] <: [t1*] -> [t2*]`
 
-* `suspend <evtidx>` suspends the current continuation
-  - `suspend $e : [t1*] -> [t2*]`
-    - iff `event $e : [t1*] -> [t2*]`
+* `suspend <tagidx>` suspends the current continuation
+  - `suspend $t : [t1*] -> [t2*]`
+    - iff `tag $t : [t1*] -> [t2*]`
 
-* `resume (event <evtidx> <labelidx>)*` resumes a continuation
-  - `resume (event $e $l)* : [t1* (ref null? $ct)] -> [t2*]`
+* `resume (tag <tagidx> <labelidx>)*` resumes a continuation
+  - `resume (tag $e $l)* : [t1* (ref null? $ct)] -> [t2*]`
     - iff `$ct = cont $ft`
     - and `$ft = [t1*] -> [t2*]`
-    - and `(event $e : [te1*] -> [te2*])*`
+    - and `(tag $t : [te1*] -> [te2*])*`
     - and `(label $l : [te1'* (ref null? $ct')])*`
     - and `([te1*] <: [te1'*])*`
     - and `($ct' = cont $ft')*`
     - and `([te2*] -> [t2*] <: $ft')*`
 
-* `resume_throw <evtidx>` aborts a continuation
+* `resume_throw <tagidx>` aborts a continuation
   - `resume_throw $e : [te* (ref null? $ct)] -> [t2*]`
     - iff `exception $e : [te*]`
     - and `$ct = cont $ft`
@@ -57,11 +57,11 @@ Based on [typed reference proposal](https://github.com/WebAssembly/function-refe
 
 ### Store extensions
 
-* New store component `evts` for allocated events
-  - `S ::= {..., evts <evtinst>*}`
+* New store component `tags` for allocated tags
+  - `S ::= {..., tags <taginst>*}`
 
-* An *event instance* represents an event tag
-  - `evtinst ::= {type <evttype>}`
+* A *tag instance* represents a control tag
+  - `taginst ::= {type <tagtype>}`
 
 * New store component `conts` for allocated continuations
   - `S ::= {..., conts <cont>?*}`
@@ -78,10 +78,10 @@ Based on [typed reference proposal](https://github.com/WebAssembly/function-refe
     - and `$ct = cont $ft`
     - and `$ft = [t1^n] -> [t2*]`
 
-* `(handle{(<evtaddr> <labelidx>)*}? <instr>* end)` represents an active handler (or a barrier when no handler list is present)
+* `(handle{(<tagaddr> <labelidx>)*}? <instr>* end)` represents an active handler (or a barrier when no handler list is present)
   - `(handle{(a $l)*}? instr* end) : [t1*] -> [t2*]`
     - iff `instr* : [t1*] -> [t2*]`
-    - and `(S.evts[a].type = [te1*] -> [te2*])*`
+    - and `(S.tags[a].type = [te1*] -> [te2*])*`
     - and `(label $l : [te1'* (ref null? $ct')])*`
     - and `([te1*] <: [te1'*])*`
     - and `($ct' = cont $ft')*`
@@ -124,14 +124,14 @@ H^ea ::=
   - and `S' = S with conts[ca] = epsilon with conts += (E : |t1'*|)`
   - and `E = E'[v^n _]`
 
-* `S; F; (ref.null t) (resume (event $e $l)*)  -->  S; F; trap`
+* `S; F; (ref.null t) (resume (tag $e $l)*)  -->  S; F; trap`
 
-* `S; F; (ref.cont ca) (resume (event $e $l)*)  -->  S; F; trap`
+* `S; F; (ref.cont ca) (resume (tag $e $l)*)  -->  S; F; trap`
   - iff `S.conts[ca] = epsilon`
 
-* `S; F; v^n (ref.cont ca) (resume (event $e $l)*)  -->  S'; F; handle{(ea $l)*} E[v^n] end`
+* `S; F; v^n (ref.cont ca) (resume (tag $e $l)*)  -->  S'; F; handle{(ea $l)*} E[v^n] end`
   - iff `S.conts[ca] = (E : n)`
-  - and `(ea = F.evts[$e])*`
+  - and `(ea = F.tags[$e])*`
   - and `S' = S with conts[ca] = epsilon`
 
 * `S; F; (ref.null t) (resume_throw $e)  -->  S; F; trap`
@@ -141,7 +141,7 @@ H^ea ::=
 
 * `S; F; v^m (ref.cont ca) (resume_throw $e)  -->  S'; F; E[v^m (throw $e)]`
   - iff `S.conts[ca] = (E : n)`
-  - and `S.evts[F.evts[$e]].type = [t1^m] -> [t2*]`
+  - and `S.tags[F.tags[$e]].type = [t1^m] -> [t2*]`
   - and `S' = S with conts[ca] = epsilon`
 
 * `S; F; (barrier bt instr* end)  -->  S; F; handle instr* end`
@@ -149,10 +149,10 @@ H^ea ::=
 * `S; F; (handle{(e $l)*}? v* end)  -->  S; F; v*`
 
 * `S; F; (handle H^ea[(suspend $e)] end)  --> S; F; trap`
-  - iff `ea = F.evts[$e]`
+  - iff `ea = F.tags[$e]`
 
 * `S; F; (handle{(ea1 $l1)* (ea $l) (ea2 $l2)*} H^ea[v^n (suspend $e)] end)  --> S'; F; v^n (ref.cont |S.conts|) (br $l)`
   - iff `ea notin ea1*`
-  - and `ea = F.evts[$e]`
-  - and `S.evts[ea].type = [t1^n] -> [t2^m]`
+  - and `ea = F.tags[$e]`
+  - and `S.tags[ea].type = [t1^n] -> [t2^m]`
   - and `S' = S with conts += (H^ea : m)`

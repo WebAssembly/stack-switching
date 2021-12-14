@@ -22,7 +22,7 @@ type context =
   tables : table_type list;
   memories : memory_type list;
   globals : global_type list;
-  events : event_type list;
+  tags : tag_type list;
   elems : ref_type list;
   datas : unit list;
   locals : value_type list;
@@ -33,7 +33,7 @@ type context =
 
 let empty_context =
   { types = []; funcs = []; tables = []; memories = [];
-    globals = []; events = []; elems = []; datas = [];
+    globals = []; tags = []; elems = []; datas = [];
     locals = []; results = []; labels = [];
     refs = Free.empty
   }
@@ -47,7 +47,7 @@ let func_var (c : context) x = lookup "function" c.funcs x
 let table (c : context) x = lookup "table" c.tables x
 let memory (c : context) x = lookup "memory" c.memories x
 let global (c : context) x = lookup "global" c.globals x
-let event (c : context) x = lookup "event" c.events x
+let tag (c : context) x = lookup "tag" c.tags x
 let elem (c : context) x = lookup "elem segment" c.elems x
 let data (c : context) x = lookup "data segment" c.datas x
 let local (c : context) x = lookup "local" c.locals x
@@ -127,8 +127,8 @@ let check_memory_type (c : context) (mt : memory_type) at =
   check_limits lim 0x1_0000l at
     "memory size must be at most 65536 pages (4GiB)"
 
-let check_event_type (c : context) (et : event_type) at =
-  let EventType (ft, res) = et in
+let check_tag_type (c : context) (et : tag_type) at =
+  let TagType (ft, res) = et in
   let FuncType (_, ts2) = ft in
   check_func_type c ft at;
   require (res = Resumable || ts2 = []) at "exception type must not have results"
@@ -362,8 +362,8 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : op_type 
       match xo with
       | None -> []
       | Some x ->
-        let EventType (FuncType (ts1', _), res) = event c x in
-        require (res = Terminal) e.at "catching a non-exception event";
+        let TagType (FuncType (ts1', _), res) = tag c x in
+        require (res = Terminal) e.at "catching a non-exception tag";
         ts1'
     in
     let ft2 = FuncType (ts1', ts2) in
@@ -371,8 +371,8 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : op_type 
     ts1 --> ts2
 
   | Throw x ->
-    let EventType (FuncType (ts1, ts2), res) = event c x in
-    require (res = Terminal) e.at "throwing a non-exception event";
+    let TagType (FuncType (ts1, ts2), res) = tag c x in
+    require (res = Terminal) e.at "throwing a non-exception tag";
     ts1 -->... ts2
 
   | Br x ->
@@ -503,8 +503,8 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : op_type 
     )
 
   | Suspend x ->
-    let EventType (FuncType (ts1, ts2), res) = event c x in
-    require (res = Resumable) e.at "suspending with a non-resumable event";
+    let TagType (FuncType (ts1, ts2), res) = tag c x in
+    require (res = Resumable) e.at "suspending with a non-resumable tag";
     ts1 --> ts2
 
   | Resume xys ->
@@ -513,8 +513,8 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : op_type 
       let ContType z = cont_type c (y @@ e.at) in
       let FuncType (ts1, ts2) = func_type c (as_syn_var z @@ e.at) in
       List.iter (fun (x1, x2) ->
-        let EventType (FuncType (ts3, ts4), res) = event c x1 in
-        require (res = Resumable) x1.at "handling a non-resumable event";
+        let TagType (FuncType (ts3, ts4), res) = tag c x1 in
+        require (res = Resumable) x1.at "handling a non-resumable tag";
         match Lib.List.last_opt (label c x2) with
         | Some (RefType (nul', DefHeapType (SynVar y'))) ->
           let ContType z' = cont_type c (y' @@ x2.at) in
@@ -537,8 +537,8 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : op_type 
     )
 
   | ResumeThrow x ->
-    let EventType (FuncType (ts0, _), res) = event c x in
-    require (res = Terminal) e.at "throwing a non-exception event";
+    let TagType (FuncType (ts0, _), res) = tag c x in
+    require (res = Terminal) e.at "throwing a non-exception tag";
     (match peek_ref 0 s e.at with
     | nul, DefHeapType (SynVar y) ->
       let ContType z = cont_type c (y @@ e.at) in
@@ -752,7 +752,7 @@ let check_const (c : context) (const : const) (t : value_type) =
   check_block c const.it (FuncType ([], [t])) const.at
 
 
-(* Tables, Memories, Globals, Events *)
+(* Tables, Memories, Globals, Tags *)
 
 let check_table (c : context) (tab : table) =
   let {ttype} = tab.it in
@@ -797,9 +797,9 @@ let check_global (c : context) (glob : global) =
   let GlobalType (t, mut) = gtype in
   check_const c ginit t
 
-let check_event (c : context) (evt : event) =
-  let {evtype} = evt.it in
-  check_event_type c evtype evt.at
+let check_tag (c : context) (tag : tag) =
+  let {tagtype} = tag.it in
+  check_tag_type c tagtype tag.at
 
 
 (* Modules *)
@@ -825,9 +825,9 @@ let check_import (im : import) (c : context) : context =
   | GlobalImport gt ->
     check_global_type c gt idesc.at;
     {c with globals = gt :: c.globals}
-  | EventImport et ->
-    check_event_type c et idesc.at;
-    {c with events = et :: c.events}
+  | TagImport et ->
+    check_tag_type c et idesc.at;
+    {c with tags = et :: c.tags}
 
 module NameSet = Set.Make(struct type t = Ast.name let compare = compare end)
 
@@ -838,7 +838,7 @@ let check_export (c : context) (set : NameSet.t) (ex : export) : NameSet.t =
   | TableExport x -> ignore (table c x)
   | MemoryExport x -> ignore (memory c x)
   | GlobalExport x -> ignore (global c x)
-  | EventExport x -> ignore (event c x)
+  | TagExport x -> ignore (tag c x)
   );
   require (not (NameSet.mem name set)) ex.at "duplicate export name";
   NameSet.add name set
@@ -846,7 +846,7 @@ let check_export (c : context) (set : NameSet.t) (ex : export) : NameSet.t =
 
 let check_module (m : module_) =
   let
-    { types; imports; tables; memories; globals; events; funcs;
+    { types; imports; tables; memories; globals; tags; funcs;
       start; elems; datas; exports } = m.it
   in
   let c0 =
@@ -861,7 +861,7 @@ let check_module (m : module_) =
       funcs = c0.funcs @ List.map (fun f -> ignore (func_type c0 f.it.ftype); f.it.ftype.it) funcs;
       tables = c0.tables @ List.map (fun tab -> tab.it.ttype) tables;
       memories = c0.memories @ List.map (fun mem -> mem.it.mtype) memories;
-      events = c0.events @ List.map (fun evt -> evt.it.evtype) events;
+      tags = c0.tags @ List.map (fun tag -> tag.it.tagtype) tags;
       elems = List.map (fun elem -> elem.it.etype) elems;
       datas = List.map (fun _data -> ()) datas;
     }
@@ -873,7 +873,7 @@ let check_module (m : module_) =
   List.iter (check_global c1) globals;
   List.iter (check_table c1) tables;
   List.iter (check_memory c1) memories;
-  List.iter (check_event c1) events;
+  List.iter (check_tag c1) tags;
   List.iter (check_elem c1) elems;
   List.iter (check_data c1) datas;
   List.iter (check_func c) funcs;

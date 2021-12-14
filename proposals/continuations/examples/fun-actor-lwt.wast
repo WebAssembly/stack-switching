@@ -5,10 +5,10 @@
   (type $func (func))
   (type $cont (cont $func))
 
-  (event $self (export "self") (result i32))
-  (event $spawn (export "spawn") (param (ref $cont)) (result i32))
-  (event $send (export "send") (param i32 i32))
-  (event $recv (export "recv") (result i32))
+  (tag $self (export "self") (result i32))
+  (tag $spawn (export "spawn") (param (ref $cont)) (result i32))
+  (tag $send (export "send") (param i32 i32))
+  (tag $recv (export "recv") (result i32))
 )
 (register "actor")
 
@@ -20,10 +20,10 @@
   (type $i-func (func (param i32)))
   (type $i-cont (cont $i-func))
 
-  (event $self (import "actor" "self") (result i32))
-  (event $spawn (import "actor" "spawn") (param (ref $cont)) (result i32))
-  (event $send (import "actor" "send") (param i32 i32))
-  (event $recv (import "actor" "recv") (result i32))
+  (tag $self (import "actor" "self") (result i32))
+  (tag $spawn (import "actor" "spawn") (param (ref $cont)) (result i32))
+  (tag $send (import "actor" "send") (param i32 i32))
+  (tag $recv (import "actor" "recv") (result i32))
 
   (elem declare func $next)
 
@@ -61,8 +61,8 @@
   (type $func (func))
   (type $cont (cont $func))
 
-  (event $yield (export "yield"))
-  (event $fork (export "fork") (param (ref $cont)))
+  (tag $yield (export "yield"))
+  (tag $fork (export "fork") (param (ref $cont)))
 )
 (register "lwt")
 
@@ -130,8 +130,8 @@
   (type $func (func))
   (type $cont (cont $func))
 
-  (event $yield (import "lwt" "yield"))
-  (event $fork (import "lwt" "fork") (param (ref $cont)))
+  (tag $yield (import "lwt" "yield"))
+  (tag $fork (import "lwt" "fork") (param (ref $cont)))
 
   (func $queue-empty (import "queue" "queue-empty") (result i32))
   (func $dequeue (import "queue" "dequeue") (result (ref null $cont)))
@@ -143,7 +143,7 @@
       (if (call $queue-empty) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_fork (result (ref $cont) (ref $cont))
-          (resume (event $yield $on_yield) (event $fork $on_fork)
+          (resume (tag $yield $on_yield) (tag $fork $on_fork)
             (call $dequeue)
           )
           (br $l)  ;; thread terminated
@@ -233,8 +233,8 @@
   (func $log (import "spectest" "print_i32") (param i32))
 
   ;; lwt interface
-  (event $yield (import "lwt" "yield"))
-  (event $fork (import "lwt" "fork") (param (ref $cont)))
+  (tag $yield (import "lwt" "yield"))
+  (tag $fork (import "lwt" "fork") (param (ref $cont)))
 
   ;; mailbox interface
   (func $init (import "mailboxes" "init"))
@@ -244,10 +244,10 @@
   (func $recv-from-mb (import "mailboxes" "recv-from-mb") (param $mb i32) (result i32))
 
   ;; actor interface
-  (event $self (import "actor" "self") (result i32))
-  (event $spawn (import "actor" "spawn") (param (ref $cont)) (result i32))
-  (event $send (import "actor" "send") (param i32 i32))
-  (event $recv (import "actor" "recv") (result i32))
+  (tag $self (import "actor" "self") (result i32))
+  (tag $spawn (import "actor" "spawn") (param (ref $cont)) (result i32))
+  (tag $send (import "actor" "send") (param i32 i32))
+  (tag $recv (import "actor" "recv") (result i32))
 
   (elem declare func $act-nullary $act-res)
 
@@ -259,10 +259,10 @@
           (block $on_recv (result (ref $i-cont))
              ;; this should really be a tail call to the continuation
              ;; do we need a 'return_resume' operator?
-             (resume (event $self $on_self)
-                     (event $spawn $on_spawn)
-                     (event $send $on_send)
-                     (event $recv $on_recv)
+             (resume (tag $self $on_self)
+                     (tag $spawn $on_spawn)
+                     (tag $send $on_send)
+                     (tag $recv $on_recv)
                      (local.get $res) (local.get $ik)
              )
              (return)
@@ -312,10 +312,10 @@
           (block $on_recv (result (ref $i-cont))
              ;; this should really be a tail call to the continuation
              ;; do we need a 'return_resume' operator?
-             (resume (event $self $on_self)
-                     (event $spawn $on_spawn)
-                     (event $send $on_send)
-                     (event $recv $on_recv)
+             (resume (tag $self $on_self)
+                     (tag $spawn $on_spawn)
+                     (tag $send $on_send)
+                     (tag $recv $on_recv)
                      (local.get $k)
              )
              (return)

@@ -283,7 +283,7 @@ let rec instr e =
     | Suspend x -> "suspend " ^ var x, []
     | Resume xys ->
       "resume",
-      List.map (fun (x, y) -> Node ("event " ^ var x ^ " " ^ var y, [])) xys
+      List.map (fun (x, y) -> Node ("tag " ^ var x ^ " " ^ var y, [])) xys
     | ResumeThrow x -> "resume_throw " ^ var x, []
     | Barrier (bt, es) -> "barrier", block_type bt @ list instr es
     | LocalGet x -> "local.get " ^ var x, []
@@ -356,9 +356,9 @@ let memory off i mem =
   let {mtype = MemoryType lim} = mem.it in
   Node ("memory $" ^ nat (off + i) ^ " " ^ limits nat32 lim, [])
 
-let event off i evt =
-  let {evtype = EventType (FuncType (ins, out), res)} = evt.it in
-  Node ("event $" ^ nat (off + i) ^ resumability res,
+let tag off i tag =
+  let {tagtype = TagType (FuncType (ins, out), res)} = tag.it in
+  Node ("tag $" ^ nat (off + i) ^ resumability res,
     decls "param" ins @ decls "result" out
   )
 
@@ -416,8 +416,8 @@ let import_desc fx tx mx ex gx d =
     incr tx; table 0 (!tx - 1) ({ttype = t} @@ d.at)
   | MemoryImport t ->
     incr mx; memory 0 (!mx - 1) ({mtype = t} @@ d.at)
-  | EventImport t ->
-    incr ex; event 0 (!ex - 1) ({evtype = t} @@ d.at)
+  | TagImport t ->
+    incr ex; tag 0 (!ex - 1) ({tagtype = t} @@ d.at)
   | GlobalImport t ->
     incr gx; Node ("global $" ^ nat (!gx - 1), [global_type t])
 
@@ -433,7 +433,7 @@ let export_desc d =
   | TableExport x -> Node ("table", [atom var x])
   | MemoryExport x -> Node ("memory", [atom var x])
   | GlobalExport x -> Node ("global", [atom var x])
-  | EventExport x -> Node ("event", [atom var x])
+  | TagExport x -> Node ("tag", [atom var x])
 
 let export ex =
   let {name = n; edesc} = ex.it in
@@ -462,7 +462,7 @@ let module_with_var_opt x_opt m =
     imports @
     listi (table !tx) m.it.tables @
     listi (memory !mx) m.it.memories @
-    listi (event !ex) m.it.events @
+    listi (tag !ex) m.it.tags @
     listi (global !gx) m.it.globals @
     listi (func_with_index !fx) m.it.funcs @
     list export m.it.exports @

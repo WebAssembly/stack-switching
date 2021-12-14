@@ -2,20 +2,20 @@
 
 ;; interface to lightweight threads
 (module $lwt
-  (type $func (func))
-  (type $cont (cont $func))
+  (type $func (func))       ;; [] -> []
+  (type $cont (cont $func)) ;; cont ([] -> [])
 
-  (event $yield (export "yield"))
-  (event $fork (export "fork") (param (ref $cont)))
+  (tag $yield (export "yield"))                   ;; [] -> []
+  (tag $fork (export "fork") (param (ref $cont))) ;; [cont ([] -> [])] -> []
 )
 (register "lwt")
 
 (module $example
-  (type $func (func))
-  (type $cont (cont $func))
+  (type $func (func))       ;; [] -> []
+  (type $cont (cont $func)) ;; cont ([] -> [])
 
-  (event $yield (import "lwt" "yield"))
-  (event $fork (import "lwt" "fork") (param (ref $cont)))
+  (tag $yield (import "lwt" "yield"))                   ;; [] -> []
+  (tag $fork (import "lwt" "fork") (param (ref $cont))) ;; [cont ([] -> [])] -> []
 
   (func $log (import "spectest" "print_i32") (param i32))
 
@@ -57,9 +57,10 @@
 )
 (register "example")
 
+;; queue of threads
 (module $queue
-  (type $func (func))
-  (type $cont (cont $func))
+  (type $func (func))       ;; [] -> []
+  (type $cont (cont $func)) ;; cont ([] -> [])
 
   ;; Table as simple queue (keeping it simple, no ring buffer)
   (table $queue 0 (ref null $cont))
@@ -116,11 +117,11 @@
 (register "queue")
 
 (module $scheduler
-  (type $func (func))
-  (type $cont (cont $func))
+  (type $func (func))       ;; [] -> []
+  (type $cont (cont $func)) ;; cont ([] -> [])
 
-  (event $yield (import "lwt" "yield"))
-  (event $fork (import "lwt" "fork") (param (ref $cont)))
+  (tag $yield (import "lwt" "yield"))                   ;; [] -> []
+  (tag $fork (import "lwt" "fork") (param (ref $cont))) ;; [cont ([] -> [])] -> []
 
   (func $queue-empty (import "queue" "queue-empty") (result i32))
   (func $dequeue (import "queue" "dequeue") (result (ref null $cont)))
@@ -133,9 +134,10 @@
       (if (ref.is_null (local.get $nextk)) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_fork (result (ref $cont) (ref $cont))
-          (resume (event $yield $on_yield)
-                  (event $fork $on_fork)
-                  (local.get $nextk)
+          (resume
+            (tag $yield $on_yield)
+            (tag $fork $on_fork)
+            (local.get $nextk)
           )
           (local.set $nextk (call $dequeue))
           (br $l)  ;; thread terminated
@@ -143,8 +145,7 @@
         (local.set $nextk)                      ;; current thread
         (call $enqueue) ;; new thread
         (br $l)
-      )
-      ;;     $on_yield (result (ref $cont))
+      ) ;;   $on_yield (result (ref $cont))
       (local.set $nextk)  ;; carry on with current thread
       (br $l)
     )
@@ -164,19 +165,19 @@
       (if (ref.is_null (local.get $nextk)) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_fork (result (ref $cont) (ref $cont))
-          (resume (event $yield $on_yield)
-                  (event $fork $on_fork)
-                  (local.get $nextk)
+          (resume
+            (tag $yield $on_yield)
+            (tag $fork $on_fork)
+            (local.get $nextk)
           )
           (local.set $nextk (call $dequeue))
           (br $l)  ;; thread terminated
         ) ;;   $on_fork (result (ref $cont) (ref $cont))
-        (local.set $nextk)                      ;; current thread
+        (local.set $nextk) ;; current thread
         (call $enqueue) ;; new thread
         (br $l)
-      )
-      ;;     $on_yield (result (ref $cont))
-      (call $enqueue)                    ;; current thread
+      ) ;;   $on_yield (result (ref $cont))
+      (call $enqueue) ;; current thread
       (local.set $nextk (call $dequeue)) ;; next thread
       (br $l)
     )
@@ -188,19 +189,19 @@
       (if (ref.is_null (local.get $nextk)) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_fork (result (ref $cont) (ref $cont))
-          (resume (event $yield $on_yield)
-                  (event $fork $on_fork)
-                  (local.get $nextk)
+          (resume
+            (tag $yield $on_yield)
+            (tag $fork $on_fork)
+            (local.get $nextk)
           )
           (local.set $nextk (call $dequeue))
           (br $l)  ;; thread terminated
         ) ;;   $on_fork (result (ref $cont) (ref $cont))
-        (call $enqueue)                            ;; current thread
+        (call $enqueue) ;; current thread
         (local.set $nextk) ;; new thread
         (br $l)
-      )
-      ;;     $on_yield (result (ref $cont))
-      (call $enqueue)                    ;; current thread
+      ) ;;   $on_yield (result (ref $cont))
+      (call $enqueue) ;; current thread
       (local.set $nextk (call $dequeue)) ;; next thread
       (br $l)
     )
@@ -212,20 +213,20 @@
       (if (ref.is_null (local.get $nextk)) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_fork (result (ref $cont) (ref $cont))
-          (resume (event $yield $on_yield)
-                  (event $fork $on_fork)
-                  (local.get $nextk)
+          (resume
+            (tag $yield $on_yield)
+            (tag $fork $on_fork)
+            (local.get $nextk)
           )
           (local.set $nextk (call $dequeue))
           (br $l)  ;; thread terminated
         ) ;;   $on_fork (result (ref $cont) (ref $cont))
-        (call $enqueue)                         ;; current thread
+        (call $enqueue) ;; current thread
         (call $enqueue) ;; new thread
-        (local.set $nextk (call $dequeue))      ;; next thread
+        (local.set $nextk (call $dequeue)) ;; next thread
         (br $l)
-      )
-      ;;     $on_yield (result (ref $cont))
-      (call $enqueue)                    ;; current thread
+      ) ;;   $on_yield (result (ref $cont))
+      (call $enqueue) ;; current thread
       (local.set $nextk (call $dequeue)) ;; next thread
       (br $l)
     )
@@ -237,21 +238,21 @@
       (if (ref.is_null (local.get $nextk)) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_fork (result (ref $cont) (ref $cont))
-          (resume (event $yield $on_yield)
-                  (event $fork $on_fork)
-                  (local.get $nextk)
+          (resume
+            (tag $yield $on_yield)
+            (tag $fork $on_fork)
+            (local.get $nextk)
           )
           (local.set $nextk (call $dequeue))
           (br $l)  ;; thread terminated
         ) ;;   $on_fork (result (ref $cont) (ref $cont))
         (local.set $nextk)
         (call $enqueue) ;; new thread
-        (call $enqueue (local.get $nextk))      ;; current thread
-        (local.set $nextk (call $dequeue))      ;; next thread
+        (call $enqueue (local.get $nextk)) ;; current thread
+        (local.set $nextk (call $dequeue)) ;; next thread
         (br $l)
-      )
-      ;;     $on_yield (result (ref $cont))
-      (call $enqueue)                    ;; current thread
+      ) ;;   $on_yield (result (ref $cont))
+      (call $enqueue) ;; current thread
       (local.set $nextk (call $dequeue)) ;; next thread
       (br $l)
     )
@@ -260,14 +261,14 @@
 (register "scheduler")
 
 (module
-  (type $func (func))
-  (type $cont (cont $func))
+  (type $func (func))       ;; [] -> []
+  (type $cont (cont $func)) ;; cont ([] -> [])
 
-  (func $scheduler1 (import "scheduler" "sync") (param $nextk (ref null $cont)))
-  (func $scheduler2 (import "scheduler" "kt") (param $nextk (ref null $cont)))
-  (func $scheduler3 (import "scheduler" "tk") (param $nextk (ref null $cont)))
-  (func $scheduler4 (import "scheduler" "ykt") (param $nextk (ref null $cont)))
-  (func $scheduler5 (import "scheduler" "ytk") (param $nextk (ref null $cont)))
+  (func $scheduler-sync (import "scheduler" "sync") (param $nextk (ref null $cont)))
+  (func $scheduler-kt (import "scheduler" "kt") (param $nextk (ref null $cont)))
+  (func $schedule-tk (import "scheduler" "tk") (param $nextk (ref null $cont)))
+  (func $scheduler-ykt (import "scheduler" "ykt") (param $nextk (ref null $cont)))
+  (func $scheduler-ytk (import "scheduler" "ytk") (param $nextk (ref null $cont)))
 
   (func $log (import "spectest" "print_i32") (param i32))
 
@@ -277,15 +278,15 @@
 
   (func (export "run")
     (call $log (i32.const -1))
-    (call $scheduler1 (cont.new (type $cont) (ref.func $main)))
+    (call $scheduler-sync (cont.new (type $cont) (ref.func $main)))
     (call $log (i32.const -2))
-    (call $scheduler2 (cont.new (type $cont) (ref.func $main)))
+    (call $scheduler-kt (cont.new (type $cont) (ref.func $main)))
     (call $log (i32.const -3))
-    (call $scheduler3 (cont.new (type $cont) (ref.func $main)))
+    (call $schedule-tk (cont.new (type $cont) (ref.func $main)))
     (call $log (i32.const -4))
-    (call $scheduler4 (cont.new (type $cont) (ref.func $main)))
+    (call $scheduler-ykt (cont.new (type $cont) (ref.func $main)))
     (call $log (i32.const -5))
-    (call $scheduler5 (cont.new (type $cont) (ref.func $main)))
+    (call $scheduler-ytk (cont.new (type $cont) (ref.func $main)))
     (call $log (i32.const -6))
   )
 )

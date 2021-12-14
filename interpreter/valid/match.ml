@@ -81,7 +81,7 @@ and eq_memory_type c a (MemoryType lim1) (MemoryType lim2) =
 and eq_global_type c a (GlobalType (t1, mut1)) (GlobalType (t2, mut2)) =
   eq_mutability c a mut1 mut2 && eq_value_type c a t1 t2
 
-and eq_event_type c a (EventType (ft1, res1)) (EventType (ft2, res2)) =
+and eq_tag_type c a (TagType (ft1, res1)) (TagType (ft2, res2)) =
   eq_resumability c a res1 res2 && eq_func_type c [] ft1 ft2
 
 and eq_extern_type c a et1 et2 =
@@ -90,7 +90,7 @@ and eq_extern_type c a et1 et2 =
   | ExternTableType tt1, ExternTableType tt2 -> eq_table_type c a tt1 tt2
   | ExternMemoryType mt1, ExternMemoryType mt2 -> eq_memory_type c a mt1 mt2
   | ExternGlobalType gt1, ExternGlobalType gt2 -> eq_global_type c a gt1 gt2
-  | ExternEventType et1, ExternEventType et2 -> eq_event_type c a et1 et2
+  | ExternTagType et1, ExternTagType et2 -> eq_tag_type c a et1 et2
   | _, _ -> false
 
 
@@ -156,7 +156,7 @@ and match_global_type c a (GlobalType (t1, mut1)) (GlobalType (t2, mut2)) =
   | Immutable -> match_value_type c a t1 t2
   | Mutable -> eq_value_type c [] t1 t2
 
-and match_event_type c a (EventType (ft1, res1)) (EventType (ft2, res2)) =
+and match_tag_type c a (TagType (ft1, res1)) (TagType (ft2, res2)) =
   eq_resumability c [] res1 res2 && match_func_type c a ft1 ft2
 
 and match_extern_type c a et1 et2 =
@@ -165,7 +165,7 @@ and match_extern_type c a et1 et2 =
   | ExternTableType tt1, ExternTableType tt2 -> match_table_type c a tt1 tt2
   | ExternMemoryType mt1, ExternMemoryType mt2 -> match_memory_type c a mt1 mt2
   | ExternGlobalType gt1, ExternGlobalType gt2 -> match_global_type c a gt1 gt2
-  | ExternEventType et1, ExternEventType et2 -> match_event_type c a et1 et2
+  | ExternTagType et1, ExternTagType et2 -> match_tag_type c a et1 et2
   | _, _ -> false
 
 and match_def_type c a dt1 dt2 =

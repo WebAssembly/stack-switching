@@ -25,8 +25,8 @@ let table =
 let memory = Memory.alloc (MemoryType {min = 1l; max = Some 2l})
 let func f ft = Func.alloc_host (Types.alloc (FuncDefType ft)) (f ft)
 
-let event = Event.alloc (EventType (FuncType ([NumType I32Type], [NumType I32Type]), Resumable))
-let except = Event.alloc (EventType (FuncType ([NumType I32Type], []), Terminal))
+let tag = Tag.alloc (TagType (FuncType ([NumType I32Type], [NumType I32Type]), Resumable))
+let except = Tag.alloc (TagType (FuncType ([NumType I32Type], []), Terminal))
 
 let print_value v =
   Printf.printf "%s : %s\n"
@@ -55,6 +55,6 @@ let lookup name t =
   | "global_f64", _ -> ExternGlobal (global (GlobalType (NumType F64Type, Immutable)))
   | "table", _ -> ExternTable table
   | "memory", _ -> ExternMemory memory
-  | "event", _ -> ExternEvent event
-  | "exception", _ -> ExternEvent except
+  | "tag", _ -> ExternTag tag
+  | "exception", _ -> ExternTag except
   | _ -> raise Not_found

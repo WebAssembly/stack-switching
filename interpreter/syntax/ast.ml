@@ -157,12 +157,12 @@ and func' =
 }
 
 
-(* Events *)
+(* Tags *)
 
-type event = event' Source.phrase
-and event' =
+type tag = tag' Source.phrase
+and tag' =
 {
-  evtype : event_type;
+  tagtype : tag_type;
 }
 
 
@@ -212,7 +212,7 @@ and export_desc' =
   | TableExport of idx
   | MemoryExport of idx
   | GlobalExport of idx
-  | EventExport of idx
+  | TagExport of idx
 
 type export = export' Source.phrase
 and export' =
@@ -227,7 +227,7 @@ and import_desc' =
   | TableImport of table_type
   | MemoryImport of memory_type
   | GlobalImport of global_type
-  | EventImport of event_type
+  | TagImport of tag_type
 
 type import = import' Source.phrase
 and import' =
@@ -244,7 +244,7 @@ and module_' =
   globals : global list;
   tables : table list;
   memories : memory list;
-  events : event list;
+  tags : tag list;
   funcs : func list;
   start : idx option;
   elems : elem_segment list;
@@ -262,7 +262,7 @@ let empty_module =
   globals = [];
   tables = [];
   memories = [];
-  events = [];
+  tags = [];
   funcs = [];
   start = None;
   elems = [];
@@ -284,7 +284,7 @@ let import_type_of (m : module_) (im : import) : import_type =
     | TableImport t -> ExternTableType t
     | MemoryImport t -> ExternMemoryType t
     | GlobalImport t -> ExternGlobalType t
-    | EventImport t -> ExternEventType t
+    | TagImport t -> ExternTagType t
   in ImportType (et, module_name, item_name)
 
 let export_type_of (m : module_) (ex : export) : export_type =
@@ -307,9 +307,9 @@ let export_type_of (m : module_) (ex : export) : export_type =
     | GlobalExport x ->
       let gts = globals ets @ List.map (fun g -> g.it.gtype) m.it.globals in
       ExternGlobalType (nth gts x.it)
-    | EventExport x ->
-      let evts = events ets @ List.map (fun e -> e.it.evtype) m.it.events in
-      ExternEventType (nth evts x.it)
+    | TagExport x ->
+      let tagts = tags ets @ List.map (fun t -> t.it.tagtype) m.it.tags in
+      ExternTagType (nth tagts x.it)
   in ExportType (et, name)
 
 let module_type_of (m : module_) : module_type =

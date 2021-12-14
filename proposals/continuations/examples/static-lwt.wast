@@ -2,12 +2,12 @@
 
 ;; interface to a fixed collection of lightweight threads
 (module $lwt
-  (event $yield (export "yield"))
+  (tag $yield (export "yield"))
 )
 (register "lwt")
 
 (module $example
-  (event $yield (import "lwt" "yield"))
+  (tag $yield (import "lwt" "yield"))
   (func $log (import "spectest" "print_i32") (param i32))
 
   (func $thread1 (export "thread1")
@@ -99,7 +99,7 @@
   (type $func (func))
   (type $cont (cont $func))
 
-  (event $yield (import "lwt" "yield"))
+  (tag $yield (import "lwt" "yield"))
 
   ;; queue interface
   (func $queue-empty (import "queue" "queue-empty") (result i32))
@@ -110,7 +110,7 @@
     (loop $l
       (if (call $queue-empty) (then (return)))
       (block $on_yield (result (ref $cont))
-        (resume (event $yield $on_yield)
+        (resume (tag $yield $on_yield)
                 (call $dequeue)
         )
         (br $l)  ;; thread terminated

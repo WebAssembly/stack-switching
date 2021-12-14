@@ -24,13 +24,13 @@ type resumability = Terminal | Resumable
 type table_type = TableType of Int32.t limits * ref_type
 type memory_type = MemoryType of Int32.t limits
 type global_type = GlobalType of value_type * mutability
-type event_type = EventType of func_type * resumability  (* TODO: use index *)
+type tag_type = TagType of func_type * resumability  (* TODO: use index *)
 type extern_type =
   | ExternFuncType of func_type
   | ExternTableType of table_type
   | ExternMemoryType of memory_type
   | ExternGlobalType of global_type
-  | ExternEventType of event_type
+  | ExternTagType of tag_type
 
 type export_type = ExportType of extern_type * name
 type import_type = ImportType of extern_type * name * name
@@ -109,8 +109,8 @@ let memories =
   Lib.List.map_filter (function ExternMemoryType t -> Some t | _ -> None)
 let globals =
   Lib.List.map_filter (function ExternGlobalType t -> Some t | _ -> None)
-let events =
-  Lib.List.map_filter (function ExternEventType t -> Some t | _ -> None)
+let tags =
+  Lib.List.map_filter (function ExternTagType t -> Some t | _ -> None)
 
 
 (* Allocation *)
@@ -163,15 +163,15 @@ let sem_func_type c (FuncType (ins, out)) =
 let sem_cont_type c (ContType x) =
   ContType (sem_var_type c x)
 
-let sem_event_type c (EventType (ft, res)) =
-  EventType (sem_func_type c ft, res)
+let sem_tag_type c (TagType (ft, res)) =
+  TagType (sem_func_type c ft, res)
 
 let sem_extern_type c = function
   | ExternFuncType ft -> ExternFuncType (sem_func_type c ft)
   | ExternTableType tt -> ExternTableType (sem_table_type c tt)
   | ExternMemoryType mt -> ExternMemoryType (sem_memory_type c mt)
   | ExternGlobalType gt -> ExternGlobalType (sem_global_type c gt)
-  | ExternEventType et -> ExternEventType (sem_event_type c et)
+  | ExternTagType et -> ExternTagType (sem_tag_type c et)
 
 
 let sem_def_type c = function
@@ -276,16 +276,16 @@ let string_of_global_type = function
   | GlobalType (t, Immutable) -> string_of_value_type t
   | GlobalType (t, Mutable) -> "(mut " ^ string_of_value_type t ^ ")"
 
-let string_of_event_type = function
-  | EventType (ft, Terminal) -> "exception " ^ string_of_func_type ft
-  | EventType (ft, Resumable) -> string_of_func_type ft
+let string_of_tag_type = function
+  | TagType (ft, Terminal) -> "exception " ^ string_of_func_type ft
+  | TagType (ft, Resumable) -> string_of_func_type ft
 
 let string_of_extern_type = function
   | ExternFuncType ft -> "func " ^ string_of_func_type ft
   | ExternTableType tt -> "table " ^ string_of_table_type tt
   | ExternMemoryType mt -> "memory " ^ string_of_memory_type mt
   | ExternGlobalType gt -> "global " ^ string_of_global_type gt
-  | ExternEventType et -> "event " ^ string_of_event_type et
+  | ExternTagType et -> "tag " ^ string_of_tag_type et
 
 let string_of_export_type (ExportType (et, name)) =
   "\"" ^ string_of_name name ^ "\" : " ^ string_of_extern_type et

@@ -5,8 +5,8 @@
   (type $producer (cont $pfun))
   (type $consumer (cont $cfun))
 
-  (event $send (export "send") (param i32))
-  (event $receive (export "receive") (result i32))
+  (tag $send (export "send") (param i32))
+  (tag $receive (export "receive") (result i32))
 
   (func $piper (export "pipe") (param $p (ref $producer)) (param $c (ref $consumer))
     (local $n i32)
@@ -19,7 +19,7 @@
       (if (local.get $consuming)
         (then
            (block $on-receive (result (ref $consumer))
-             (resume (event $receive $on-receive) (local.get $n) (local.get $c))
+             (resume (tag $receive $on-receive) (local.get $n) (local.get $c))
              (return)
            ) ;; receive
            (local.set $c)
@@ -28,7 +28,7 @@
         )
       ) ;; else producing
            (block $on-send (result i32 (ref $producer))
-             (resume (event $send $on-send) (local.get $p))
+             (resume (tag $send $on-send) (local.get $p))
              (return)
            ) ;; send
            (local.set $p)
@@ -48,8 +48,8 @@
   (type $producer (cont $pfun))
   (type $consumer (cont $cfun))
 
-  (event $send (import "pipes" "send") (param i32))
-  (event $receive (import "pipes" "receive") (result i32))
+  (tag $send (import "pipes" "send") (param i32))
+  (tag $receive (import "pipes" "receive") (result i32))
 
   (func $pipe (import "pipes" "pipe") (param $p (ref $producer)) (param $c (ref $consumer)))
 
