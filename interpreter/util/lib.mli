@@ -5,10 +5,11 @@ type void
 module Fun :
 sig
   val id : 'a -> 'a
+  val flip : ('a -> 'b -> 'c) -> ('b -> 'a -> 'c)
   val curry : ('a * 'b -> 'c) -> ('a -> 'b -> 'c)
   val uncurry : ('a -> 'b -> 'c) -> ('a * 'b -> 'c)
 
-  val repeat : int -> ('a -> unit) -> 'a -> unit
+  val repeat : int -> ('a -> 'a) -> 'a -> 'a
 end
 
 module List :
@@ -17,7 +18,9 @@ sig
   val table : int -> (int -> 'a) -> 'a list
   val take : int -> 'a list -> 'a list (* raises Failure *)
   val drop : int -> 'a list -> 'a list (* raises Failure *)
+  val split : int -> 'a list -> 'a list * 'a list (* raises Failure *)
 
+  val last_opt : 'a list -> 'a option
   val last : 'a list -> 'a (* raises Failure *)
   val split_last : 'a list -> 'a list * 'a (* raises Failure *)
 
@@ -81,4 +84,14 @@ sig
   val split : string -> char -> string list
   val breakup : string -> int -> string list
   val find_from_opt : (char -> bool) -> string -> int -> int option
+end
+
+module Promise :
+sig
+  type 'a t
+  exception Promise
+  val make : unit -> 'a t
+  val fulfill : 'a t -> 'a -> unit
+  val value : 'a t -> 'a
+  val value_opt : 'a t -> 'a option
 end

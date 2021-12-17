@@ -36,6 +36,16 @@
     (select (result externref) (local.get 0) (local.get 1) (local.get 2))
   )
 
+  (type $t (func))
+  (func $tf) (elem declare func $tf)
+  (func (export "join-funcnull") (param i32) (result (ref null func))
+    (select (result (ref null func))
+      (ref.func $tf)
+      (ref.null func)
+      (local.get 0)
+    )
+  )
+
   ;; Check that both sides of the select are evaluated
   (func (export "select-trap-left") (param $cond i32) (result i32)
     (select (unreachable) (i32.const 0) (local.get $cond))
@@ -278,6 +288,9 @@
 (assert_return (invoke "select-f64-t" (f64.const 2) (f64.const nan) (i32.const 0)) (f64.const nan))
 (assert_return (invoke "select-f64-t" (f64.const 2) (f64.const nan:0x20304) (i32.const 0)) (f64.const nan:0x20304))
 
+(assert_return (invoke "join-funcnull" (i32.const 1)) (ref.func))
+(assert_return (invoke "join-funcnull" (i32.const 0)) (ref.null))
+
 (assert_trap (invoke "select-trap-left" (i32.const 1)) "unreachable")
 (assert_trap (invoke "select-trap-left" (i32.const 0)) "unreachable")
 (assert_trap (invoke "select-trap-right" (i32.const 1)) "unreachable")
@@ -379,6 +392,20 @@
 )
 
 
+(assert_invalid
+  (module (type $t (func))
+    (func $type-ref-implicit (param $r (ref $t))
+      (drop (select (local.get $r) (local.get $r) (i32.const 1)))
+    )
+  )
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-funcref-implicit (param $r funcref)
+    (drop (select (local.get $r) (local.get $r) (i32.const 1)))
+  ))
+  "type mismatch"
+)
 (assert_invalid
   (module (func $type-externref-implicit (param $r externref)
     (drop (select (local.get $r) (local.get $r) (i32.const 1)))

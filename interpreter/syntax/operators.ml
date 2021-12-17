@@ -1,6 +1,6 @@
 open Source
 open Types
-open Values
+open Value
 open Ast
 
 
@@ -15,16 +15,35 @@ let unreachable = Unreachable
 let nop = Nop
 let drop = Drop
 let select t = Select t
+
 let block bt es = Block (bt, es)
 let loop bt es = Loop (bt, es)
 let if_ bt es1 es2 = If (bt, es1, es2)
+let let_ bt ts es = Let (bt, ts, es)
+
+let try_ bt es1 xo es2 = Try (bt, es1, xo, es2)
+let throw x = Throw x
+
 let br x = Br x
 let br_if x = BrIf x
 let br_table xs x = BrTable (xs, x)
+let br_on_null x = BrOnNull x
 
 let return = Return
 let call x = Call x
+let call_ref = CallRef
 let call_indirect x y = CallIndirect (x, y)
+let return_call x = ReturnCall x
+let return_call_ref = ReturnCallRef
+let return_call_indirect x y = ReturnCallIndirect (x, y)
+let func_bind x = FuncBind x
+
+let cont_new x = ContNew x
+let cont_bind x = ContBind x
+let suspend x = Suspend x
+let resume xys = Resume xys
+let resume_throw x = ResumeThrow x
+let barrier bt es = Barrier (bt, es)
 
 let local_get x = LocalGet x
 let local_set x = LocalSet x
@@ -89,6 +108,7 @@ let memory_init x = MemoryInit x
 let data_drop x = DataDrop x
 
 let ref_is_null = RefIsNull
+let ref_as_non_null = RefAsNonNull
 
 let i32_clz = Unary (I32 I32Op.Clz)
 let i32_ctz = Unary (I32 I32Op.Ctz)

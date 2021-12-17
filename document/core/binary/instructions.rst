@@ -37,6 +37,8 @@ Control Instructions
 .. _binary-return:
 .. _binary-call:
 .. _binary-call_indirect:
+.. _binary-return_call:
+.. _binary-return_call_indirect:
 
 .. math::
    \begin{array}{llcllll}
@@ -63,16 +65,18 @@ Control Instructions
      \hex{0F} &\Rightarrow& \RETURN \\ &&|&
      \hex{10}~~x{:}\Bfuncidx &\Rightarrow& \CALL~x \\ &&|&
      \hex{11}~~y{:}\Btypeidx~~x{:}\Btableidx &\Rightarrow& \CALLINDIRECT~x~y \\
+     \hex{12}~~x{:}\Bfuncidx &\Rightarrow& \RETURNCALL~x \\ &&|&
+     \hex{13}~~y{:}\Btypeidx~~x{:}\Btableidx &\Rightarrow& \RETURNCALLINDIRECT~x~y \\
    \end{array}
 
 .. note::
    The |ELSE| opcode :math:`\hex{05}` in the encoding of an |IF| instruction can be omitted if the following instruction sequence is empty.
 
    Unlike any :ref:`other occurrence <binary-typeidx>`, the :ref:`type index <syntax-typeidx>` in a :ref:`block type <syntax-blocktype>` is encoded as a positive :ref:`signed integer <syntax-sint>`, so that its |SignedLEB128| bit pattern cannot collide with the encoding of :ref:`value types <binary-valtype>` or the special code :math:`\hex{40}`, which correspond to the LEB128 encoding of negative integers.
-   To avoid any loss in the range of allowed indices, it is treated as a 33 bit signed integer. 
+   To avoid any loss in the range of allowed indices, it is treated as a 33 bit signed integer.
 
    In future versions of WebAssembly, the zero byte occurring in the encoding
-   of the |CALLINDIRECT| instruction may be used to index additional tables.
+   of the |CALLINDIRECT| and |RETURNCALLINDIRECT| instructions may be used to index additional tables.
 
 
 .. index:: reference instruction

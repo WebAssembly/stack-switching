@@ -74,12 +74,16 @@ Value Types
 ~~~~~~~~~~~
 
 *Value types* classify the individual values that WebAssembly code can compute with and the values that a variable accepts.
-They are either :ref:`number types <syntax-numtype>` or :ref:`reference types <syntax-reftype>`.
+They are either :ref:`number types <syntax-numtype>`, :ref:`reference type <syntax-reftype>`, or the unique *bottom type*, written :math:`\BOT`.
+
+The type :math:`\BOT` is a :ref:`subtype <match-valtype>` of all other types.
+By virtue of being representable in neither the :ref:`binary format <binary-valtype>` nor the :ref:`text format <text-valtype>`, it cannot be used in a program;
+it only occurs during :ref:`validation <valid>`, as a possible operand type for instructions.
 
 .. math::
    \begin{array}{llll}
    \production{value type} & \valtype &::=&
-     \numtype ~|~ \reftype \\
+     \numtype ~|~ \reftype ~|~ \BOT \\
    \end{array}
 
 Conventions

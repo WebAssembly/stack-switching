@@ -110,6 +110,7 @@ let input_from get_script run =
   | Import.Unknown (at, msg) -> error at "link failure" msg
   | Eval.Link (at, msg) -> error at "link failure" msg
   | Eval.Trap (at, msg) -> error at "runtime trap" msg
+  | Eval.Exception (at, msg) -> error at "runtime exception" msg
   | Eval.Exhaustion (at, msg) -> error at "resource exhaustion" msg
   | Eval.Crash (at, msg) -> error at "runtime crash" msg
   | Encode.Code (at, msg) -> error at "encoding error" msg
@@ -208,43 +209,19 @@ let input_stdin run =
 
 (* Printing *)
 
-let print_import m im =
-  let open Types in
-  let category, annotation =
-    match Ast.import_type m im with
-    | ExternFuncType t -> "func", string_of_func_type t
-    | ExternTableType t -> "table", string_of_table_type t
-    | ExternMemoryType t -> "memory", string_of_memory_type t
-    | ExternGlobalType t -> "global", string_of_global_type t
-  in
-  Printf.printf "  import %s \"%s\" \"%s\" : %s\n"
-    category (Ast.string_of_name im.it.Ast.module_name)
-      (Ast.string_of_name im.it.Ast.item_name) annotation
-
-let print_export m ex =
-  let open Types in
-  let category, annotation =
-    match Ast.export_type m ex with
-    | ExternFuncType t -> "func", string_of_func_type t
-    | ExternTableType t -> "table", string_of_table_type t
-    | ExternMemoryType t -> "memory", string_of_memory_type t
-    | ExternGlobalType t -> "global", string_of_global_type t
-  in
-  Printf.printf "  export %s \"%s\" : %s\n"
-    category (Ast.string_of_name ex.it.Ast.name) annotation
+let indent s =
+  let lines = List.filter ((<>) "") (String.split_on_char '\n' s) in
+  String.concat "\n" (List.map ((^) "  ") lines) ^ "\n"
 
 let print_module x_opt m =
-  Printf.printf "module%s :\n"
-    (match x_opt with None -> "" | Some x -> " " ^ x.it);
-  List.iter (print_import m) m.it.Ast.imports;
-  List.iter (print_export m) m.it.Ast.exports;
-  flush_all ()
+  Printf.printf "module%s :\n%s%!"
+    (match x_opt with None -> "" | Some x -> " " ^ x.it)
+    (indent (Types.string_of_module_type (Ast.module_type_of m)))
 
 let print_values vs =
-  let ts = List.map Values.type_of_value vs in
-  Printf.printf "%s : %s\n"
-    (Values.string_of_values vs) (Types.string_of_value_types ts);
-  flush_all ()
+  let ts = List.map Value.type_of_value vs in
+  Printf.printf "%s : %s\n%!"
+    (Value.string_of_values vs) (Types.string_of_result_type ts)
 
 let string_of_nan = function
   | CanonicalNan -> "nan:canonical"
@@ -252,19 +229,21 @@ let string_of_nan = function
 
 let type_of_result r =
   match r with
-  | LitResult v -> Values.type_of_value v.it
-  | NanResult n -> Types.NumType (Values.type_of_num n.it)
-  | RefResult t -> Types.RefType t
+  | LitResult v -> Value.type_of_value v.it
+  | NanResult n -> Types.NumType (Value.type_of_num n.it)
+  | RefResult t -> Types.(RefType (NonNullable, t))
+  | NullResult -> Types.(RefType (Nullable, ExternHeapType))
 
 let string_of_result r =
   match r with
-  | LitResult v -> Values.string_of_value v.it
+  | LitResult v -> Value.string_of_value v.it
   | NanResult nanop ->
     (match nanop.it with
-    | Values.I32 _ | Values.I64 _ -> assert false
-    | Values.F32 n | Values.F64 n -> string_of_nan n
+    | Value.I32 _ | Value.I64 _ -> assert false
+    | Value.F32 n | Value.F64 n -> string_of_nan n
     )
-  | RefResult t -> Types.string_of_refed_type t
+  | RefResult t -> Types.string_of_heap_type t
+  | NullResult -> "null"
 
 let string_of_results = function
   | [r] -> string_of_result r
@@ -272,9 +251,8 @@ let string_of_results = function
 
 let print_results rs =
   let ts = List.map type_of_result rs in
-  Printf.printf "%s : %s\n"
-    (string_of_results rs) (Types.string_of_value_types ts);
-  flush_all ()
+  Printf.printf "%s : %s\n%!"
+    (string_of_results rs) (Types.string_of_result_type ts)
 
 
 (* Configuration *)
@@ -324,10 +302,10 @@ let rec run_definition def : Ast.module_ =
     let def' = Parse.string_to_module s in
     run_definition def'
 
-let run_action act : Values.value list =
+let run_action act : Value.t list =
   match act.it with
   | Invoke (x_opt, name, vs) ->
-    trace ("Invoking function \"" ^ Ast.string_of_name name ^ "\"...");
+    trace ("Invoking function \"" ^ Types.string_of_name name ^ "\"...");
     let inst = lookup_instance x_opt act.at in
     (match Instance.export inst name with
     | Some (Instance.ExternFunc f) ->
@@ -335,7 +313,7 @@ let run_action act : Values.value list =
       if List.length vs <> List.length ins then
         Script.error act.at "wrong number of arguments";
       List.iter2 (fun v t ->
-        if Values.type_of_value v.it <> t then
+        if not (Match.match_value_type [] [] (Value.type_of_value v.it) t) then
           Script.error v.at "wrong type of argument"
       ) vs ins;
       Eval.invoke f (List.map (fun v -> v.it) vs)
@@ -344,7 +322,7 @@ let run_action act : Values.value list =
     )
 
  | Get (x_opt, name) ->
-    trace ("Getting global \"" ^ Ast.string_of_name name ^ "\"...");
+    trace ("Getting global \"" ^ Types.string_of_name name ^ "\"...");
     let inst = lookup_instance x_opt act.at in
     (match Instance.export inst name with
     | Some (Instance.ExternGlobal gl) -> [Global.load gl]
@@ -353,7 +331,7 @@ let run_action act : Values.value list =
     )
 
 let assert_result at got expect =
-  let open Values in
+  let open Value in
   if
     List.length got <> List.length expect ||
     List.exists2 (fun v r ->
@@ -375,8 +353,13 @@ let assert_result at got expect =
         )
       | RefResult t ->
         (match t, v with
-        | Types.FuncRefType, Ref (Instance.FuncRef _)
-        | Types.ExternRefType, Ref (ExternRef _) -> false
+        | Types.FuncHeapType, Ref (Instance.FuncRef _)
+        | Types.ExternHeapType, Ref (ExternRef _) -> false
+        | _ -> true
+        )
+      | NullResult ->
+        (match v with
+        | Ref (NullRef _) -> false
         | _ -> true
         )
     ) got expect
@@ -456,6 +439,20 @@ let run_assertion ass =
     | _ -> Assert.error ass.at "expected runtime error"
     )
 
+  | AssertException (act, re) ->
+    trace ("Asserting exception...");
+    (match run_action act with
+    | exception Eval.Exception (_, msg) -> assert_message ass.at "runtime" msg re
+    | _ -> Assert.error ass.at "expected exception"
+    )
+
+  | AssertSuspension (act, re) ->
+    trace ("Asserting suspension...");
+    (match run_action act with
+    | exception Eval.Suspension (_, msg) -> assert_message ass.at "runtime" msg re
+    | _ -> Assert.error ass.at "expected suspension"
+    )
+
   | AssertExhaustion (act, re) ->
     trace ("Asserting exhaustion...");
     (match run_action act with
@@ -489,7 +486,7 @@ let rec run_command cmd =
   | Register (name, x_opt) ->
     quote := cmd :: !quote;
     if not !Flags.dry then begin
-      trace ("Registering module \"" ^ Ast.string_of_name name ^ "\"...");
+      trace ("Registering module \"" ^ Types.string_of_name name ^ "\"...");
       let inst = lookup_instance x_opt cmd.at in
       registry := Map.add (Utf8.encode name) inst !registry;
       Import.register name (lookup_registry (Utf8.encode name))

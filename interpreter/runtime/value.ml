@@ -9,25 +9,10 @@ type ('i32, 'i64, 'f32, 'f64) op =
 type num = (I32.t, I64.t, F32.t, F64.t) op
 
 type ref_ = ..
-type ref_ += NullRef of ref_type
+type ref_ += NullRef of heap_type
 
 type value = Num of num | Ref of ref_
-
-
-(* Typing *)
-
-let type_of_num = function
-  | I32 _ -> I32Type
-  | I64 _ -> I64Type
-  | F32 _ -> F32Type
-  | F64 _ -> F64Type
-
-let type_of_ref' = ref (function NullRef t -> t | _ -> assert false)
-let type_of_ref r = !type_of_ref' r
-
-let type_of_value = function
-  | Num n -> NumType (type_of_num n)
-  | Ref r -> RefType (type_of_ref r)
+type t = value
 
 
 (* Projections *)
@@ -41,6 +26,24 @@ let as_ref = function
   | Ref r -> r
 
 
+(* Typing *)
+
+let type_of_num = function
+  | I32 _ -> I32Type
+  | I64 _ -> I64Type
+  | F32 _ -> F32Type
+  | F64 _ -> F64Type
+
+let type_of_ref' = ref (function _ -> assert false)
+let type_of_ref = function
+  | NullRef t -> (Nullable, t)
+  | r -> (NonNullable, !type_of_ref' r)
+
+let type_of_value = function
+  | Num n -> NumType (type_of_num n)
+  | Ref r -> RefType (type_of_ref r)
+
+
 (* Defaults *)
 
 let default_num = function
@@ -50,11 +53,13 @@ let default_num = function
   | F64Type -> F64 F64.zero
 
 let default_ref = function
-  | t -> NullRef t
+  | (Nullable, t) -> NullRef t
+  | (NonNullable, _) -> assert false
 
 let default_value = function
   | NumType t' -> Num (default_num t')
   | RefType t' -> Ref (default_ref t')
+  | BotType -> assert false
 
 
 (* Conversion *)

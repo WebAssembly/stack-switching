@@ -63,6 +63,8 @@ Value Types
    \end{array}
 
 .. note::
+   The type :math:`\BOT` cannot occur in a module.
+
    Value types can occur in contexts where :ref:`type indices <syntax-typeidx>` are also allowed, such as in the case of :ref:`block types <binary-blocktype>`.
    Thus, the binary format for types corresponds to the |SignedLEB128|_ :ref:`encoding <binary-sint>` of small negative :math:`\sN` values, so that they can coexist with (positive) type indices in the future.
 

@@ -2,7 +2,10 @@ Types
 -----
 
 Most :ref:`types <syntax-type>` are universally valid.
-However, restrictions apply to :ref:`limits <syntax-limits>`, which must be checked during validation.
+However, restrictions apply to :ref:`function types <syntax-functype>` as well as the :ref:`limits <syntax-limits>` of :ref:`table types <syntax-tabletype>` and :ref:`memory types <syntax-memtype>`, which must be checked during validation.
+
+On :ref:`value types <syntax-valtype>`, a simple notion of subtyping is defined.
+
 Moreover, :ref:`block types <syntax-blocktype>` are converted to plain :ref:`function types <syntax-functype>` for ease of processing.
 
 
@@ -229,6 +232,92 @@ External Types
    }{
      \vdashexterntype \ETGLOBAL~\globaltype \ok
    }
+ 
+ 
+.. index:: subtyping
+
+Value Subtyping
+~~~~~~~~~~~~~~~
+
+.. index:: number type
+
+.. _match-numtype:
+
+Number Types
+............
+
+A :ref:`number type <syntax-numtype>` :math:`\numtype_1` matches a :ref:`number type <syntax-numtype>` :math:`\numtype_2` if and only if:
+
+* Both :math:`\numtype_1` and :math:`\numtype_2` are the same.
+
+.. math::
+   ~\\[-1ex]
+   \frac{
+   }{
+     \vdashnumtypematch \numtype \matchesvaltype \numtype
+   }
+
+
+
+.. index:: reference type
+
+.. _match-reftype:
+
+Reference Types
+...............
+
+A :ref:`reference type <syntax-reftype>` :math:`\reftype_1` matches a :ref:`reference type <syntax-reftype>` :math:`\reftype_2` if and only if:
+
+* Either both :math:`\reftype_1` and :math:`\reftype_2` are the same.
+
+.. math::
+   ~\\[-1ex]
+   \frac{
+   }{
+     \vdashreftypematch \reftype \matchesvaltype \reftype
+   }
+
+
+.. index:: value type, number type, reference type
+
+.. _match-valtype:
+
+Value Types
+...........
+
+A :ref:`value type <syntax-valtype>` :math:`\valtype_1` matches a :ref:`value type <syntax-valtype>` :math:`\valtype_2` if and only if:
+
+* Either both :math:`\valtype_1` and :math:`\valtype_2` are :ref:`number types <syntax-numtype>` and :math:`\valtype_1` :ref:`matches <match-numtype>` :math:`\valtype_2`.
+
+* Or both :math:`\valtype_1` and :math:`\valtype_2` are :ref:`reference types <syntax-reftype>` and :math:`\valtype_1` :ref:`matches <match-reftype>` :math:`\valtype_2`.
+
+* Or :math:`\valtype_1` is :math:`\BOT`.
+
+.. math::
+   ~\\[-1ex]
+   \frac{
+   }{
+     \vdashvaltypematch \BOT \matchesvaltype \valtype
+   }
+
+
+.. _match-resulttype:
+
+Result Types
+............
+
+Subtyping is lifted to :ref:`result types <syntax-resulttype>` in a pointwise manner.
+That is, a :ref:`result type <syntax-resulttype>` :math:`[t_1^\ast]` matches a :ref:`result type <syntax-resulttype>` :math:`[t_2^\ast]` if and only if:
+
+* Every :ref:`value type <syntax-valtype>` :math:`t_1` in :math:`[t_1^\ast]` :ref:`matches <match-valtype>` the corresponding :ref:`value type <syntax-valtype>` :math:`t_2` in :math:`[t_2^\ast]`.
+
+.. math::
+   ~\\[-1ex]
+   \frac{
+     (\vdashvaltypematch t_1 \matchesvaltype t_2)^\ast
+   }{
+     \vdashresulttypematch [t_1^\ast] \matchesresulttype [t_2^ast]
+   }
 
 
 .. index:: ! matching, external type
@@ -344,13 +433,21 @@ An :ref:`external type <syntax-externtype>` :math:`\ETMEM~\limits_1` matches :ma
 Globals
 .......
 
-An :ref:`external type <syntax-externtype>` :math:`\ETGLOBAL~\globaltype_1` matches :math:`\ETGLOBAL~\globaltype_2` if and only if:
+An :ref:`external type <syntax-externtype>` :math:`\ETGLOBAL~(\mut_1~t_1)` matches :math:`\ETGLOBAL~(\mut_2~t_2)` if and only if:
 
-* Both :math:`\globaltype_1` and :math:`\globaltype_2` are the same.
+* Either both :math:`\mut_1` and :math:`\mut_2` are |MVAR| and :math:`t_1` and :math:`t_2` are the same.
+ 
+* Or both :math:`\mut_1` and :math:`\mut_2` are |MCONST| and :math:`t_1` :ref:`matches <match-valtype>` :math:`t_2`.
 
 .. math::
    ~\\[-1ex]
    \frac{
    }{
-     \vdashexterntypematch \ETGLOBAL~\globaltype \matchesexterntype \ETGLOBAL~\globaltype
+     \vdashexterntypematch \ETGLOBAL~(\MVAR~t) \matchesexterntype \ETGLOBAL~(\MVAR~t)
+   }
+   \qquad
+   \frac{
+     \vdashvaltypematch t_1 \matchesvaltype t_2
+   }{
+     \vdashexterntypematch \ETGLOBAL~(\MCONST~t_1) \matchesexterntype \ETGLOBAL~(\MCONST~t_2)
    }

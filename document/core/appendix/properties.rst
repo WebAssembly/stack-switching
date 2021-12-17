@@ -215,7 +215,9 @@ Module instances are classified by *module contexts*, which are regular :ref:`co
 
 * For each :ref:`reference <syntax-ref>` :math:`\reff_i` in the table's elements :math:`\reff^n`:
 
-  * The :ref:`reference <syntax-ref>` :math:`\reff_i` must be :ref:`valid <valid-ref>` with :ref:`reference type <syntax-reftype>` :math:`t`.
+  * The :ref:`reference <syntax-ref>` :math:`\reff_i` must be :ref:`valid <valid-ref>` with some :ref:`reference type <syntax-reftype>` :math:`t'_i`.
+
+  * The :ref:`reference type <syntax-reftype>` :math:`t'_i` must :ref:`match <match-reftype>` the :ref:`reference type <syntax-reftype>` :math:`t`.
 
 * Then the table instance is valid with :ref:`table type <syntax-tabletype>` :math:`\limits~t`.
 
@@ -225,7 +227,9 @@ Module instances are classified by *module contexts*, which are regular :ref:`co
      \qquad
      n = \limits.\LMIN
      \qquad
-     (S \vdash \reff : t)^n
+     (S \vdash \reff : t')^n
+     \qquad
+     (\vdashreftypematch t' \matchesvaltype t)^n
    }{
      S \vdashtableinst \{ \TITYPE~(\limits~t), \TIELEM~\reff^n \} : \limits~t
    }
@@ -261,7 +265,9 @@ Module instances are classified by *module contexts*, which are regular :ref:`co
 
 * The :ref:`global type <syntax-globaltype>` :math:`\mut~t` must be :ref:`valid <valid-globaltype>`.
 
-* The :ref:`value <syntax-val>` :math:`\val` must be :ref:`valid <valid-val>` with :ref:`value type <syntax-valtype>` :math:`t`.
+* The :ref:`value <syntax-val>` :math:`\val` must be :ref:`valid <valid-val>` with some :ref:`value type <syntax-valtype>` :math:`t'`.
+
+* The :ref:`value type <syntax-valtype>` :math:`t'` must :ref:`match <match-valtype>` the :ref:`value type <syntax-valtype>` :math:`t`.
 
 * Then the global instance is valid with :ref:`global type <syntax-globaltype>` :math:`\mut~t`.
 
@@ -269,7 +275,9 @@ Module instances are classified by *module contexts*, which are regular :ref:`co
    \frac{
      \vdashglobaltype \mut~t \ok
      \qquad
-     S \vdashval \val : t
+     S \vdashval \val : t'
+     \qquad
+     \vdashvaltypematch t' \matchesvaltype t
    }{
      S \vdashglobalinst \{ \GITYPE~(\mut~t), \GIVALUE~\val \} : \mut~t
    }
@@ -283,13 +291,17 @@ Module instances are classified by *module contexts*, which are regular :ref:`co
 
 * For each :ref:`reference <syntax-ref>` :math:`\reff_i` in the elements :math:`\reff^n`:
 
-  * The :ref:`reference <syntax-ref>` :math:`\reff_i` must be :ref:`valid <valid-ref>` with :ref:`reference type <syntax-reftype>` :math:`t`.
+  * The :ref:`reference <syntax-ref>` :math:`\reff_i` must be :ref:`valid <valid-ref>` with some :ref:`reference type <syntax-reftype>` :math:`t'_i`.
+
+  * The :ref:`reference type <syntax-reftype>` :math:`t'_i` must :ref:`match <match-reftype>` the :ref:`reference type <syntax-reftype>` :math:`t`.
 
 * Then the table instance is valid.
 
 .. math::
    \frac{
-     (S \vdash \reff : t)^\ast
+     (S \vdash \reff : t')^\ast
+     \qquad
+     (\vdashreftypematch t' \matchesvaltype t)^\ast
    }{
      S \vdasheleminst \{ \EITYPE~t, \EIELEM~\reff^\ast \} \ok
    }
@@ -360,7 +372,8 @@ Module instances are classified by *module contexts*, which are regular :ref:`co
 
 * Let :math:`\globaltype^\ast` be the concatenation of all :math:`\globaltype_i` in order.
 
-* Then the module instance is valid with :ref:`context <context>` :math:`\{\CTYPES~\functype^\ast, \CFUNCS~{\functype'}^\ast, \CTABLES~\tabletype^\ast, \CMEMS~\memtype^\ast, \CGLOBALS~\globaltype^\ast\}`.
+* | Then the module instance is valid with :ref:`context <context>`
+  | :math:`\{\CTYPES~\functype^\ast, \CFUNCS~{\functype'}^\ast, \CTABLES~\tabletype^\ast, \CMEMS~\memtype^\ast, \CGLOBALS~\globaltype^\ast\}`.
 
 .. math::
    ~\\[-1ex]

@@ -91,23 +91,42 @@ struct
 
   open Types
 
+  let var_type = function
+    | SynVar x -> vs33 x
+    | SemVar _ -> assert false
+
   let num_type = function
     | I32Type -> vs7 (-0x01)
     | I64Type -> vs7 (-0x02)
     | F32Type -> vs7 (-0x03)
     | F64Type -> vs7 (-0x04)
 
+  let heap_type = function
+    | FuncHeapType -> vs7 (-0x10)
+    | ExternHeapType -> vs7 (-0x11)
+    | DefHeapType x -> var_type x
+    | BotHeapType -> assert false
+
   let ref_type = function
-    | FuncRefType -> vs7 (-0x10)
-    | ExternRefType -> vs7 (-0x11)
+    | (Nullable, FuncHeapType) -> vs32 (-0x10l)
+    | (Nullable, ExternHeapType) -> vs32 (-0x11l)
+    | (Nullable, t) -> vs33 (-0x14l); heap_type t
+    | (NonNullable, t) -> vs33 (-0x15l); heap_type t
 
   let value_type = function
     | NumType t -> num_type t
     | RefType t -> ref_type t
+    | BotType -> assert false
 
   let func_type = function
-    | FuncType (ts1, ts2) ->
-      vs7 (-0x20); vec value_type ts1; vec value_type ts2
+    | FuncType (ts1, ts2) -> vec value_type ts1; vec value_type ts2
+
+  let cont_type = function
+    | ContType x -> var_type x
+
+  let def_type = function
+    | FuncDefType ft -> vs7 (-0x20); func_type ft
+    | ContDefType ct -> vs7 (-0x21); cont_type ct
 
   let limits vu {min; max} =
     bool (max <> None); vu min; opt vu max
@@ -122,14 +141,21 @@ struct
     | Immutable -> u8 0
     | Mutable -> u8 1
 
+  let resumability = function
+    | Terminal -> u8 0
+    | Resumable -> u8 1
+
   let global_type = function
     | GlobalType (t, mut) -> value_type t; mutability mut
+
+  let tag_type = function
+    | TagType (ft, res) -> resumability res; func_type ft  (* TODO *)
 
   (* Expressions *)
 
   open Source
   open Ast
-  open Values
+  open Value
 
   let op n = u8 n
   let end_ () = op 0x0b
@@ -137,11 +163,20 @@ struct
   let memop {align; offset; _} = vu32 (Int32.of_int align); vu32 offset
 
   let var x = vu32 x.it
+  let var_pair (x, y) = var x; var y
 
   let block_type = function
-    | VarBlockType x -> vs33 x.it
-    | ValBlockType None -> vs7 (-0x40)
+    | ValBlockType None -> vs33 (-0x40l)
     | ValBlockType (Some t) -> value_type t
+    | VarBlockType (SynVar x) -> vs33 x
+    | VarBlockType (SemVar _) -> assert false
+
+  let local (t, n) = len n; value_type t.it
+  let locals locs =
+  let combine t = function
+    | (t', n) :: ts when t.it = t'.it -> (t, n + 1) :: ts
+    | ts -> (t, 1) :: ts
+  in vec local (List.fold_right combine locs [])
 
   let rec instr e =
     match e.it with
@@ -154,13 +189,37 @@ struct
       op 0x04; block_type bt; list instr es1;
       if es2 <> [] then op 0x05;
       list instr es2; end_ ()
+    | Let (bt, locs, es) ->
+      op 0x17; block_type bt; locals locs; list instr es; end_ ()
+
+    | Try (bt, es1, xo, es2) ->
+      op 0x06; block_type bt; list instr es1;
+      (match xo with
+      | Some x -> op 0x07; var x
+      | None -> op 0x19
+      );
+      list instr es2; end_ ()
+    | Throw x -> op 0x08; var x
 
     | Br x -> op 0x0c; var x
     | BrIf x -> op 0x0d; var x
     | BrTable (xs, x) -> op 0x0e; vec var xs; var x
+    | BrOnNull x -> op 0xd4; var x
     | Return -> op 0x0f
     | Call x -> op 0x10; var x
+    | CallRef -> op 0x14
     | CallIndirect (x, y) -> op 0x11; var y; var x
+    | ReturnCall x -> op 0x12; var x
+    | ReturnCallRef -> op 0x15
+    | ReturnCallIndirect (x, y) -> op 0x13; var y; var x
+    | FuncBind x -> op 0x16; var x
+
+    | ContNew x -> op 0xe0; var x
+    | ContBind x -> op 0xe1; var x
+    | Suspend x -> op 0xe2; var x
+    | Resume xls -> op 0xe3; vec var_pair xls
+    | ResumeThrow x -> op 0xe4; var x
+    | Barrier (bt, es) -> op 0xe5; block_type bt; list instr es; end_ ()
 
     | Drop -> op 0x1a
     | Select None -> op 0x1b
@@ -229,9 +288,10 @@ struct
     | MemoryInit x -> op 0xfc; vu32 0x08l; var x; u8 0x00
     | DataDrop x -> op 0xfc; vu32 0x09l; var x
 
-    | RefNull t -> op 0xd0; ref_type t
-    | RefIsNull -> op 0xd1
+    | RefNull t -> op 0xd0; heap_type t
     | RefFunc x -> op 0xd2; var x
+    | RefIsNull -> op 0xd1
+    | RefAsNonNull -> op 0xd3
 
     | Const {it = I32 c; _} -> op 0x41; vs32 c
     | Const {it = I64 c; _} -> op 0x42; vs64 c
@@ -414,7 +474,7 @@ struct
     end
 
   (* Type section *)
-  let type_ t = func_type t.it
+  let type_ t = def_type t.it
 
   let type_section ts =
     section 1 (vec type_) ts (ts <> [])
@@ -426,6 +486,7 @@ struct
     | TableImport t -> u8 0x01; table_type t
     | MemoryImport t -> u8 0x02; memory_type t
     | GlobalImport t -> u8 0x03; global_type t
+    | TagImport t -> u8 0x04; tag_type t
 
   let import im =
     let {module_name; item_name; idesc} = im.it in
@@ -464,6 +525,14 @@ struct
   let global_section gs =
     section 6 (vec global) gs (gs <> [])
 
+  (* Tag section *)
+  let tag tag =
+    let {tagtype} = tag.it in
+    tag_type tagtype
+
+  let tag_section ts =
+    section 13 (vec tag) ts (ts <> [])
+
   (* Export section *)
   let export_desc d =
     match d.it with
@@ -471,6 +540,7 @@ struct
     | TableExport x -> u8 1; var x
     | MemoryExport x -> u8 2; var x
     | GlobalExport x -> u8 3; var x
+    | TagExport x -> u8 4; var x
 
   let export ex =
     let {name = n; edesc} = ex.it in
@@ -484,19 +554,11 @@ struct
     section 8 (opt var) xo (xo <> None)
 
   (* Code section *)
-  let compress ts =
-    let combine t = function
-      | (t', n) :: ts when t = t' -> (t, n + 1) :: ts
-      | ts -> (t, 1) :: ts
-    in List.fold_right combine ts []
-
-  let local (t, n) = len n; value_type t
-
   let code f =
-    let {locals; body; _} = f.it in
+    let {locals = locs; body; _} = f.it in
     let g = gap32 () in
     let p = pos s in
-    vec local (compress locals);
+    locals locs;
     list instr body;
     end_ ();
     patch_gap32 g (pos s - p)
@@ -506,11 +568,11 @@ struct
 
   (* Element section *)
   let is_elem_kind = function
-    | FuncRefType -> true
+    | (NonNullable, FuncHeapType) -> true
     | _ -> false
 
   let elem_kind = function
-    | FuncRefType -> u8 0x00
+    | (NonNullable, FuncHeapType) -> u8 0x00
     | _ -> assert false
 
   let is_elem_index e =
@@ -529,7 +591,7 @@ struct
       match emode.it with
       | Passive ->
         vu32 0x01l; elem_kind etype; vec elem_index einit
-      | Active {index; offset} when index.it = 0l && etype = FuncRefType ->
+      | Active {index; offset} when index.it = 0l ->
         vu32 0x00l; const offset; vec elem_index einit
       | Active {index; offset} ->
         vu32 0x02l;
@@ -540,7 +602,7 @@ struct
       match emode.it with
       | Passive ->
         vu32 0x05l; ref_type etype; vec const einit
-      | Active {index; offset} when index.it = 0l && etype = FuncRefType ->
+      | Active {index; offset} when index.it = 0l && is_elem_kind etype ->
         vu32 0x04l; const offset; vec const einit
       | Active {index; offset} ->
         vu32 0x06l; var index; const offset; ref_type etype; vec const einit
@@ -587,6 +649,7 @@ struct
     func_section m.it.funcs;
     table_section m.it.tables;
     memory_section m.it.memories;
+    tag_section m.it.tags;
     global_section m.it.globals;
     export_section m.it.exports;
     start_section m.it.start;
