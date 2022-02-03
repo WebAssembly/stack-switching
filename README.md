@@ -1,17 +1,20 @@
-[![Build Status](https://travis-ci.org/WebAssembly/function-references.svg?branch=master)](https://travis-ci.org/WebAssembly/function-references)
+# Typed Continuations Proposal for WebAssembly
 
-# Continuations Proposal for WebAssembly
+This repository is a clone of
+[github.com/WebAssembly/spec/](https://github.com/WebAssembly/spec/).
+It is meant for discussion, prototype specification and implementation
+of a proposal to add support for different patterns of non-local
+control flow to WebAssembly.
 
-This repository is a clone of [github.com/WebAssembly/spec/](https://github.com/WebAssembly/spec/).
-It is meant for discussion, prototype specification and implementation of a proposal to add support for basic function reference types to WebAssembly.
+The proposal is fully implemented as part of the reference interpreter.
 
-* See the [overview](proposals/continuations/Overview.md) for a summary of the proposal.
+* See the [explainer](proposals/continuations/Explainer.md) for a high-level summary of the proposal.
 
-* See the [modified spec](https://webassembly.github.io/continuations/core) for details.  (Note, link is 404.)
+* See the [overview](proposals/continuations/Overview.md) for a more formal description of the proposal.
 
-The repository is based on the [function references](proposals/function-references/Overview.md) and the [tail call]proposals/tail-call/Overview.md) proposal and includes all respective changes.
+* See the [examples](proposals/continuations/examples) for Wasm code for implementing various different features including lightweight threads, actors, and async/await.
 
-Original README from upstream repository follows...
+Original `README` from upstream repository follows.
 
 # spec
 
