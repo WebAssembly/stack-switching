@@ -197,7 +197,9 @@ struct
     | Call x -> op 0x10; var x
     | CallRef -> op 0x14
     | CallIndirect (x, y) -> op 0x11; var y; var x
+    | ReturnCall x -> op 0x12; var x
     | ReturnCallRef -> op 0x15
+    | ReturnCallIndirect (x, y) -> op 0x13; var y; var x
     | FuncBind x -> op 0x16; var x
 
     | Drop -> op 0x1a

@@ -419,6 +419,11 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : op_type 
        " but table has element type " ^ string_of_ref_type t);
     (ts1 @ [NumType I32Type]) --> ts2
 
+  | ReturnCall x ->
+    let FuncType (ts1, ts2) = func c x in
+    require (ts2 = c.results) e.at "type mismatch in function result";
+    ts1 -->... []
+
   | ReturnCallRef ->
     (match peek_ref 0 s e.at with
     | (nul, DefHeapType (SynVar x)) ->
@@ -435,6 +440,12 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : op_type 
         ("type mismatch: instruction requires function reference type" ^
          " but stack has " ^ string_of_value_type (RefType rt))
     )
+
+  | ReturnCallIndirect (x, y) ->
+    let TableType (lim, t) = table c x in
+    let FuncType (ts1, ts2) = func_type c y in
+    require (ts2 = c.results) e.at "type mismatch in function result";
+    (ts1 @ [NumType I32Type]) -->... []
 
   | FuncBind x ->
     (match peek_ref 0 s e.at with

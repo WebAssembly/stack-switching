@@ -246,11 +246,26 @@ let rec step (c : config) : config =
         else
           vs, [Trapping "indirect call type mismatch" @@ e.at]
 
+      | ReturnCall x, vs ->
+        (match (step {c with code = (vs, [Plain (Call x) @@ e.at])}).code with
+        | vs', [{it = Invoke a; at}] -> vs', [ReturningInvoke (vs', a) @@ at]
+        | _ -> assert false
+        )
+
       | ReturnCallRef, Ref (NullRef _) :: vs ->
         vs, [Trapping "null function reference" @@ e.at]
 
       | ReturnCallRef, vs ->
         (match (step {c with code = (vs, [Plain CallRef @@ e.at])}).code with
+        | vs', [{it = Invoke a; at}] -> vs', [ReturningInvoke (vs', a) @@ at]
+        | vs', [{it = Trapping s; at}] -> vs', [Trapping s @@ at]
+        | _ -> assert false
+        )
+
+      | ReturnCallIndirect (x, y), vs ->
+        (match
+          (step {c with code = (vs, [Plain (CallIndirect (x, y)) @@ e.at])}).code
+        with
         | vs', [{it = Invoke a; at}] -> vs', [ReturningInvoke (vs', a) @@ at]
         | vs', [{it = Trapping s; at}] -> vs', [Trapping s @@ at]
         | _ -> assert false
@@ -663,14 +678,14 @@ let rec step (c : config) : config =
     | Refer r, vs ->
       Ref r :: vs, []
 
-    | Trapping msg, vs ->
+    | Trapping _, vs ->
       assert false
 
     | Returning _, vs
     | ReturningInvoke _, vs ->
       Crash.error e.at "undefined frame"
 
-    | Breaking (k, vs'), vs ->
+    | Breaking _, vs ->
       Crash.error e.at "undefined label"
 
     | Label (n, es0, (vs', [])), vs ->

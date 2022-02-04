@@ -66,10 +66,10 @@ editor = u'Andreas Rossberg (editor)'
 logo = 'static/webassembly.png'
 
 # The name of the GitHub repository this resides in
-repo = 'function-references'
+repo = 'stack-switching'
 
 # The name of the proposal it represents, if any
-proposal = 'function-references'
+proposal = 'stack-switching'
 
 # The draft version string (clear out for release cuts)
 draft = ' (Draft ' + date.today().strftime("%Y-%m-%d") + ')'
