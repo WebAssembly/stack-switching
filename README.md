@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/WebAssembly/stack-switching.svg?branch=master)](https://travis-ci.org/WebAssembly/stack-switching)
+![Build Status](https://github.com/WebAssembly/stack-switching/actions/workflows/main.yml/badge.svg)
 
 # Stack Switching Proposal for WebAssembly
 
