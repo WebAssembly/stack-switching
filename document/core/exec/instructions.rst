@@ -192,39 +192,13 @@ Reference Instructions
 
 .. _exec-ref.null:
 
-:math:`\REFNULL~t`
-..................
+:math:`\REFNULL~\X{ht}`
+.......................
 
-1. Push the value :math:`\REFNULL~t` to the stack.
+1. Push the value :math:`\REFNULL~\X{ht}` to the stack.
 
 .. note::
    No formal reduction rule is required for this instruction, since the |REFNULL| instruction is already a :ref:`value <syntax-val>`.
-
-
-.. _exec-ref.is_null:
-
-:math:`\REFISNULL`
-..................
-
-1. Assert: due to :ref:`validation <valid-ref.is_null>`, a :ref:`reference value <syntax-ref>` is on the top of the stack.
-
-2. Pop the value :math:`\val` from the stack.
-
-3. If :math:`\val` is :math:`\REFNULL~t`, then:
-
-   a. Push the value :math:`\I32.\CONST~1` to the stack.
-
-4. Else:
-
-   a. Push the value :math:`\I32.\CONST~0` to the stack.
-
-.. math::
-   \begin{array}{lcl@{\qquad}l}
-   \val~\REFISNULL &\stepto& \I32.\CONST~1
-     & (\iff \val = \REFNULL~t) \\
-   \val~\REFISNULL &\stepto& \I32.\CONST~0
-     & (\otherwise) \\
-   \end{array}
 
 
 .. _exec-ref.func:
@@ -244,6 +218,56 @@ Reference Instructions
    \begin{array}{lcl@{\qquad}l}
    F; \REFFUNC~x &\stepto& F; \REFFUNCADDR~a
      & (\iff a = F.\AMODULE.\MIFUNCS[x]) \\
+   \end{array}
+
+
+.. _exec-ref.is_null:
+
+:math:`\REFISNULL`
+..................
+
+1. Assert: due to :ref:`validation <valid-ref.is_null>`, a :ref:`reference value <syntax-ref>` is on the top of the stack.
+
+2. Pop the value :math:`\val` from the stack.
+
+3. If :math:`\val` is :math:`\REFNULL~\X{ht}`, then:
+
+   a. Push the value :math:`\I32.\CONST~1` to the stack.
+
+4. Else:
+
+   a. Push the value :math:`\I32.\CONST~0` to the stack.
+
+.. math::
+   \begin{array}{lcl@{\qquad}l}
+   \val~\REFISNULL &\stepto& \I32.\CONST~1
+     & (\iff \val = \REFNULL~\X{ht}) \\
+   \val~\REFISNULL &\stepto& \I32.\CONST~0
+     & (\otherwise) \\
+   \end{array}
+
+
+.. _exec-ref.as_non_null:
+
+:math:`\REFASNONNULL`
+.....................
+
+1. Assert: due to :ref:`validation <valid-ref.is_null>`, a :ref:`reference value <syntax-ref>` is on the top of the stack.
+
+2. Pop the value :math:`\val` from the stack.
+
+3. If :math:`\val` is :math:`\REFNULL~\X{ht}`, then:
+
+   a. Trap.
+
+4. Push the value :math:`\val` back to the stack.
+
+.. math::
+   \begin{array}{lcl@{\qquad}l}
+   \val~\REFASNONNULL &\stepto& \TRAP
+     & (\iff \val = \REFNULL~\X{ht}) \\
+   \val~\REFASNONNULL &\stepto& \val
+     & (\otherwise) \\
    \end{array}
 
 
@@ -2713,6 +2737,60 @@ Control Instructions
    \end{array}
 
 
+.. _exec-br_on_null:
+
+:math:`\BRONNULL~l`
+...................
+
+1. Assert: due to :ref:`validation <valid-ref.is_null>`, a :ref:`reference value <syntax-ref>` is on the top of the stack.
+
+2. Pop the value :math:`\val` from the stack.
+
+3. If :math:`\val` is :math:`\REFNULL~\X{ht}`, then:
+
+   a. :ref:`Execute <exec-br>` the instruction :math:`(\BR~l)`.
+
+4. Else:
+
+   a. Push the value :math:`\val` back to the stack.
+
+.. math::
+   \begin{array}{lcl@{\qquad}l}
+   \val~(\BRONNULL~l) &\stepto& (\BR~l)
+     & (\iff \val = \REFNULL~\X{ht}) \\
+   \val~(\BRONNULL~l) &\stepto& \val
+     & (\otherwise) \\
+   \end{array}
+
+
+.. _exec-br_on_non_null:
+
+:math:`\BRONNONNULL~l`
+......................
+
+1. Assert: due to :ref:`validation <valid-ref.is_null>`, a :ref:`reference value <syntax-ref>` is on the top of the stack.
+
+2. Pop the value :math:`\val` from the stack.
+
+3. If :math:`\val` is :math:`\REFNULL~\X{ht}`, then:
+
+   a. Do nothing.
+
+4. Else:
+
+   a. Push the value :math:`\val` back to the stack.
+
+   b. :ref:`Execute <exec-br>` the instruction :math:`(\BR~l)`.
+
+.. math::
+   \begin{array}{lcl@{\qquad}l}
+   \val~(\BRONNONNULL~l) &\stepto& \epsilon
+     & (\iff \val = \REFNULL~\X{ht}) \\
+   \val~(\BRONNONNULL~l) &\stepto& \val~(\BR~l)
+     & (\otherwise) \\
+   \end{array}
+
+
 .. _exec-return:
 
 :math:`\RETURN`
@@ -2743,7 +2821,7 @@ Control Instructions
 .. math::
    ~\\[-1ex]
    \begin{array}{lcl@{\qquad}l}
-   \FRAME_n\{F\}~\XB^k[\val^n~\RETURN]~\END &\stepto& \val^n
+   \FRAME_n\{F\}~B^\ast[\val^n~\RETURN]~\END &\stepto& \val^n
    \end{array}
 
 
@@ -2764,6 +2842,23 @@ Control Instructions
    \begin{array}{lcl@{\qquad}l}
    F; (\CALL~x) &\stepto& F; (\INVOKE~a)
      & (\iff F.\AMODULE.\MIFUNCS[x] = a)
+   \end{array}
+
+
+.. _exec-call_ref:
+
+:math:`\CALLREF`
+................
+
+1. Assert: due to :ref:`validation <valid-call_ref>`, a :ref:`function reference <syntax-ref>` is on the top of the stack.
+
+2. Pop the value :math:`\REFFUNCADDR~a` from the stack.
+
+3. :ref:`Invoke <exec-invoke>` the function instance at address :math:`a`.
+
+.. math::
+   \begin{array}{lcl@{\qquad}l}
+   F; (\REFFUNCADDR~a)~\CALLREF &\stepto& F; (\INVOKE~a)
    \end{array}
 
 
@@ -2796,7 +2891,7 @@ Control Instructions
 
 11. Let :math:`r` be the :ref:`reference <syntax-ref>` :math:`\X{tab}.\TIELEM[i]`.
 
-12. If :math:`r` is :math:`\REFNULL~t`, then:
+12. If :math:`r` is :math:`\REFNULL~\X{ht}`, then:
 
     a. Trap.
 
@@ -2834,6 +2929,84 @@ Control Instructions
    \end{array}
    \\ \qquad
      (\otherwise)
+   \end{array}
+
+
+.. _exec-return_call:
+
+:math:`\RETURNCALL~x`
+.....................
+
+.. todo: find a way to reuse call/call_indirect prose for tail call versions
+
+1. Let :math:`F` be the :ref:`current <exec-notation-textual>` :ref:`frame <syntax-frame>`.
+
+2. Assert: due to :ref:`validation <valid-call>`, :math:`F.\AMODULE.\MIFUNCS[x]` exists.
+
+3. Let :math:`a` be the :ref:`function address <syntax-funcaddr>` :math:`F.\AMODULE.\MIFUNCS[x]`.
+
+4. :ref:`Tail-invoke <exec-return-invoke>` the function instance at address :math:`a`.
+
+
+.. math::
+   \begin{array}{lcl@{\qquad}l}
+   (\RETURNCALL~x) &\stepto& (\RETURNINVOKE~a)
+     & (\iff \CALL~x \stepto \INVOKE~a)
+   \end{array}
+
+
+.. _exec-return_call_indirect:
+
+:math:`\RETURNCALLINDIRECT~x`
+.............................
+
+1. Let :math:`F` be the :ref:`current <exec-notation-textual>` :ref:`frame <syntax-frame>`.
+
+2. Assert: due to :ref:`validation <valid-call_indirect>`, :math:`F.\AMODULE.\MITABLES[0]` exists.
+
+3. Let :math:`\X{ta}` be the :ref:`table address <syntax-tableaddr>` :math:`F.\AMODULE.\MITABLES[0]`.
+
+4. Assert: due to :ref:`validation <valid-call_indirect>`, :math:`S.\STABLES[\X{ta}]` exists.
+
+5. Let :math:`\X{tab}` be the :ref:`table instance <syntax-tableinst>` :math:`S.\STABLES[\X{ta}]`.
+
+6. Assert: due to :ref:`validation <valid-call_indirect>`, :math:`F.\AMODULE.\MITYPES[x]` exists.
+
+7. Let :math:`\X{ft}_{\F{expect}}` be the :ref:`function type <syntax-functype>` :math:`F.\AMODULE.\MITYPES[x]`.
+
+8. Assert: due to :ref:`validation <valid-call_indirect>`, a value with :ref:`value type <syntax-valtype>` |I32| is on the top of the stack.
+
+9. Pop the value :math:`\I32.\CONST~i` from the stack.
+
+10. If :math:`i` is not smaller than the length of :math:`\X{tab}.\TIELEM`, then:
+
+    a. Trap.
+
+11. If :math:`\X{tab}.\TIELEM[i]` is uninitialized, then:
+
+    a. Trap.
+
+12. Let :math:`a` be the :ref:`function address <syntax-funcaddr>` :math:`\X{tab}.\TIELEM[i]`.
+
+13. Assert: due to :ref:`validation <valid-call_indirect>`, :math:`S.\SFUNCS[a]` exists.
+
+14. Let :math:`\X{f}` be the :ref:`function instance <syntax-funcinst>` :math:`S.\SFUNCS[a]`.
+
+15. Let :math:`\X{ft}_{\F{actual}}` be the :ref:`function type <syntax-functype>` :math:`\X{f}.\FITYPE`.
+
+16. If :math:`\X{ft}_{\F{actual}}` and :math:`\X{ft}_{\F{expect}}` differ, then:
+
+    a. Trap.
+
+17. :ref:`Tail-invoke <exec-return-invoke>` the function instance at address :math:`a`.
+
+
+.. math::
+   \begin{array}{lcl@{\qquad}l}
+   (\RETURNCALLINDIRECT~x) &\stepto& (\RETURNINVOKE~a)
+     & (\iff \CALLINDIRECT~x \stepto \INVOKE~a) \\
+   (\RETURNCALLINDIRECT~x) &\stepto& \TRAP
+     & (\iff \CALLINDIRECT~x \stepto \TRAP) \\
    \end{array}
 
 
@@ -2943,6 +3116,42 @@ Invocation of :ref:`function address <syntax-funcaddr>` :math:`a`
      \wedge & f.\FICODE = \{ \FTYPE~x, \FLOCALS~t^k, \FBODY~\instr^\ast~\END \} \\
      \wedge & F = \{ \AMODULE~f.\FIMODULE, ~\ALOCALS~\val^n~(\default_t)^k \})
      \end{array} \\
+   \end{array}
+
+
+.. _exec-return-invoke:
+
+Tail-invocation of :ref:`function address <syntax-funcaddr>` :math:`a`
+......................................................................
+
+1. Assert: due to :ref:`validation <valid-call>`, :math:`S.\SFUNCS[a]` exists.
+
+2. Let :math:`[t_1^n] \to [t_2^m]` be the :ref:`function type <syntax-functype>` :math:`S.\SFUNCS[a].\FITYPE`.
+
+3. Assert: due to :ref:`validation <valid-return_call>`, there are at least :math:`n` values on the top of the stack.
+
+4. Pop the results :math:`\val^n` from the stack.
+
+5. Assert: due to :ref:`validation <valid-return_call>`, the stack contains at least one :ref:`frame <syntax-frame>`.
+
+6. While the top of the stack is not a frame, do:
+
+   a. Pop the top element from the stack.
+
+7. Assert: the top of the stack is a frame.
+
+8. Pop the frame from the stack.
+
+9. Push :math:`\val^n` to the stack.
+
+10. :ref:`Invoke <exec-invoke>` the function instance at address :math:`a`.
+
+.. math::
+   ~\\[-1ex]
+   \begin{array}{lcl@{\qquad}l}
+    S; \FRAME_m\{F\}~B^\ast[\val^n~(\RETURNINVOKE~a)]~\END &\stepto&
+      \val^n~(\INVOKE~a)
+      & (\iff S.\SFUNCS[a].\FITYPE = [t_1^n] \to [t_2^m])
    \end{array}
 
 

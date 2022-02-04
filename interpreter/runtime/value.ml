@@ -13,9 +13,10 @@ type num = (I32.t, I64.t, F32.t, F64.t) op
 type vec = (V128.t) vecop
 
 type ref_ = ..
-type ref_ += NullRef of ref_type
+type ref_ += NullRef of heap_type
 
 type value = Num of num | Vec of vec | Ref of ref_
+type t = value
 
 
 (* Injection & projection *)
@@ -96,8 +97,10 @@ let type_of_num = function
 let type_of_vec = function
   | V128 _ -> V128Type
 
-let type_of_ref' = ref (function NullRef t -> t | _ -> assert false)
-let type_of_ref r = !type_of_ref' r
+let type_of_ref' = ref (function _ -> assert false)
+let type_of_ref = function
+  | NullRef t -> (Nullable, t)
+  | r -> (NonNullable, !type_of_ref' r)
 
 let type_of_value = function
   | Num n -> NumType (type_of_num n)
@@ -139,12 +142,14 @@ let default_vec = function
   | V128Type -> V128 V128.zero
 
 let default_ref = function
-  | t -> NullRef t
+  | (Nullable, t) -> NullRef t
+  | (NonNullable, _) -> assert false
 
 let default_value = function
   | NumType t' -> Num (default_num t')
   | VecType t' -> Vec (default_vec t')
   | RefType t' -> Ref (default_ref t')
+  | BotType -> assert false
 
 
 (* Conversion *)

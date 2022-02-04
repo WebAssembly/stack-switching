@@ -211,6 +211,8 @@ rule token = parse
   | '"'character*'\\'_
     { error_nest (Lexing.lexeme_end_p lexbuf) lexbuf "illegal escape" }
 
+  | "ref" { REF }
+  | "null" { NULL }
   | "extern" { EXTERN }
   | "externref" { EXTERNREF }
   | "funcref" { FUNCREF }
@@ -224,42 +226,51 @@ rule token = parse
     { let open Source in
       CONST (numop t
         (fun s -> let n = I32.of_string s.it in
-          i32_const (n @@ s.at), Values.I32 n)
+          i32_const (n @@ s.at), Value.I32 n)
         (fun s -> let n = I64.of_string s.it in
-          i64_const (n @@ s.at), Values.I64 n)
+          i64_const (n @@ s.at), Value.I64 n)
         (fun s -> let n = F32.of_string s.it in
-          f32_const (n @@ s.at), Values.F32 n)
+          f32_const (n @@ s.at), Value.F32 n)
         (fun s -> let n = F64.of_string s.it in
-          f64_const (n @@ s.at), Values.F64 n))
+          f64_const (n @@ s.at), Value.F64 n))
     }
   | vxxx".const"
     { let open Source in
       VEC_CONST
         (fun shape ss at ->
           let v = V128.of_strings shape (List.map (fun s -> s.it) ss) in
-          (v128_const (v @@ at), Values.V128 v))
+          (v128_const (v @@ at), Value.V128 v))
     }
   | "ref.null" { REF_NULL }
   | "ref.func" { REF_FUNC }
   | "ref.extern" { REF_EXTERN }
   | "ref.is_null" { REF_IS_NULL }
+  | "ref.as_non_null" { REF_AS_NON_NULL }
 
   | "nop" { NOP }
   | "unreachable" { UNREACHABLE }
   | "drop" { DROP }
   | "block" { BLOCK }
   | "loop" { LOOP }
+  | "let" { LET }
   | "end" { END }
   | "br" { BR }
   | "br_if" { BR_IF }
   | "br_table" { BR_TABLE }
+  | "br_on_null" { BR_ON_NULL }
+  | "br_on_non_null" { BR_ON_NON_NULL }
   | "return" { RETURN }
   | "if" { IF }
   | "then" { THEN }
   | "else" { ELSE }
   | "select" { SELECT }
   | "call" { CALL }
+  | "call_ref" { CALL_REF }
   | "call_indirect" { CALL_INDIRECT }
+  | "return_call" { RETURN_CALL }
+  | "return_call_ref" { RETURN_CALL_REF }
+  | "return_call_indirect" { RETURN_CALL_INDIRECT }
+  | "func.bind" { FUNC_BIND }
 
   | "local.get" { LOCAL_GET }
   | "local.set" { LOCAL_SET }
