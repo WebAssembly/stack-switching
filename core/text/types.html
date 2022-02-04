@@ -90,55 +90,74 @@
 <span id="text-numtype"></span><span id="index-1"></span><h2>Number Types<a class="headerlink" href="#number-types" title="Permalink to this headline">¶</a></h2>
 <div class="math notranslate nohighlight">
 \[\begin{split}\begin{array}{llcll&#64;{\qquad\qquad}l}
-\def\mathdef3689#1{{}}\mathdef3689{number type} &amp; \href{../text/types.html#text-numtype}{\mathtt{numtype}} &amp;::=&amp;
-  \def\mathdef3728#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3728{i32} &amp;\Rightarrow&amp; \href{../syntax/types.html#syntax-valtype}{\mathsf{i32}} \\ &amp;&amp;|&amp;
-  \def\mathdef3729#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3729{i64} &amp;\Rightarrow&amp; \href{../syntax/types.html#syntax-valtype}{\mathsf{i64}} \\ &amp;&amp;|&amp;
-  \def\mathdef3730#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3730{f32} &amp;\Rightarrow&amp; \href{../syntax/types.html#syntax-valtype}{\mathsf{f32}} \\ &amp;&amp;|&amp;
-  \def\mathdef3731#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3731{f64} &amp;\Rightarrow&amp; \href{../syntax/types.html#syntax-valtype}{\mathsf{f64}} \\
+\def\mathdef3712#1{{}}\mathdef3712{number type} &amp; \href{../text/types.html#text-numtype}{\mathtt{numtype}}_I &amp;::=&amp;
+  \def\mathdef3751#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3751{i32} &amp;\Rightarrow&amp; \href{../syntax/types.html#syntax-valtype}{\mathsf{i32}} \\ &amp;&amp;|&amp;
+  \def\mathdef3752#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3752{i64} &amp;\Rightarrow&amp; \href{../syntax/types.html#syntax-valtype}{\mathsf{i64}} \\ &amp;&amp;|&amp;
+  \def\mathdef3753#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3753{f32} &amp;\Rightarrow&amp; \href{../syntax/types.html#syntax-valtype}{\mathsf{f32}} \\ &amp;&amp;|&amp;
+  \def\mathdef3754#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3754{f64} &amp;\Rightarrow&amp; \href{../syntax/types.html#syntax-valtype}{\mathsf{f64}} \\
 \end{array}\end{split}\]</div>
 </section>
 <section id="vector-types">
 <span id="text-vectype"></span><span id="index-2"></span><h2>Vector Types<a class="headerlink" href="#vector-types" title="Permalink to this headline">¶</a></h2>
 <div class="math notranslate nohighlight">
 \[\begin{split}\begin{array}{llcll&#64;{\qquad\qquad}l}
-\def\mathdef3689#1{{}}\mathdef3689{vector type} &amp; \href{../text/types.html#text-vectype}{\mathtt{vectype}} &amp;::=&amp;
-  \def\mathdef3732#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3732{v128} &amp;\Rightarrow&amp; \href{../syntax/types.html#syntax-valtype}{\mathsf{v128}} \\
+\def\mathdef3712#1{{}}\mathdef3712{vector type} &amp; \href{../text/types.html#text-vectype}{\mathtt{vectype}}_I &amp;::=&amp;
+  \def\mathdef3755#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3755{v128} &amp;\Rightarrow&amp; \href{../syntax/types.html#syntax-valtype}{\mathsf{v128}} \\
+\end{array}\end{split}\]</div>
+</section>
+<section id="heap-types">
+<span id="text-heaptype"></span><span id="index-3"></span><h2>Heap Types<a class="headerlink" href="#heap-types" title="Permalink to this headline">¶</a></h2>
+<div class="math notranslate nohighlight">
+\[\begin{split}\begin{array}{llcll&#64;{\qquad\qquad}l}
+\def\mathdef3712#1{{}}\mathdef3712{heap type} &amp; \href{../text/types.html#text-heaptype}{\mathtt{heaptype}}_I &amp;::=&amp;
+  \def\mathdef3756#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3756{func} &amp;\Rightarrow&amp; \href{../syntax/types.html#syntax-heaptype}{\mathsf{func}} \\ &amp;&amp;|&amp;
+  \def\mathdef3757#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3757{extern} &amp;\Rightarrow&amp; \href{../syntax/types.html#syntax-heaptype}{\mathsf{extern}} \\ &amp;&amp;|&amp;
+  x{:}\href{../text/modules.html#text-typeidx}{\mathtt{typeidx}}_I &amp;\Rightarrow&amp; x \\
 \end{array}\end{split}\]</div>
 </section>
 <section id="reference-types">
-<span id="text-heaptype"></span><span id="text-reftype"></span><span id="index-3"></span><h2>Reference Types<a class="headerlink" href="#reference-types" title="Permalink to this headline">¶</a></h2>
+<span id="text-reftype"></span><span id="index-4"></span><h2>Reference Types<a class="headerlink" href="#reference-types" title="Permalink to this headline">¶</a></h2>
 <div class="math notranslate nohighlight">
 \[\begin{split}\begin{array}{llcll&#64;{\qquad\qquad}l}
-\def\mathdef3689#1{{}}\mathdef3689{reference type} &amp; \href{../text/types.html#text-reftype}{\mathtt{reftype}} &amp;::=&amp;
-  \def\mathdef3733#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3733{funcref} &amp;\Rightarrow&amp; \href{../syntax/types.html#syntax-reftype}{\mathsf{funcref}} \\ &amp;&amp;|&amp;
-  \def\mathdef3734#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3734{externref} &amp;\Rightarrow&amp; \href{../syntax/types.html#syntax-reftype}{\mathsf{externref}} \\
-\def\mathdef3689#1{{}}\mathdef3689{heap type} &amp; \href{../text/types.html#text-heaptype}{\mathtt{heaptype}} &amp;::=&amp;
-  \def\mathdef3735#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3735{func} &amp;\Rightarrow&amp; \href{../syntax/types.html#syntax-reftype}{\mathsf{funcref}} \\ &amp;&amp;|&amp;
-  \def\mathdef3736#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3736{extern} &amp;\Rightarrow&amp; \href{../syntax/types.html#syntax-reftype}{\mathsf{externref}} \\
+\def\mathdef3712#1{{}}\mathdef3712{reference type} &amp; \href{../text/types.html#text-reftype}{\mathtt{reftype}}_I &amp;::=&amp;
+  \def\mathdef3758#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3758{(}~\def\mathdef3759#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3759{ref}~~\mathit{ht}{:}\href{../text/types.html#text-heaptype}{\mathtt{heaptype}}~\def\mathdef3760#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3760{)}
+    &amp;\Rightarrow&amp; \href{../syntax/types.html#syntax-reftype}{\mathsf{ref}}~\mathit{ht} \\ &amp;&amp;|&amp;
+  \def\mathdef3761#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3761{(}~\def\mathdef3762#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3762{ref}~~\def\mathdef3763#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3763{null}~~\mathit{ht}{:}\href{../text/types.html#text-heaptype}{\mathtt{heaptype}}~\def\mathdef3764#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3764{)}
+    &amp;\Rightarrow&amp; \href{../syntax/types.html#syntax-reftype}{\mathsf{ref}}~\href{../syntax/types.html#syntax-reftype}{\mathsf{null}}~\mathit{ht} \\
+\end{array}\end{split}\]</div>
+<section id="abbreviations">
+<h3>Abbreviations<a class="headerlink" href="#abbreviations" title="Permalink to this headline">¶</a></h3>
+<p>There are shorthands for references to abstract heap types.</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}\begin{array}{llclll}
+\def\mathdef3712#1{{}}\mathdef3712{reference type} &amp;
+  \def\mathdef3765#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3765{funcref} &amp;\equiv&amp; \def\mathdef3766#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3766{(}~\def\mathdef3767#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3767{ref}~~\def\mathdef3768#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3768{null}~~\def\mathdef3769#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3769{func}~\def\mathdef3770#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3770{)} \\
+  \def\mathdef3771#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3771{externref} &amp;\equiv&amp; \def\mathdef3772#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3772{(}~\def\mathdef3773#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3773{ref}~~\def\mathdef3774#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3774{null}~~\def\mathdef3775#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3775{extern}~\def\mathdef3776#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3776{)} \\
 \end{array}\end{split}\]</div>
 </section>
+</section>
 <section id="value-types">
-<span id="text-valtype"></span><span id="index-4"></span><h2>Value Types<a class="headerlink" href="#value-types" title="Permalink to this headline">¶</a></h2>
+<span id="text-valtype"></span><span id="index-5"></span><h2>Value Types<a class="headerlink" href="#value-types" title="Permalink to this headline">¶</a></h2>
 <div class="math notranslate nohighlight">
 \[\begin{split}\begin{array}{llcll&#64;{\qquad\qquad}l}
-\def\mathdef3689#1{{}}\mathdef3689{value type} &amp; \href{../text/types.html#text-valtype}{\mathtt{valtype}} &amp;::=&amp;
-  t{:}\href{../text/types.html#text-numtype}{\mathtt{numtype}} &amp;\Rightarrow&amp; t \\ &amp;&amp;|&amp;
-  t{:}\href{../text/types.html#text-vectype}{\mathtt{vectype}} &amp;\Rightarrow&amp; t \\ &amp;&amp;|&amp;
-  t{:}\href{../text/types.html#text-reftype}{\mathtt{reftype}} &amp;\Rightarrow&amp; t \\
+\def\mathdef3712#1{{}}\mathdef3712{value type} &amp; \href{../text/types.html#text-valtype}{\mathtt{valtype}}_I &amp;::=&amp;
+  t{:}\href{../text/types.html#text-numtype}{\mathtt{numtype}}_I &amp;\Rightarrow&amp; t \\ &amp;&amp;|&amp;
+  t{:}\href{../text/types.html#text-vectype}{\mathtt{vectype}}_I &amp;\Rightarrow&amp; t \\ &amp;&amp;|&amp;
+  t{:}\href{../text/types.html#text-reftype}{\mathtt{reftype}}_I &amp;\Rightarrow&amp; t \\
 \end{array}\end{split}\]</div>
 </section>
 <section id="function-types">
-<span id="text-functype"></span><span id="text-result"></span><span id="text-param"></span><span id="index-5"></span><h2>Function Types<a class="headerlink" href="#function-types" title="Permalink to this headline">¶</a></h2>
+<span id="text-functype"></span><span id="text-result"></span><span id="text-param"></span><span id="index-6"></span><h2>Function Types<a class="headerlink" href="#function-types" title="Permalink to this headline">¶</a></h2>
 <div class="math notranslate nohighlight">
 \[\begin{split}\begin{array}{llclll&#64;{\qquad\qquad}l}
-\def\mathdef3689#1{{}}\mathdef3689{function type} &amp; \href{../text/types.html#text-functype}{\mathtt{functype}} &amp;::=&amp;
-  \def\mathdef3737#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3737{(}~\def\mathdef3738#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3738{func}~~t_1^\ast{:\,}\href{../text/conventions.html#text-vec}{\mathtt{vec}}(\href{../text/types.html#text-functype}{\mathtt{param}})~~t_2^\ast{:\,}\href{../text/conventions.html#text-vec}{\mathtt{vec}}(\href{../text/types.html#text-functype}{\mathtt{result}})~\def\mathdef3739#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3739{)}
+\def\mathdef3712#1{{}}\mathdef3712{function type} &amp; \href{../text/types.html#text-functype}{\mathtt{functype}}_I &amp;::=&amp;
+  \def\mathdef3777#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3777{(}~\def\mathdef3778#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3778{func}~~t_1^\ast{:\,}\href{../text/conventions.html#text-vec}{\mathtt{vec}}(\href{../text/types.html#text-functype}{\mathtt{param}}_I)~~t_2^\ast{:\,}\href{../text/conventions.html#text-vec}{\mathtt{vec}}(\href{../text/types.html#text-functype}{\mathtt{result}}_I)~\def\mathdef3779#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3779{)}
     &amp;\Rightarrow&amp; [t_1^\ast] \href{../syntax/types.html#syntax-functype}{\rightarrow} [t_2^\ast] \\
-\def\mathdef3689#1{{}}\mathdef3689{parameter} &amp; \href{../text/types.html#text-functype}{\mathtt{param}} &amp;::=&amp;
-  \def\mathdef3740#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3740{(}~\def\mathdef3741#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3741{param}~~\href{../text/values.html#text-id}{\mathtt{id}}^?~~t{:}\href{../text/types.html#text-valtype}{\mathtt{valtype}}~\def\mathdef3742#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3742{)}
+\def\mathdef3712#1{{}}\mathdef3712{parameter} &amp; \href{../text/types.html#text-functype}{\mathtt{param}}_I &amp;::=&amp;
+  \def\mathdef3780#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3780{(}~\def\mathdef3781#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3781{param}~~\href{../text/values.html#text-id}{\mathtt{id}}^?~~t{:}\href{../text/types.html#text-valtype}{\mathtt{valtype}}_I~\def\mathdef3782#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3782{)}
     &amp;\Rightarrow&amp; t \\
-\def\mathdef3689#1{{}}\mathdef3689{result} &amp; \href{../text/types.html#text-functype}{\mathtt{result}} &amp;::=&amp;
-  \def\mathdef3743#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3743{(}~\def\mathdef3744#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3744{result}~~t{:}\href{../text/types.html#text-valtype}{\mathtt{valtype}}~\def\mathdef3745#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3745{)}
+\def\mathdef3712#1{{}}\mathdef3712{result} &amp; \href{../text/types.html#text-functype}{\mathtt{result}}_I &amp;::=&amp;
+  \def\mathdef3783#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3783{(}~\def\mathdef3784#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3784{result}~~t{:}\href{../text/types.html#text-valtype}{\mathtt{valtype}}_I~\def\mathdef3785#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3785{)}
     &amp;\Rightarrow&amp; t \\
 \end{array}\end{split}\]</div>
 <div class="admonition note">
@@ -146,52 +165,52 @@
 <p>The optional identifier names for parameters in a function type only have documentation purpose.
 They cannot be referenced from anywhere.</p>
 </div>
-<section id="abbreviations">
-<h3>Abbreviations<a class="headerlink" href="#abbreviations" title="Permalink to this headline">¶</a></h3>
+<section id="id1">
+<h3>Abbreviations<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h3>
 <p>Multiple anonymous parameters or results may be combined into a single declaration:</p>
 <div class="math notranslate nohighlight">
 \[\begin{split}\begin{array}{llclll}
-\def\mathdef3689#1{{}}\mathdef3689{parameter} &amp;
-  \def\mathdef3746#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3746{(}~~\def\mathdef3747#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3747{param}~~\href{../text/types.html#text-valtype}{\mathtt{valtype}}^\ast~~\def\mathdef3748#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3748{)} &amp;\equiv&amp;
-  (\def\mathdef3749#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3749{(}~~\def\mathdef3750#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3750{param}~~\href{../text/types.html#text-valtype}{\mathtt{valtype}}~~\def\mathdef3751#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3751{)})^\ast \\
-\def\mathdef3689#1{{}}\mathdef3689{result} &amp;
-  \def\mathdef3752#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3752{(}~~\def\mathdef3753#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3753{result}~~\href{../text/types.html#text-valtype}{\mathtt{valtype}}^\ast~~\def\mathdef3754#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3754{)} &amp;\equiv&amp;
-  (\def\mathdef3755#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3755{(}~~\def\mathdef3756#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3756{result}~~\href{../text/types.html#text-valtype}{\mathtt{valtype}}~~\def\mathdef3757#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3757{)})^\ast \\
+\def\mathdef3712#1{{}}\mathdef3712{parameter} &amp;
+  \def\mathdef3786#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3786{(}~~\def\mathdef3787#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3787{param}~~\href{../text/types.html#text-valtype}{\mathtt{valtype}}^\ast~~\def\mathdef3788#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3788{)} &amp;\equiv&amp;
+  (\def\mathdef3789#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3789{(}~~\def\mathdef3790#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3790{param}~~\href{../text/types.html#text-valtype}{\mathtt{valtype}}~~\def\mathdef3791#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3791{)})^\ast \\
+\def\mathdef3712#1{{}}\mathdef3712{result} &amp;
+  \def\mathdef3792#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3792{(}~~\def\mathdef3793#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3793{result}~~\href{../text/types.html#text-valtype}{\mathtt{valtype}}^\ast~~\def\mathdef3794#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3794{)} &amp;\equiv&amp;
+  (\def\mathdef3795#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3795{(}~~\def\mathdef3796#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3796{result}~~\href{../text/types.html#text-valtype}{\mathtt{valtype}}~~\def\mathdef3797#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3797{)})^\ast \\
 \end{array}\end{split}\]</div>
 </section>
 </section>
 <section id="limits">
-<span id="text-limits"></span><span id="index-6"></span><h2>Limits<a class="headerlink" href="#limits" title="Permalink to this headline">¶</a></h2>
+<span id="text-limits"></span><span id="index-7"></span><h2>Limits<a class="headerlink" href="#limits" title="Permalink to this headline">¶</a></h2>
 <div class="math notranslate nohighlight">
 \[\begin{split}\begin{array}{llclll}
-\def\mathdef3689#1{{}}\mathdef3689{limits} &amp; \href{../text/types.html#text-limits}{\mathtt{limits}} &amp;::=&amp;
-  n{:}\href{../text/values.html#text-int}{\def\mathdef3714#1{{\mathtt{u}#1}}\mathdef3714{\mathtt{32}}} &amp;\Rightarrow&amp; \{ \href{../syntax/types.html#syntax-limits}{\mathsf{min}}~n, \href{../syntax/types.html#syntax-limits}{\mathsf{max}}~\epsilon \} \\ &amp;&amp;|&amp;
-  n{:}\href{../text/values.html#text-int}{\def\mathdef3714#1{{\mathtt{u}#1}}\mathdef3714{\mathtt{32}}}~~m{:}\href{../text/values.html#text-int}{\def\mathdef3714#1{{\mathtt{u}#1}}\mathdef3714{\mathtt{32}}} &amp;\Rightarrow&amp; \{ \href{../syntax/types.html#syntax-limits}{\mathsf{min}}~n, \href{../syntax/types.html#syntax-limits}{\mathsf{max}}~m \} \\
+\def\mathdef3712#1{{}}\mathdef3712{limits} &amp; \href{../text/types.html#text-limits}{\mathtt{limits}} &amp;::=&amp;
+  n{:}\href{../text/values.html#text-int}{\def\mathdef3737#1{{\mathtt{u}#1}}\mathdef3737{\mathtt{32}}} &amp;\Rightarrow&amp; \{ \href{../syntax/types.html#syntax-limits}{\mathsf{min}}~n, \href{../syntax/types.html#syntax-limits}{\mathsf{max}}~\epsilon \} \\ &amp;&amp;|&amp;
+  n{:}\href{../text/values.html#text-int}{\def\mathdef3737#1{{\mathtt{u}#1}}\mathdef3737{\mathtt{32}}}~~m{:}\href{../text/values.html#text-int}{\def\mathdef3737#1{{\mathtt{u}#1}}\mathdef3737{\mathtt{32}}} &amp;\Rightarrow&amp; \{ \href{../syntax/types.html#syntax-limits}{\mathsf{min}}~n, \href{../syntax/types.html#syntax-limits}{\mathsf{max}}~m \} \\
 \end{array}\end{split}\]</div>
 </section>
 <section id="memory-types">
-<span id="text-memtype"></span><span id="index-7"></span><h2>Memory Types<a class="headerlink" href="#memory-types" title="Permalink to this headline">¶</a></h2>
+<span id="text-memtype"></span><span id="index-8"></span><h2>Memory Types<a class="headerlink" href="#memory-types" title="Permalink to this headline">¶</a></h2>
 <div class="math notranslate nohighlight">
 \[\begin{split}\begin{array}{llclll&#64;{\qquad\qquad}l}
-\def\mathdef3689#1{{}}\mathdef3689{memory type} &amp; \href{../text/types.html#text-memtype}{\mathtt{memtype}} &amp;::=&amp;
+\def\mathdef3712#1{{}}\mathdef3712{memory type} &amp; \href{../text/types.html#text-memtype}{\mathtt{memtype}}_I &amp;::=&amp;
   \mathit{lim}{:}\href{../text/types.html#text-limits}{\mathtt{limits}} &amp;\Rightarrow&amp; \mathit{lim} \\
 \end{array}\end{split}\]</div>
 </section>
 <section id="table-types">
-<span id="text-tabletype"></span><span id="index-8"></span><h2>Table Types<a class="headerlink" href="#table-types" title="Permalink to this headline">¶</a></h2>
+<span id="text-tabletype"></span><span id="index-9"></span><h2>Table Types<a class="headerlink" href="#table-types" title="Permalink to this headline">¶</a></h2>
 <div class="math notranslate nohighlight">
 \[\begin{split}\begin{array}{llclll}
-\def\mathdef3689#1{{}}\mathdef3689{table type} &amp; \href{../text/types.html#text-tabletype}{\mathtt{tabletype}} &amp;::=&amp;
-  \mathit{lim}{:}\href{../text/types.html#text-limits}{\mathtt{limits}}~~\mathit{et}{:}\href{../text/types.html#text-reftype}{\mathtt{reftype}} &amp;\Rightarrow&amp; \mathit{lim}~\mathit{et} \\
+\def\mathdef3712#1{{}}\mathdef3712{table type} &amp; \href{../text/types.html#text-tabletype}{\mathtt{tabletype}}_I &amp;::=&amp;
+  \mathit{lim}{:}\href{../text/types.html#text-limits}{\mathtt{limits}}~~\mathit{et}{:}\href{../text/types.html#text-reftype}{\mathtt{reftype}}_I &amp;\Rightarrow&amp; \mathit{lim}~\mathit{et} \\
 \end{array}\end{split}\]</div>
 </section>
 <section id="global-types">
-<span id="text-globaltype"></span><span id="index-9"></span><h2>Global Types<a class="headerlink" href="#global-types" title="Permalink to this headline">¶</a></h2>
+<span id="text-globaltype"></span><span id="index-10"></span><h2>Global Types<a class="headerlink" href="#global-types" title="Permalink to this headline">¶</a></h2>
 <div class="math notranslate nohighlight">
 \[\begin{split}\begin{array}{llclll}
-\def\mathdef3689#1{{}}\mathdef3689{global type} &amp; \href{../text/types.html#text-globaltype}{\mathtt{globaltype}} &amp;::=&amp;
+\def\mathdef3712#1{{}}\mathdef3712{global type} &amp; \href{../text/types.html#text-globaltype}{\mathtt{globaltype}}_I &amp;::=&amp;
   t{:}\href{../text/types.html#text-valtype}{\mathtt{valtype}} &amp;\Rightarrow&amp; \href{../syntax/types.html#syntax-mut}{\mathsf{const}}~t \\ &amp;&amp;|&amp;
-  \def\mathdef3758#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3758{(}~\def\mathdef3759#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3759{mut}~~t{:}\href{../text/types.html#text-valtype}{\mathtt{valtype}}~\def\mathdef3760#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3760{)} &amp;\Rightarrow&amp; \href{../syntax/types.html#syntax-mut}{\mathsf{var}}~t \\
+  \def\mathdef3798#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3798{(}~\def\mathdef3799#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3799{mut}~~t{:}\href{../text/types.html#text-valtype}{\mathtt{valtype}}_I~\def\mathdef3800#1{\mbox{‘}\mathtt{#1}\mbox{’}}\mathdef3800{)} &amp;\Rightarrow&amp; \href{../syntax/types.html#syntax-mut}{\mathsf{var}}~t \\
 \end{array}\end{split}\]</div>
 </section>
 </section>
@@ -204,7 +223,7 @@ They cannot be referenced from anywhere.</p>
     <div class="clearer"></div>
   </div>
     <div class="footer">
-      &copy;2017, WebAssembly Community Group.
+      &copy;2017-2021, WebAssembly Community Group.
       
     </div>
 

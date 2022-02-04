@@ -17,7 +17,7 @@
     <script>window.MathJax = {"tex": {"maxBuffer": 30720}}</script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Instructions" href="instructions.html" />
+    <link rel="next" title="Matching" href="matching.html" />
     <link rel="prev" title="Conventions" href="conventions.html" />
    
   <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
@@ -39,6 +39,7 @@
 <li class="toctree-l1 current"><a class="reference internal" href="index.html">Validation</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="conventions.html">Conventions</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="matching.html">Matching</a></li>
 <li class="toctree-l2"><a class="reference internal" href="instructions.html">Instructions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="modules.html">Modules</a></li>
 </ul>
@@ -84,11 +85,146 @@
             
   <section id="types">
 <h1>Types<a class="headerlink" href="#types" title="Permalink to this headline">¶</a></h1>
-<p>Most <a class="reference internal" href="../syntax/types.html#syntax-type"><span class="std std-ref">types</span></a> are universally valid.
-However, restrictions apply to <a class="reference internal" href="../syntax/types.html#syntax-limits"><span class="std std-ref">limits</span></a>, which must be checked during validation.
-Moreover, <a class="reference internal" href="../syntax/instructions.html#syntax-blocktype"><span class="std std-ref">block types</span></a> are converted to plain <a class="reference internal" href="../syntax/types.html#syntax-functype"><span class="std std-ref">function types</span></a> for ease of processing.</p>
+<p>Simple <a class="reference internal" href="../syntax/types.html#syntax-type"><span class="std std-ref">types</span></a>, such as <a class="reference internal" href="../syntax/types.html#syntax-numtype"><span class="std std-ref">number types</span></a> are universally valid.
+However, restrictions apply to most other types, such as <a class="reference internal" href="../syntax/types.html#syntax-reftype"><span class="std std-ref">reference types</span></a>, <a class="reference internal" href="../syntax/types.html#syntax-functype"><span class="std std-ref">function types</span></a>, as well as the <a class="reference internal" href="../syntax/types.html#syntax-limits"><span class="std std-ref">limits</span></a> of <a class="reference internal" href="../syntax/types.html#syntax-tabletype"><span class="std std-ref">table types</span></a> and <a class="reference internal" href="../syntax/types.html#syntax-memtype"><span class="std std-ref">memory types</span></a>, which must be checked during validation.</p>
+<p>Moreover, <a class="reference internal" href="../syntax/instructions.html#syntax-blocktype"><span class="std std-ref">block types</span></a> are converted to plain <a class="reference internal" href="../syntax/types.html#syntax-functype"><span class="std std-ref">function types</span></a> for ease of processing.</p>
+<section id="number-types">
+<span id="valid-numtype"></span><span id="index-0"></span><h2>Number Types<a class="headerlink" href="#number-types" title="Permalink to this headline">¶</a></h2>
+<p><a class="reference internal" href="../syntax/types.html#syntax-numtype"><span class="std std-ref">Number types</span></a> are always valid.</p>
+<div class="math notranslate nohighlight">
+\[\frac{
+}{
+  C \href{../valid/types.html#valid-numtype}{\vdash} \href{../syntax/types.html#syntax-numtype}{\mathit{numtype}} \mathrel{\mbox{ok}}
+}\]</div>
+</section>
+<section id="vector-types">
+<span id="valid-vectype"></span><span id="index-1"></span><h2>Vector Types<a class="headerlink" href="#vector-types" title="Permalink to this headline">¶</a></h2>
+<p><a class="reference internal" href="../syntax/types.html#syntax-vectype"><span class="std std-ref">Vector types</span></a> are always valid.</p>
+<div class="math notranslate nohighlight">
+\[\frac{
+}{
+  C \href{../valid/types.html#valid-vectype}{\vdash} \href{../syntax/types.html#syntax-vectype}{\mathit{vectype}} \mathrel{\mbox{ok}}
+}\]</div>
+</section>
+<section id="heap-types">
+<span id="valid-heaptype"></span><span id="index-2"></span><h2>Heap Types<a class="headerlink" href="#heap-types" title="Permalink to this headline">¶</a></h2>
+<p>Concrete <a class="reference internal" href="../syntax/types.html#syntax-heaptype"><span class="std std-ref">Heap types</span></a> are only valid when the <a class="reference internal" href="../syntax/modules.html#syntax-typeidx"><span class="std std-ref">type index</span></a> is.</p>
+<section id="xref-syntax-types-syntax-heaptype-mathsf-func">
+<h3><span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-heaptype}{\mathsf{func}}\)</span><a class="headerlink" href="#xref-syntax-types-syntax-heaptype-mathsf-func" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><p>The heap type is valid.</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[\frac{
+}{
+  C \href{../valid/types.html#valid-heaptype}{\vdash} \href{../syntax/types.html#syntax-heaptype}{\mathsf{func}} \mathrel{\mbox{ok}}
+}\]</div>
+</section>
+<section id="xref-syntax-types-syntax-heaptype-mathsf-extern">
+<h3><span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-heaptype}{\mathsf{extern}}\)</span><a class="headerlink" href="#xref-syntax-types-syntax-heaptype-mathsf-extern" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><p>The heap type is valid.</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[\frac{
+}{
+  C \href{../valid/types.html#valid-heaptype}{\vdash} \href{../syntax/types.html#syntax-heaptype}{\mathsf{extern}} \mathrel{\mbox{ok}}
+}\]</div>
+</section>
+<section id="xref-syntax-modules-syntax-typeidx-mathit-typeidx">
+<h3><span class="math notranslate nohighlight">\(\href{../syntax/modules.html#syntax-typeidx}{\mathit{typeidx}}\)</span><a class="headerlink" href="#xref-syntax-modules-syntax-typeidx-mathit-typeidx" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><p>The type <span class="math notranslate nohighlight">\(C.\href{../valid/conventions.html#context}{\mathsf{types}}[\href{../syntax/modules.html#syntax-typeidx}{\mathit{typeidx}}]\)</span> must be defined in the context.</p></li>
+<li><p>Then the heap type is valid.</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[\frac{
+  C.\href{../valid/conventions.html#context}{\mathsf{types}}[\href{../syntax/modules.html#syntax-typeidx}{\mathit{typeidx}}] = \href{../syntax/types.html#syntax-functype}{\mathit{functype}}
+}{
+  C \href{../valid/types.html#valid-heaptype}{\vdash} \href{../syntax/modules.html#syntax-typeidx}{\mathit{typeidx}} \mathrel{\mbox{ok}}
+}\]</div>
+</section>
+</section>
+<section id="reference-types">
+<span id="valid-reftype"></span><span id="index-3"></span><h2>Reference Types<a class="headerlink" href="#reference-types" title="Permalink to this headline">¶</a></h2>
+<p><a class="reference internal" href="../syntax/types.html#syntax-reftype"><span class="std std-ref">Reference types</span></a> are valid when the referenced <a class="reference internal" href="../syntax/types.html#syntax-heaptype"><span class="std std-ref">heap type</span></a> is.</p>
+<section id="xref-syntax-types-syntax-reftype-mathsf-ref-xref-syntax-types-syntax-reftype-mathsf-null-xref-syntax-types-syntax-heaptype-mathit-heaptype">
+<h3><span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-reftype}{\mathsf{ref}}~\href{../syntax/types.html#syntax-reftype}{\mathsf{null}}^?~\href{../syntax/types.html#syntax-heaptype}{\mathit{heaptype}}\)</span><a class="headerlink" href="#xref-syntax-types-syntax-reftype-mathsf-ref-xref-syntax-types-syntax-reftype-mathsf-null-xref-syntax-types-syntax-heaptype-mathit-heaptype" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><p>The heap type <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-heaptype}{\mathit{heaptype}}\)</span> must be <a class="reference internal" href="#valid-heaptype"><span class="std std-ref">valid</span></a>.</p></li>
+<li><p>Then the reference type is valid.</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[\frac{
+  C \href{../valid/types.html#valid-reftype}{\vdash} \href{../syntax/types.html#syntax-heaptype}{\mathit{heaptype}} \mathrel{\mbox{ok}}
+}{
+  C \href{../valid/types.html#valid-reftype}{\vdash} \href{../syntax/types.html#syntax-reftype}{\mathsf{ref}}~\href{../syntax/types.html#syntax-reftype}{\mathsf{null}}^?~\href{../syntax/types.html#syntax-heaptype}{\mathit{heaptype}} \mathrel{\mbox{ok}}
+}\]</div>
+</section>
+</section>
+<section id="value-types">
+<span id="valid-bottype"></span><span id="valid-valtype"></span><span id="index-4"></span><h2>Value Types<a class="headerlink" href="#value-types" title="Permalink to this headline">¶</a></h2>
+<p>Valid <a class="reference internal" href="../syntax/types.html#syntax-valtype"><span class="std std-ref">value types</span></a> are either valid <a class="reference internal" href="#valid-numtype"><span class="std std-ref">number type</span></a>,  <a class="reference internal" href="#valid-reftype"><span class="std std-ref">reference type</span></a>, or the <a class="reference internal" href="../syntax/types.html#syntax-bottype"><span class="std std-ref">bottom type</span></a>.</p>
+<section id="xref-syntax-types-syntax-valtype-mathsf-bot">
+<h3><span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-valtype}{\mathsf{bot}}\)</span><a class="headerlink" href="#xref-syntax-types-syntax-valtype-mathsf-bot" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><p>The value type is valid.</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[\frac{
+}{
+  C \href{../valid/types.html#valid-valtype}{\vdash} \href{../syntax/types.html#syntax-valtype}{\mathsf{bot}} \mathrel{\mbox{ok}}
+}\]</div>
+</section>
+</section>
+<section id="block-types">
+<span id="valid-blocktype"></span><span id="index-5"></span><h2>Block Types<a class="headerlink" href="#block-types" title="Permalink to this headline">¶</a></h2>
+<p><a class="reference internal" href="../syntax/instructions.html#syntax-blocktype"><span class="std std-ref">Block types</span></a> may be expressed in one of two forms, both of which are converted to plain <a class="reference internal" href="../syntax/types.html#syntax-functype"><span class="std std-ref">function types</span></a> by the following rules.</p>
+<section id="id1">
+<h3><span class="math notranslate nohighlight">\(\href{../syntax/modules.html#syntax-typeidx}{\mathit{typeidx}}\)</span><a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><p>The type <span class="math notranslate nohighlight">\(C.\href{../valid/conventions.html#context}{\mathsf{types}}[\href{../syntax/modules.html#syntax-typeidx}{\mathit{typeidx}}]\)</span> must be defined in the context.</p></li>
+<li><p>Then the block type is valid as <a class="reference internal" href="../syntax/types.html#syntax-functype"><span class="std std-ref">function type</span></a> <span class="math notranslate nohighlight">\(C.\href{../valid/conventions.html#context}{\mathsf{types}}[\href{../syntax/modules.html#syntax-typeidx}{\mathit{typeidx}}]\)</span>.</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[\frac{
+  C.\href{../valid/conventions.html#context}{\mathsf{types}}[\href{../syntax/modules.html#syntax-typeidx}{\mathit{typeidx}}] = \href{../syntax/types.html#syntax-functype}{\mathit{functype}}
+}{
+  C \href{../valid/types.html#valid-blocktype}{\vdash} \href{../syntax/modules.html#syntax-typeidx}{\mathit{typeidx}} : \href{../syntax/types.html#syntax-functype}{\mathit{functype}}
+}\]</div>
+</section>
+<section id="xref-syntax-types-syntax-valtype-mathit-valtype">
+<h3><span class="math notranslate nohighlight">\([\href{../syntax/types.html#syntax-valtype}{\mathit{valtype}}^?]\)</span><a class="headerlink" href="#xref-syntax-types-syntax-valtype-mathit-valtype" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><p>The value type <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-valtype}{\mathit{valtype}}\)</span> must either be absent, or <a class="reference internal" href="#valid-valtype"><span class="std std-ref">valid</span></a>.</p></li>
+<li><p>Then the block type is valid as <a class="reference internal" href="../syntax/types.html#syntax-functype"><span class="std std-ref">function type</span></a> <span class="math notranslate nohighlight">\([] \href{../syntax/types.html#syntax-functype}{\rightarrow} [\href{../syntax/types.html#syntax-valtype}{\mathit{valtype}}^?]\)</span>.</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[\frac{
+  (C \href{../valid/types.html#valid-valtype}{\vdash} \href{../syntax/types.html#syntax-valtype}{\mathit{valtype}} \mathrel{\mbox{ok}})^?
+}{
+  C \href{../valid/types.html#valid-blocktype}{\vdash} [\href{../syntax/types.html#syntax-valtype}{\mathit{valtype}}^?] : [] \href{../syntax/types.html#syntax-functype}{\rightarrow} [\href{../syntax/types.html#syntax-valtype}{\mathit{valtype}}^?]
+}\]</div>
+</section>
+</section>
+<section id="result-types">
+<span id="valid-resulttype"></span><span id="index-6"></span><h2>Result Types<a class="headerlink" href="#result-types" title="Permalink to this headline">¶</a></h2>
+<section id="t-ast">
+<h3><span class="math notranslate nohighlight">\([t^\ast]\)</span><a class="headerlink" href="#t-ast" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><p>Each <a class="reference internal" href="../syntax/types.html#syntax-valtype"><span class="std std-ref">value type</span></a> <span class="math notranslate nohighlight">\(t_i\)</span> in the type sequence <span class="math notranslate nohighlight">\(t^\ast\)</span> must be <a class="reference internal" href="#valid-valtype"><span class="std std-ref">valid</span></a>.</p></li>
+<li><p>Then the result type is valid.</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[\frac{
+  (C \href{../valid/types.html#valid-valtype}{\vdash} t \mathrel{\mbox{ok}})^\ast
+}{
+  C \href{../valid/types.html#valid-resulttype}{\vdash} [t^\ast] \mathrel{\mbox{ok}}
+}\]</div>
+</section>
+</section>
 <section id="limits">
-<span id="valid-limits"></span><span id="index-0"></span><h2>Limits<a class="headerlink" href="#limits" title="Permalink to this headline">¶</a></h2>
+<span id="valid-limits"></span><span id="index-7"></span><h2>Limits<a class="headerlink" href="#limits" title="Permalink to this headline">¶</a></h2>
 <p><a class="reference internal" href="../syntax/types.html#syntax-limits"><span class="std std-ref">Limits</span></a> must have meaningful bounds that are within a given range.</p>
 <section id="xref-syntax-types-syntax-limits-mathsf-min-n-xref-syntax-types-syntax-limits-mathsf-max-m">
 <h3><span class="math notranslate nohighlight">\(\{ \href{../syntax/types.html#syntax-limits}{\mathsf{min}}~n, \href{../syntax/types.html#syntax-limits}{\mathsf{max}}~m^? \}\)</span><a class="headerlink" href="#xref-syntax-types-syntax-limits-mathsf-min-n-xref-syntax-types-syntax-limits-mathsf-max-m" title="Permalink to this headline">¶</a></h3>
@@ -110,71 +246,50 @@ Moreover, <a class="reference internal" href="../syntax/instructions.html#syntax
   \qquad
   (n \leq m)^?
 }{
-  \href{../valid/types.html#valid-limits}{\vdash} \{ \href{../syntax/types.html#syntax-limits}{\mathsf{min}}~n, \href{../syntax/types.html#syntax-limits}{\mathsf{max}}~m^? \} : k
-}\]</div>
-</section>
-</section>
-<section id="block-types">
-<span id="valid-blocktype"></span><span id="index-1"></span><h2>Block Types<a class="headerlink" href="#block-types" title="Permalink to this headline">¶</a></h2>
-<p><a class="reference internal" href="../syntax/instructions.html#syntax-blocktype"><span class="std std-ref">Block types</span></a> may be expressed in one of two forms, both of which are converted to plain <a class="reference internal" href="../syntax/types.html#syntax-functype"><span class="std std-ref">function types</span></a> by the following rules.</p>
-<section id="xref-syntax-modules-syntax-typeidx-mathit-typeidx">
-<h3><span class="math notranslate nohighlight">\(\href{../syntax/modules.html#syntax-typeidx}{\mathit{typeidx}}\)</span><a class="headerlink" href="#xref-syntax-modules-syntax-typeidx-mathit-typeidx" title="Permalink to this headline">¶</a></h3>
-<ul class="simple">
-<li><p>The type <span class="math notranslate nohighlight">\(C.\href{../valid/conventions.html#context}{\mathsf{types}}[\href{../syntax/modules.html#syntax-typeidx}{\mathit{typeidx}}]\)</span> must be defined in the context.</p></li>
-<li><p>Then the block type is valid as <a class="reference internal" href="../syntax/types.html#syntax-functype"><span class="std std-ref">function type</span></a> <span class="math notranslate nohighlight">\(C.\href{../valid/conventions.html#context}{\mathsf{types}}[\href{../syntax/modules.html#syntax-typeidx}{\mathit{typeidx}}]\)</span>.</p></li>
-</ul>
-<div class="math notranslate nohighlight">
-\[\frac{
-  C.\href{../valid/conventions.html#context}{\mathsf{types}}[\href{../syntax/modules.html#syntax-typeidx}{\mathit{typeidx}}] = \href{../syntax/types.html#syntax-functype}{\mathit{functype}}
-}{
-  C \href{../valid/types.html#valid-blocktype}{\vdash} \href{../syntax/modules.html#syntax-typeidx}{\mathit{typeidx}} : \href{../syntax/types.html#syntax-functype}{\mathit{functype}}
-}\]</div>
-</section>
-<section id="xref-syntax-types-syntax-valtype-mathit-valtype">
-<h3><span class="math notranslate nohighlight">\([\href{../syntax/types.html#syntax-valtype}{\mathit{valtype}}^?]\)</span><a class="headerlink" href="#xref-syntax-types-syntax-valtype-mathit-valtype" title="Permalink to this headline">¶</a></h3>
-<ul class="simple">
-<li><p>The block type is valid as <a class="reference internal" href="../syntax/types.html#syntax-functype"><span class="std std-ref">function type</span></a> <span class="math notranslate nohighlight">\([] \href{../syntax/types.html#syntax-functype}{\rightarrow} [\href{../syntax/types.html#syntax-valtype}{\mathit{valtype}}^?]\)</span>.</p></li>
-</ul>
-<div class="math notranslate nohighlight">
-\[\frac{
-}{
-  C \href{../valid/types.html#valid-blocktype}{\vdash} [\href{../syntax/types.html#syntax-valtype}{\mathit{valtype}}^?] : [] \href{../syntax/types.html#syntax-functype}{\rightarrow} [\href{../syntax/types.html#syntax-valtype}{\mathit{valtype}}^?]
+  C \href{../valid/types.html#valid-limits}{\vdash} \{ \href{../syntax/types.html#syntax-limits}{\mathsf{min}}~n, \href{../syntax/types.html#syntax-limits}{\mathsf{max}}~m^? \} : k
 }\]</div>
 </section>
 </section>
 <section id="function-types">
-<span id="valid-functype"></span><span id="index-2"></span><h2>Function Types<a class="headerlink" href="#function-types" title="Permalink to this headline">¶</a></h2>
-<p><a class="reference internal" href="../syntax/types.html#syntax-functype"><span class="std std-ref">Function types</span></a> are always valid.</p>
-<section id="t-1-n-xref-syntax-types-syntax-functype-rightarrow-t-2-m">
-<h3><span class="math notranslate nohighlight">\([t_1^n] \href{../syntax/types.html#syntax-functype}{\rightarrow} [t_2^m]\)</span><a class="headerlink" href="#t-1-n-xref-syntax-types-syntax-functype-rightarrow-t-2-m" title="Permalink to this headline">¶</a></h3>
+<span id="valid-functype"></span><span id="index-8"></span><h2>Function Types<a class="headerlink" href="#function-types" title="Permalink to this headline">¶</a></h2>
+<section id="t-1-ast-xref-syntax-types-syntax-functype-rightarrow-t-2-ast">
+<h3><span class="math notranslate nohighlight">\([t_1^\ast] \href{../syntax/types.html#syntax-functype}{\rightarrow} [t_2^\ast]\)</span><a class="headerlink" href="#t-1-ast-xref-syntax-types-syntax-functype-rightarrow-t-2-ast" title="Permalink to this headline">¶</a></h3>
 <ul class="simple">
-<li><p>The function type is valid.</p></li>
+<li><p>The <a class="reference internal" href="../syntax/types.html#syntax-resulttype"><span class="std std-ref">result type</span></a> <span class="math notranslate nohighlight">\([t_1^\ast]\)</span> must be <a class="reference internal" href="#valid-resulttype"><span class="std std-ref">valid</span></a>.</p></li>
+<li><p>The <a class="reference internal" href="../syntax/types.html#syntax-resulttype"><span class="std std-ref">result type</span></a> <span class="math notranslate nohighlight">\([t_2^\ast]\)</span> must be <a class="reference internal" href="#valid-resulttype"><span class="std std-ref">valid</span></a>.</p></li>
+<li><p>Then the function type is valid.</p></li>
 </ul>
 <div class="math notranslate nohighlight">
 \[\frac{
+  C \href{../valid/types.html#valid-valtype}{\vdash} [t_1^\ast] \mathrel{\mbox{ok}}
+  \qquad
+  C \href{../valid/types.html#valid-valtype}{\vdash} [t_2^\ast] \mathrel{\mbox{ok}}
 }{
-  \href{../valid/types.html#valid-functype}{\vdash} [t_1^\ast] \href{../syntax/types.html#syntax-functype}{\rightarrow} [t_2^\ast] \mathrel{\mbox{ok}}
+  C \href{../valid/types.html#valid-functype}{\vdash} [t_1^\ast] \href{../syntax/types.html#syntax-functype}{\rightarrow} [t_2^\ast] \mathrel{\mbox{ok}}
 }\]</div>
 </section>
 </section>
 <section id="table-types">
-<span id="valid-tabletype"></span><span id="index-3"></span><h2>Table Types<a class="headerlink" href="#table-types" title="Permalink to this headline">¶</a></h2>
+<span id="valid-tabletype"></span><span id="index-9"></span><h2>Table Types<a class="headerlink" href="#table-types" title="Permalink to this headline">¶</a></h2>
 <section id="xref-syntax-types-syntax-limits-mathit-limits-xref-syntax-types-syntax-reftype-mathit-reftype">
 <h3><span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-limits}{\mathit{limits}}~\href{../syntax/types.html#syntax-reftype}{\mathit{reftype}}\)</span><a class="headerlink" href="#xref-syntax-types-syntax-limits-mathit-limits-xref-syntax-types-syntax-reftype-mathit-reftype" title="Permalink to this headline">¶</a></h3>
 <ul class="simple">
 <li><p>The limits <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-limits}{\mathit{limits}}\)</span> must be <a class="reference internal" href="#valid-limits"><span class="std std-ref">valid</span></a> within range <span class="math notranslate nohighlight">\(2^{32}-1\)</span>.</p></li>
+<li><p>The reference type <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-reftype}{\mathit{reftype}}\)</span> must be <a class="reference internal" href="#valid-reftype"><span class="std std-ref">valid</span></a>.</p></li>
 <li><p>Then the table type is valid.</p></li>
 </ul>
 <div class="math notranslate nohighlight">
 \[\frac{
-  \href{../valid/types.html#valid-limits}{\vdash} \href{../syntax/types.html#syntax-limits}{\mathit{limits}} : 2^{32} - 1
+  C \href{../valid/types.html#valid-limits}{\vdash} \href{../syntax/types.html#syntax-limits}{\mathit{limits}} : 2^{32} - 1
+  \qquad
+  C \href{../valid/types.html#valid-reftype}{\vdash} \href{../syntax/types.html#syntax-reftype}{\mathit{reftype}} \mathrel{\mbox{ok}}
 }{
-  \href{../valid/types.html#valid-tabletype}{\vdash} \href{../syntax/types.html#syntax-limits}{\mathit{limits}}~\href{../syntax/types.html#syntax-reftype}{\mathit{reftype}} \mathrel{\mbox{ok}}
+  C \href{../valid/types.html#valid-tabletype}{\vdash} \href{../syntax/types.html#syntax-limits}{\mathit{limits}}~\href{../syntax/types.html#syntax-reftype}{\mathit{reftype}} \mathrel{\mbox{ok}}
 }\]</div>
 </section>
 </section>
 <section id="memory-types">
-<span id="valid-memtype"></span><span id="index-4"></span><h2>Memory Types<a class="headerlink" href="#memory-types" title="Permalink to this headline">¶</a></h2>
+<span id="valid-memtype"></span><span id="index-10"></span><h2>Memory Types<a class="headerlink" href="#memory-types" title="Permalink to this headline">¶</a></h2>
 <section id="xref-syntax-types-syntax-limits-mathit-limits">
 <h3><span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-limits}{\mathit{limits}}\)</span><a class="headerlink" href="#xref-syntax-types-syntax-limits-mathit-limits" title="Permalink to this headline">¶</a></h3>
 <ul class="simple">
@@ -183,28 +298,30 @@ Moreover, <a class="reference internal" href="../syntax/instructions.html#syntax
 </ul>
 <div class="math notranslate nohighlight">
 \[\frac{
-  \href{../valid/types.html#valid-limits}{\vdash} \href{../syntax/types.html#syntax-limits}{\mathit{limits}} : 2^{16}
+  C \href{../valid/types.html#valid-limits}{\vdash} \href{../syntax/types.html#syntax-limits}{\mathit{limits}} : 2^{16}
 }{
-  \href{../valid/types.html#valid-memtype}{\vdash} \href{../syntax/types.html#syntax-limits}{\mathit{limits}} \mathrel{\mbox{ok}}
+  C \href{../valid/types.html#valid-memtype}{\vdash} \href{../syntax/types.html#syntax-limits}{\mathit{limits}} \mathrel{\mbox{ok}}
 }\]</div>
 </section>
 </section>
 <section id="global-types">
-<span id="valid-globaltype"></span><span id="index-5"></span><h2>Global Types<a class="headerlink" href="#global-types" title="Permalink to this headline">¶</a></h2>
+<span id="valid-globaltype"></span><span id="index-11"></span><h2>Global Types<a class="headerlink" href="#global-types" title="Permalink to this headline">¶</a></h2>
 <section id="xref-syntax-types-syntax-mut-mathit-mut-xref-syntax-types-syntax-valtype-mathit-valtype">
 <h3><span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-mut}{\mathit{mut}}~\href{../syntax/types.html#syntax-valtype}{\mathit{valtype}}\)</span><a class="headerlink" href="#xref-syntax-types-syntax-mut-mathit-mut-xref-syntax-types-syntax-valtype-mathit-valtype" title="Permalink to this headline">¶</a></h3>
 <ul class="simple">
-<li><p>The global type is valid.</p></li>
+<li><p>The value type <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-valtype}{\mathit{valtype}}\)</span> must be <a class="reference internal" href="#valid-valtype"><span class="std std-ref">valid</span></a>.</p></li>
+<li><p>Then the global type is valid.</p></li>
 </ul>
 <div class="math notranslate nohighlight">
 \[\frac{
+  C \href{../valid/types.html#valid-reftype}{\vdash} \href{../syntax/types.html#syntax-valtype}{\mathit{valtype}} \mathrel{\mbox{ok}}
 }{
-  \href{../valid/types.html#valid-globaltype}{\vdash} \href{../syntax/types.html#syntax-mut}{\mathit{mut}}~\href{../syntax/types.html#syntax-valtype}{\mathit{valtype}} \mathrel{\mbox{ok}}
+  C \href{../valid/types.html#valid-globaltype}{\vdash} \href{../syntax/types.html#syntax-mut}{\mathit{mut}}~\href{../syntax/types.html#syntax-valtype}{\mathit{valtype}} \mathrel{\mbox{ok}}
 }\]</div>
 </section>
 </section>
 <section id="external-types">
-<span id="valid-externtype"></span><span id="index-6"></span><h2>External Types<a class="headerlink" href="#external-types" title="Permalink to this headline">¶</a></h2>
+<span id="valid-externtype"></span><span id="index-12"></span><h2>External Types<a class="headerlink" href="#external-types" title="Permalink to this headline">¶</a></h2>
 <section id="xref-syntax-types-syntax-externtype-mathsf-func-xref-syntax-types-syntax-functype-mathit-functype">
 <h3><span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-externtype}{\mathsf{func}}~\href{../syntax/types.html#syntax-functype}{\mathit{functype}}\)</span><a class="headerlink" href="#xref-syntax-types-syntax-externtype-mathsf-func-xref-syntax-types-syntax-functype-mathit-functype" title="Permalink to this headline">¶</a></h3>
 <ul class="simple">
@@ -213,9 +330,9 @@ Moreover, <a class="reference internal" href="../syntax/instructions.html#syntax
 </ul>
 <div class="math notranslate nohighlight">
 \[\frac{
-  \href{../valid/types.html#valid-functype}{\vdash} \href{../syntax/types.html#syntax-functype}{\mathit{functype}} \mathrel{\mbox{ok}}
+  C \href{../valid/types.html#valid-functype}{\vdash} \href{../syntax/types.html#syntax-functype}{\mathit{functype}} \mathrel{\mbox{ok}}
 }{
-  \href{../valid/types.html#valid-externtype}{\vdash} \href{../syntax/types.html#syntax-externtype}{\mathsf{func}}~\href{../syntax/types.html#syntax-functype}{\mathit{functype}} \mathrel{\mbox{ok}}
+  C \href{../valid/types.html#valid-externtype}{\vdash} \href{../syntax/types.html#syntax-externtype}{\mathsf{func}}~\href{../syntax/types.html#syntax-functype}{\mathit{functype}} \mathrel{\mbox{ok}}
 }\]</div>
 </section>
 <section id="xref-syntax-types-syntax-externtype-mathsf-table-xref-syntax-types-syntax-tabletype-mathit-tabletype">
@@ -226,9 +343,9 @@ Moreover, <a class="reference internal" href="../syntax/instructions.html#syntax
 </ul>
 <div class="math notranslate nohighlight">
 \[\frac{
-  \href{../valid/types.html#valid-tabletype}{\vdash} \href{../syntax/types.html#syntax-tabletype}{\mathit{tabletype}} \mathrel{\mbox{ok}}
+  C \href{../valid/types.html#valid-tabletype}{\vdash} \href{../syntax/types.html#syntax-tabletype}{\mathit{tabletype}} \mathrel{\mbox{ok}}
 }{
-  \href{../valid/types.html#valid-externtype}{\vdash} \href{../syntax/types.html#syntax-externtype}{\mathsf{table}}~\href{../syntax/types.html#syntax-tabletype}{\mathit{tabletype}} \mathrel{\mbox{ok}}
+  C \href{../valid/types.html#valid-externtype}{\vdash} \href{../syntax/types.html#syntax-externtype}{\mathsf{table}}~\href{../syntax/types.html#syntax-tabletype}{\mathit{tabletype}} \mathrel{\mbox{ok}}
 }\]</div>
 </section>
 <section id="xref-syntax-types-syntax-externtype-mathsf-mem-xref-syntax-types-syntax-memtype-mathit-memtype">
@@ -239,9 +356,9 @@ Moreover, <a class="reference internal" href="../syntax/instructions.html#syntax
 </ul>
 <div class="math notranslate nohighlight">
 \[\frac{
-  \href{../valid/types.html#valid-memtype}{\vdash} \href{../syntax/types.html#syntax-memtype}{\mathit{memtype}} \mathrel{\mbox{ok}}
+  C \href{../valid/types.html#valid-memtype}{\vdash} \href{../syntax/types.html#syntax-memtype}{\mathit{memtype}} \mathrel{\mbox{ok}}
 }{
-  \href{../valid/types.html#valid-externtype}{\vdash} \href{../syntax/types.html#syntax-externtype}{\mathsf{mem}}~\href{../syntax/types.html#syntax-memtype}{\mathit{memtype}} \mathrel{\mbox{ok}}
+  C \href{../valid/types.html#valid-externtype}{\vdash} \href{../syntax/types.html#syntax-externtype}{\mathsf{mem}}~\href{../syntax/types.html#syntax-memtype}{\mathit{memtype}} \mathrel{\mbox{ok}}
 }\]</div>
 </section>
 <section id="xref-syntax-types-syntax-externtype-mathsf-global-xref-syntax-types-syntax-globaltype-mathit-globaltype">
@@ -252,102 +369,10 @@ Moreover, <a class="reference internal" href="../syntax/instructions.html#syntax
 </ul>
 <div class="math notranslate nohighlight">
 \[\frac{
-  \href{../valid/types.html#valid-globaltype}{\vdash} \href{../syntax/types.html#syntax-globaltype}{\mathit{globaltype}} \mathrel{\mbox{ok}}
+  C \href{../valid/types.html#valid-globaltype}{\vdash} \href{../syntax/types.html#syntax-globaltype}{\mathit{globaltype}} \mathrel{\mbox{ok}}
 }{
-  \href{../valid/types.html#valid-externtype}{\vdash} \href{../syntax/types.html#syntax-externtype}{\mathsf{global}}~\href{../syntax/types.html#syntax-globaltype}{\mathit{globaltype}} \mathrel{\mbox{ok}}
+  C \href{../valid/types.html#valid-externtype}{\vdash} \href{../syntax/types.html#syntax-externtype}{\mathsf{global}}~\href{../syntax/types.html#syntax-globaltype}{\mathit{globaltype}} \mathrel{\mbox{ok}}
 }\]</div>
-</section>
-</section>
-<section id="import-subtyping">
-<span id="match"></span><span id="exec-import"></span><span id="index-7"></span><h2>Import Subtyping<a class="headerlink" href="#import-subtyping" title="Permalink to this headline">¶</a></h2>
-<p>When <a class="reference internal" href="../exec/modules.html#exec-module"><span class="std std-ref">instantiating</span></a> a module,
-<a class="reference internal" href="../exec/runtime.html#syntax-externval"><span class="std std-ref">external values</span></a> must be provided whose <a class="reference internal" href="../exec/modules.html#valid-externval"><span class="std std-ref">types</span></a> are <em>matched</em> against the respective <a class="reference internal" href="../syntax/types.html#syntax-externtype"><span class="std std-ref">external types</span></a> classifying each import.
-In some cases, this allows for a simple form of subtyping, as defined here.</p>
-<section id="match-limits">
-<span id="index-8"></span><span id="id1"></span><h3>Limits<a class="headerlink" href="#match-limits" title="Permalink to this headline">¶</a></h3>
-<p><a class="reference internal" href="../syntax/types.html#syntax-limits"><span class="std std-ref">Limits</span></a> <span class="math notranslate nohighlight">\(\{ \href{../syntax/types.html#syntax-limits}{\mathsf{min}}~n_1, \href{../syntax/types.html#syntax-limits}{\mathsf{max}}~m_1^? \}\)</span> match limits <span class="math notranslate nohighlight">\(\{ \href{../syntax/types.html#syntax-limits}{\mathsf{min}}~n_2, \href{../syntax/types.html#syntax-limits}{\mathsf{max}}~m_2^? \}\)</span> if and only if:</p>
-<ul class="simple">
-<li><p><span class="math notranslate nohighlight">\(n_1\)</span> is larger than or equal to <span class="math notranslate nohighlight">\(n_2\)</span>.</p></li>
-<li><p>Either:</p>
-<ul>
-<li><p><span class="math notranslate nohighlight">\(m_2^?\)</span> is empty.</p></li>
-</ul>
-</li>
-<li><p>Or:</p>
-<ul>
-<li><p>Both <span class="math notranslate nohighlight">\(m_1^?\)</span> and <span class="math notranslate nohighlight">\(m_2^?\)</span> are non-empty.</p></li>
-<li><p><span class="math notranslate nohighlight">\(m_1\)</span> is smaller than or equal to <span class="math notranslate nohighlight">\(m_2\)</span>.</p></li>
-</ul>
-</li>
-</ul>
-<div class="math notranslate nohighlight">
-\[\begin{split}~\\[-1ex]
-\frac{
-  n_1 \geq n_2
-}{
-  \href{../exec/modules.html#match-limits}{\vdash} \{ \href{../syntax/types.html#syntax-limits}{\mathsf{min}}~n_1, \href{../syntax/types.html#syntax-limits}{\mathsf{max}}~m_1^? \} \href{../exec/modules.html#match-limits}{\leq} \{ \href{../syntax/types.html#syntax-limits}{\mathsf{min}}~n_2, \href{../syntax/types.html#syntax-limits}{\mathsf{max}}~\epsilon \}
-}
-\quad
-\frac{
-  n_1 \geq n_2
-  \qquad
-  m_1 \leq m_2
-}{
-  \href{../exec/modules.html#match-limits}{\vdash} \{ \href{../syntax/types.html#syntax-limits}{\mathsf{min}}~n_1, \href{../syntax/types.html#syntax-limits}{\mathsf{max}}~m_1 \} \href{../exec/modules.html#match-limits}{\leq} \{ \href{../syntax/types.html#syntax-limits}{\mathsf{min}}~n_2, \href{../syntax/types.html#syntax-limits}{\mathsf{max}}~m_2 \}
-}\end{split}\]</div>
-<span class="target" id="match-externtype"></span></section>
-<section id="functions">
-<span id="match-functype"></span><span id="index-9"></span><h3>Functions<a class="headerlink" href="#functions" title="Permalink to this headline">¶</a></h3>
-<p>An <a class="reference internal" href="../syntax/types.html#syntax-externtype"><span class="std std-ref">external type</span></a> <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-externtype}{\mathsf{func}}~\href{../syntax/types.html#syntax-functype}{\mathit{functype}}_1\)</span> matches <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-externtype}{\mathsf{func}}~\href{../syntax/types.html#syntax-functype}{\mathit{functype}}_2\)</span> if and only if:</p>
-<ul class="simple">
-<li><p>Both <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-functype}{\mathit{functype}}_1\)</span> and <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-functype}{\mathit{functype}}_2\)</span> are the same.</p></li>
-</ul>
-<div class="math notranslate nohighlight">
-\[\begin{split}~\\[-1ex]
-\frac{
-}{
-  \href{../exec/modules.html#match-externtype}{\vdash} \href{../syntax/types.html#syntax-externtype}{\mathsf{func}}~\href{../syntax/types.html#syntax-functype}{\mathit{functype}} \href{../exec/modules.html#match-externtype}{\leq} \href{../syntax/types.html#syntax-externtype}{\mathsf{func}}~\href{../syntax/types.html#syntax-functype}{\mathit{functype}}
-}\end{split}\]</div>
-</section>
-<section id="tables">
-<span id="match-tabletype"></span><span id="index-10"></span><h3>Tables<a class="headerlink" href="#tables" title="Permalink to this headline">¶</a></h3>
-<p>An <a class="reference internal" href="../syntax/types.html#syntax-externtype"><span class="std std-ref">external type</span></a> <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-externtype}{\mathsf{table}}~(\href{../syntax/types.html#syntax-limits}{\mathit{limits}}_1~\href{../syntax/types.html#syntax-reftype}{\mathit{reftype}}_1)\)</span> matches <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-externtype}{\mathsf{table}}~(\href{../syntax/types.html#syntax-limits}{\mathit{limits}}_2~\href{../syntax/types.html#syntax-reftype}{\mathit{reftype}}_2)\)</span> if and only if:</p>
-<ul class="simple">
-<li><p>Limits <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-limits}{\mathit{limits}}_1\)</span> <a class="reference internal" href="#match-limits"><span class="std std-ref">match</span></a> <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-limits}{\mathit{limits}}_2\)</span>.</p></li>
-<li><p>Both <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-reftype}{\mathit{reftype}}_1\)</span> and <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-reftype}{\mathit{reftype}}_2\)</span> are the same.</p></li>
-</ul>
-<div class="math notranslate nohighlight">
-\[\frac{
-  \href{../exec/modules.html#match-limits}{\vdash} \href{../syntax/types.html#syntax-limits}{\mathit{limits}}_1 \href{../exec/modules.html#match-limits}{\leq} \href{../syntax/types.html#syntax-limits}{\mathit{limits}}_2
-}{
-  \href{../exec/modules.html#match-externtype}{\vdash} \href{../syntax/types.html#syntax-externtype}{\mathsf{table}}~(\href{../syntax/types.html#syntax-limits}{\mathit{limits}}_1~\href{../syntax/types.html#syntax-reftype}{\mathit{reftype}}) \href{../exec/modules.html#match-externtype}{\leq} \href{../syntax/types.html#syntax-externtype}{\mathsf{table}}~(\href{../syntax/types.html#syntax-limits}{\mathit{limits}}_2~\href{../syntax/types.html#syntax-reftype}{\mathit{reftype}})
-}\]</div>
-</section>
-<section id="memories">
-<span id="match-memtype"></span><span id="index-11"></span><h3>Memories<a class="headerlink" href="#memories" title="Permalink to this headline">¶</a></h3>
-<p>An <a class="reference internal" href="../syntax/types.html#syntax-externtype"><span class="std std-ref">external type</span></a> <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-externtype}{\mathsf{mem}}~\href{../syntax/types.html#syntax-limits}{\mathit{limits}}_1\)</span> matches <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-externtype}{\mathsf{mem}}~\href{../syntax/types.html#syntax-limits}{\mathit{limits}}_2\)</span> if and only if:</p>
-<ul class="simple">
-<li><p>Limits <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-limits}{\mathit{limits}}_1\)</span> <a class="reference internal" href="#match-limits"><span class="std std-ref">match</span></a> <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-limits}{\mathit{limits}}_2\)</span>.</p></li>
-</ul>
-<div class="math notranslate nohighlight">
-\[\frac{
-  \href{../exec/modules.html#match-limits}{\vdash} \href{../syntax/types.html#syntax-limits}{\mathit{limits}}_1 \href{../exec/modules.html#match-limits}{\leq} \href{../syntax/types.html#syntax-limits}{\mathit{limits}}_2
-}{
-  \href{../exec/modules.html#match-externtype}{\vdash} \href{../syntax/types.html#syntax-externtype}{\mathsf{mem}}~\href{../syntax/types.html#syntax-limits}{\mathit{limits}}_1 \href{../exec/modules.html#match-externtype}{\leq} \href{../syntax/types.html#syntax-externtype}{\mathsf{mem}}~\href{../syntax/types.html#syntax-limits}{\mathit{limits}}_2
-}\]</div>
-</section>
-<section id="globals">
-<span id="match-globaltype"></span><span id="index-12"></span><h3>Globals<a class="headerlink" href="#globals" title="Permalink to this headline">¶</a></h3>
-<p>An <a class="reference internal" href="../syntax/types.html#syntax-externtype"><span class="std std-ref">external type</span></a> <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-externtype}{\mathsf{global}}~\href{../syntax/types.html#syntax-globaltype}{\mathit{globaltype}}_1\)</span> matches <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-externtype}{\mathsf{global}}~\href{../syntax/types.html#syntax-globaltype}{\mathit{globaltype}}_2\)</span> if and only if:</p>
-<ul class="simple">
-<li><p>Both <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-globaltype}{\mathit{globaltype}}_1\)</span> and <span class="math notranslate nohighlight">\(\href{../syntax/types.html#syntax-globaltype}{\mathit{globaltype}}_2\)</span> are the same.</p></li>
-</ul>
-<div class="math notranslate nohighlight">
-\[\begin{split}~\\[-1ex]
-\frac{
-}{
-  \href{../exec/modules.html#match-externtype}{\vdash} \href{../syntax/types.html#syntax-externtype}{\mathsf{global}}~\href{../syntax/types.html#syntax-globaltype}{\mathit{globaltype}} \href{../exec/modules.html#match-externtype}{\leq} \href{../syntax/types.html#syntax-externtype}{\mathsf{global}}~\href{../syntax/types.html#syntax-globaltype}{\mathit{globaltype}}
-}\end{split}\]</div>
 </section>
 </section>
 </section>
@@ -360,7 +385,7 @@ In some cases, this allows for a simple form of subtyping, as defined here.</p>
     <div class="clearer"></div>
   </div>
     <div class="footer">
-      &copy;2017, WebAssembly Community Group.
+      &copy;2017-2021, WebAssembly Community Group.
       
     </div>
 

@@ -80,11 +80,11 @@
 <span id="index-instr"></span><span id="index-0"></span><h1>Index of Instructions<a class="headerlink" href="#index-of-instructions" title="Permalink to this headline">¶</a></h1>
 <table class="docutils align-default">
 <colgroup>
-<col style="width: 21%" />
-<col style="width: 11%" />
-<col style="width: 19%" />
-<col style="width: 19%" />
-<col style="width: 29%" />
+<col style="width: 20%" />
+<col style="width: 10%" />
+<col style="width: 25%" />
+<col style="width: 18%" />
+<col style="width: 26%" />
 </colgroup>
 <thead>
 <tr class="row-odd"><th class="head"><p>Instruction</p></th>
@@ -203,23 +203,23 @@
 <td><p><a class="reference internal" href="../valid/instructions.html#valid-call-indirect"><span class="std std-ref">validation</span></a></p></td>
 <td><p><a class="reference internal" href="../exec/instructions.html#exec-call-indirect"><span class="std std-ref">execution</span></a></p></td>
 </tr>
-<tr class="row-even"><td><p>(reserved)</p></td>
+<tr class="row-even"><td><p><span class="math notranslate nohighlight">\(\href{../syntax/instructions.html#syntax-instr-control}{\mathsf{return\_call}}~x\)</span></p></td>
 <td><p><span class="math notranslate nohighlight">\(\def\mathdef294#1{\mathtt{0x#1}}\mathdef294{12}\)</span></p></td>
-<td></td>
-<td></td>
-<td></td>
+<td><p><span class="math notranslate nohighlight">\([t_1^\ast] \href{../syntax/types.html#syntax-functype}{\rightarrow} [t_2^\ast]\)</span></p></td>
+<td><p><a class="reference internal" href="../valid/instructions.html#valid-return-call"><span class="std std-ref">validation</span></a></p></td>
+<td><p><a class="reference internal" href="../exec/instructions.html#exec-return-call"><span class="std std-ref">execution</span></a></p></td>
 </tr>
-<tr class="row-odd"><td><p>(reserved)</p></td>
+<tr class="row-odd"><td><p><span class="math notranslate nohighlight">\(\href{../syntax/instructions.html#syntax-instr-control}{\mathsf{return\_call\_indirect}}~x\)</span></p></td>
 <td><p><span class="math notranslate nohighlight">\(\def\mathdef295#1{\mathtt{0x#1}}\mathdef295{13}\)</span></p></td>
-<td></td>
-<td></td>
-<td></td>
+<td><p><span class="math notranslate nohighlight">\([t_1^\ast~\href{../syntax/types.html#syntax-valtype}{\mathsf{i32}}] \href{../syntax/types.html#syntax-functype}{\rightarrow} [t_2^\ast]\)</span></p></td>
+<td><p><a class="reference internal" href="../valid/instructions.html#valid-return-call-indirect"><span class="std std-ref">validation</span></a></p></td>
+<td><p><a class="reference internal" href="../exec/instructions.html#exec-return-call-indirect"><span class="std std-ref">execution</span></a></p></td>
 </tr>
-<tr class="row-even"><td><p>(reserved)</p></td>
+<tr class="row-even"><td><p><span class="math notranslate nohighlight">\(\href{../syntax/instructions.html#syntax-instr-control}{\mathsf{call\_ref}}\)</span></p></td>
 <td><p><span class="math notranslate nohighlight">\(\def\mathdef296#1{\mathtt{0x#1}}\mathdef296{14}\)</span></p></td>
-<td></td>
-<td></td>
-<td></td>
+<td><p><span class="math notranslate nohighlight">\([t_1^\ast~(\href{../syntax/types.html#syntax-reftype}{\mathsf{ref}}~\href{../syntax/types.html#syntax-reftype}{\mathsf{null}}~x)] \href{../syntax/types.html#syntax-functype}{\rightarrow} [t_2^\ast]\)</span></p></td>
+<td><p><a class="reference internal" href="../valid/instructions.html#valid-call-ref"><span class="std std-ref">validation</span></a></p></td>
+<td><p><a class="reference internal" href="../exec/instructions.html#exec-call-ref"><span class="std std-ref">execution</span></a></p></td>
 </tr>
 <tr class="row-odd"><td><p>(reserved)</p></td>
 <td><p><span class="math notranslate nohighlight">\(\def\mathdef297#1{\mathtt{0x#1}}\mathdef297{15}\)</span></p></td>
@@ -1343,35 +1343,35 @@
 <td></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><span class="math notranslate nohighlight">\(\href{../syntax/instructions.html#syntax-instr-ref}{\mathsf{ref{.}null}}~t\)</span></p></td>
+<tr class="row-even"><td><p><span class="math notranslate nohighlight">\(\href{../syntax/instructions.html#syntax-instr-ref}{\mathsf{ref{.}null}}~\mathit{ht}\)</span></p></td>
 <td><p><span class="math notranslate nohighlight">\(\def\mathdef484#1{\mathtt{0x#1}}\mathdef484{D0}\)</span></p></td>
-<td><p><span class="math notranslate nohighlight">\([] \href{../syntax/types.html#syntax-functype}{\rightarrow} [t]\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\([] \href{../syntax/types.html#syntax-functype}{\rightarrow} [(\href{../syntax/types.html#syntax-reftype}{\mathsf{ref}}~\href{../syntax/types.html#syntax-reftype}{\mathsf{null}}~\mathit{ht})]\)</span></p></td>
 <td><p><a class="reference internal" href="../valid/instructions.html#valid-ref-null"><span class="std std-ref">validation</span></a></p></td>
 <td><p><a class="reference internal" href="../exec/instructions.html#exec-ref-null"><span class="std std-ref">execution</span></a></p></td>
 </tr>
 <tr class="row-odd"><td><p><span class="math notranslate nohighlight">\(\href{../syntax/instructions.html#syntax-instr-ref}{\mathsf{ref{.}is\_null}}\)</span></p></td>
 <td><p><span class="math notranslate nohighlight">\(\def\mathdef485#1{\mathtt{0x#1}}\mathdef485{D1}\)</span></p></td>
-<td><p><span class="math notranslate nohighlight">\([t] \href{../syntax/types.html#syntax-functype}{\rightarrow} [\href{../syntax/types.html#syntax-valtype}{\mathsf{i32}}]\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\([(\href{../syntax/types.html#syntax-reftype}{\mathsf{ref}}~\href{../syntax/types.html#syntax-reftype}{\mathsf{null}}~\mathit{ht})] \href{../syntax/types.html#syntax-functype}{\rightarrow} [\href{../syntax/types.html#syntax-valtype}{\mathsf{i32}}]\)</span></p></td>
 <td><p><a class="reference internal" href="../valid/instructions.html#valid-ref-is-null"><span class="std std-ref">validation</span></a></p></td>
 <td><p><a class="reference internal" href="../exec/instructions.html#exec-ref-is-null"><span class="std std-ref">execution</span></a></p></td>
 </tr>
 <tr class="row-even"><td><p><span class="math notranslate nohighlight">\(\href{../syntax/instructions.html#syntax-instr-ref}{\mathsf{ref{.}func}}~x\)</span></p></td>
 <td><p><span class="math notranslate nohighlight">\(\def\mathdef486#1{\mathtt{0x#1}}\mathdef486{D2}\)</span></p></td>
-<td><p><span class="math notranslate nohighlight">\([] \href{../syntax/types.html#syntax-functype}{\rightarrow} [\href{../syntax/types.html#syntax-reftype}{\mathsf{funcref}}]\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\([] \href{../syntax/types.html#syntax-functype}{\rightarrow} [\href{../syntax/types.html#syntax-heaptype}{\mathsf{funcref}}]\)</span></p></td>
 <td><p><a class="reference internal" href="../valid/instructions.html#valid-ref-func"><span class="std std-ref">validation</span></a></p></td>
 <td><p><a class="reference internal" href="../exec/instructions.html#exec-ref-func"><span class="std std-ref">execution</span></a></p></td>
 </tr>
-<tr class="row-odd"><td><p>(reserved)</p></td>
+<tr class="row-odd"><td><p><span class="math notranslate nohighlight">\(\href{../syntax/instructions.html#syntax-instr-ref}{\mathsf{ref{.}as\_non\_null}}\)</span></p></td>
 <td><p><span class="math notranslate nohighlight">\(\def\mathdef487#1{\mathtt{0x#1}}\mathdef487{D3}\)</span></p></td>
-<td></td>
-<td></td>
-<td></td>
+<td><p><span class="math notranslate nohighlight">\([(\href{../syntax/types.html#syntax-reftype}{\mathsf{ref}}~\href{../syntax/types.html#syntax-reftype}{\mathsf{null}}~\mathit{ht})] \href{../syntax/types.html#syntax-functype}{\rightarrow} [(\href{../syntax/types.html#syntax-reftype}{\mathsf{ref}}~\mathit{ht})]\)</span></p></td>
+<td><p><a class="reference internal" href="../valid/instructions.html#valid-ref-as-non-null"><span class="std std-ref">validation</span></a></p></td>
+<td><p><a class="reference internal" href="../exec/instructions.html#exec-ref-as-non-null"><span class="std std-ref">execution</span></a></p></td>
 </tr>
-<tr class="row-even"><td><p>(reserved)</p></td>
+<tr class="row-even"><td><p><span class="math notranslate nohighlight">\(\href{../syntax/instructions.html#syntax-instr-control}{\mathsf{br\_on\_null}}~l\)</span></p></td>
 <td><p><span class="math notranslate nohighlight">\(\def\mathdef488#1{\mathtt{0x#1}}\mathdef488{D4}\)</span></p></td>
-<td></td>
-<td></td>
-<td></td>
+<td><p><span class="math notranslate nohighlight">\([t^\ast~(\href{../syntax/types.html#syntax-reftype}{\mathsf{ref}}~\href{../syntax/types.html#syntax-reftype}{\mathsf{null}}~\mathit{ht})] \href{../syntax/types.html#syntax-functype}{\rightarrow} [t^\ast~(\href{../syntax/types.html#syntax-reftype}{\mathsf{ref}}~\mathit{ht})]\)</span></p></td>
+<td><p><a class="reference internal" href="../valid/instructions.html#valid-br-on-null"><span class="std std-ref">validation</span></a></p></td>
+<td><p><a class="reference internal" href="../exec/instructions.html#exec-br-on-null"><span class="std std-ref">execution</span></a></p></td>
 </tr>
 <tr class="row-odd"><td><p>(reserved)</p></td>
 <td><p><span class="math notranslate nohighlight">\(\def\mathdef489#1{\mathtt{0x#1}}\mathdef489{D5}\)</span></p></td>
@@ -1379,11 +1379,11 @@
 <td></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p>(reserved)</p></td>
+<tr class="row-even"><td><p><span class="math notranslate nohighlight">\(\href{../syntax/instructions.html#syntax-instr-control}{\mathsf{br\_on\_non\_null}}~l\)</span></p></td>
 <td><p><span class="math notranslate nohighlight">\(\def\mathdef490#1{\mathtt{0x#1}}\mathdef490{D6}\)</span></p></td>
-<td></td>
-<td></td>
-<td></td>
+<td><p><span class="math notranslate nohighlight">\([t^\ast~(\href{../syntax/types.html#syntax-reftype}{\mathsf{ref}}~\href{../syntax/types.html#syntax-reftype}{\mathsf{null}}~\mathit{ht})] \href{../syntax/types.html#syntax-functype}{\rightarrow} [t^\ast]\)</span></p></td>
+<td><p><a class="reference internal" href="../valid/instructions.html#valid-br-on-non-null"><span class="std std-ref">validation</span></a></p></td>
+<td><p><a class="reference internal" href="../exec/instructions.html#exec-br-on-non-null"><span class="std std-ref">execution</span></a></p></td>
 </tr>
 <tr class="row-odd"><td><p>(reserved)</p></td>
 <td><p><span class="math notranslate nohighlight">\(\def\mathdef491#1{\mathtt{0x#1}}\mathdef491{D7}\)</span></p></td>
@@ -3143,7 +3143,7 @@
     <div class="clearer"></div>
   </div>
     <div class="footer">
-      &copy;2017, WebAssembly Community Group.
+      &copy;2017-2021, WebAssembly Community Group.
       
     </div>
 

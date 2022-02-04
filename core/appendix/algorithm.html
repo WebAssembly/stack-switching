@@ -95,23 +95,55 @@ Consequently, it can be integrated directly into a decoder.</p>
 <p>The algorithm is expressed in typed pseudo code whose semantics is intended to be self-explanatory.</p>
 <section id="data-structures">
 <span id="index-1"></span><h2>Data Structures<a class="headerlink" href="#data-structures" title="Permalink to this headline">¶</a></h2>
-<p>Types are representable as an enumeration.</p>
-<div class="highlight-pseudo notranslate"><div class="highlight"><pre><span></span><span class="k">type</span> <span class="nf">val_type</span> = I32 | I64 | F32 | F64 | V128 | Funcref | Externref
+<p>Types are representable as a set of enumerations.</p>
+<div class="highlight-pseudo notranslate"><div class="highlight"><pre><span></span><span class="k">type</span> <span class="nf">num_type</span> = I32 | I64 | F32 | F64
+<span class="k">type</span> <span class="nf">vec_type</span> = V128
+<span class="k">type</span> <span class="nf">heap_type</span> = Def(<span class="nf">idx</span> : nat) | Func | Extern | Bot
+<span class="k">type</span> <span class="nf">ref_type</span> = Ref(<span class="nf">heap</span> : heap_type, <span class="nf">null</span> : bool)
+<span class="k">type</span> <span class="nf">val_type</span> = num_type | vec_type | ref_type | Bot
 
-<span class="k">func</span> <span class="nf">is_num</span>(<span class="nf">t</span> : val_type | Unknown) : bool =
-  <span class="k">return</span> t = I32 || t = I64 || t = F32 || t = F64 || t = Unknown
+<span class="k">func</span> <span class="nf">is_num</span>(<span class="nf">t</span> : val_type) : bool =
+  <span class="k">return</span> t = I32 || t = I64 || t = F32 || t = F64 || t = Bot
 
 <span class="k">func</span> <span class="nf">is_vec</span>(<span class="nf">t</span> : val_type | Unknown) : bool =
   <span class="k">return</span> t = V128 || t = Unknown
 
 <span class="k">func</span> <span class="nf">is_ref</span>(<span class="nf">t</span> : val_type | Unknown) : bool =
-  <span class="k">return</span> t = Funcref || t = Externref || t = Unknown
+  <span class="k">return</span> t = not (is_num t || is_vec t) || t = Bot
+</pre></div>
+</div>
+<p>Equivalence and subtyping checks can be defined on these types.</p>
+<div class="highlight-pseudo notranslate"><div class="highlight"><pre><span></span><span class="k">func</span> <span class="nf">eq_def</span>(n1, n2) =
+  ...  // check that both <span class="k">type</span> <span class="nf">definitions</span> are equivalent (TODO)
+
+<span class="k">func</span> <span class="nf">matches_null</span>(<span class="nf">null1</span> : bool, <span class="nf">null2</span> : bool) : bool =
+  <span class="k">return</span> null1 = null2 || null2
+
+<span class="k">func</span> <span class="nf">matches_heap</span>(<span class="nf">t1</span> : heap_type, <span class="nf">t2</span> : heap_type) : bool =
+  <span class="k">switch</span> (t1, t2)
+    <span class="k">case</span> (Def(n1), Def(n2))
+      <span class="k">return</span> eq_def(n1, n2)
+    <span class="k">case</span> (Def(_), Func)
+      <span class="k">return</span> true
+    <span class="k">case</span> (Bot, _)
+      <span class="k">return</span> true
+    <span class="k">case</span> (_, _)
+      <span class="k">return</span> t1 = t2
+
+<span class="k">func</span> <span class="nf">matches_ref</span>(<span class="nf">t1</span> : ref_type, <span class="nf">t2</span> : ref_type) : bool =
+  <span class="k">return</span> matches_heap(t1.heap, t2.heap) &amp;&amp; matches_null(t1.null, t2.null)
+
+<span class="k">func</span> <span class="nf">matches</span>(<span class="nf">t1</span> : val_type, <span class="nf">t2</span> : val_type) : bool =
+  <span class="k">return</span>
+    (is_num t1 &amp;&amp; is_num t2 &amp; t1 = t2) ||
+    (is_ref t1 &amp;&amp; is_ref t2 &amp; matches_ref(t1, t2)) ||
+    t1 = Bot
 </pre></div>
 </div>
 <p>The algorithm uses two separate stacks: the <em>value stack</em> and the <em>control stack</em>.
 The former tracks the <a class="reference internal" href="../syntax/types.html#syntax-valtype"><span class="std std-ref">types</span></a> of operand values on the <a class="reference internal" href="../exec/runtime.html#stack"><span class="std std-ref">stack</span></a>,
 the latter surrounding <a class="reference internal" href="../syntax/instructions.html#syntax-instr-control"><span class="std std-ref">structured control instructions</span></a> and their associated <a class="reference internal" href="../syntax/instructions.html#syntax-instr-control"><span class="std std-ref">blocks</span></a>.</p>
-<div class="highlight-pseudo notranslate"><div class="highlight"><pre><span></span><span class="k">type</span> <span class="nf">val_stack</span> = stack(val_type | Unknown)
+<div class="highlight-pseudo notranslate"><div class="highlight"><pre><span></span><span class="k">type</span> <span class="nf">val_stack</span> = stack(val_type)
 
 <span class="k">type</span> <span class="nf">ctrl_stack</span> = stack(ctrl_frame)
 <span class="k">type</span> <span class="nf">ctrl_frame</span> = {
@@ -123,25 +155,36 @@ the latter surrounding <a class="reference internal" href="../syntax/instruction
 }
 </pre></div>
 </div>
-<p>For each value, the value stack records its <a class="reference internal" href="../syntax/types.html#syntax-valtype"><span class="std std-ref">value type</span></a>, or <code class="code docutils literal notranslate"><span class="pre">Unknown</span></code> when the type is not known.</p>
-<p>For each entered block, the control stack records a <em>control frame</em> with the originating opcode, the types on the top of the operand stack at the start and end of the block (used to check its result as well as branches), the height of the operand stack at the start of the block (used to check that operands do not underflow the current block), and a flag recording whether the remainder of the block is unreachable (used to handle <a class="reference internal" href="../valid/instructions.html#polymorphism"><span class="std std-ref">stack-polymorphic</span></a> typing after branches).</p>
+<p>For each value, the value stack records its <a class="reference internal" href="../syntax/types.html#syntax-valtype"><span class="std std-ref">value type</span></a>.
+For each entered block, the control stack records a <em>control frame</em> with the originating opcode, the types on the top of the operand stack at the start and end of the block (used to check its result as well as branches), the height of the operand stack at the start of the block (used to check that operands do not underflow the current block), and a flag recording whether the remainder of the block is unreachable (used to handle <a class="reference internal" href="../valid/instructions.html#polymorphism"><span class="std std-ref">stack-polymorphic</span></a> typing after branches).</p>
 <p>For the purpose of presenting the algorithm, the operand and control stacks are simply maintained as global variables:</p>
 <div class="highlight-pseudo notranslate"><div class="highlight"><pre><span></span><span class="k">var</span> <span class="nf">vals</span> : val_stack
 <span class="k">var</span> <span class="nf">ctrls</span> : ctrl_stack
 </pre></div>
 </div>
 <p>However, these variables are not manipulated directly by the main checking function, but through a set of auxiliary functions:</p>
-<div class="highlight-pseudo notranslate"><div class="highlight"><pre><span></span><span class="k">func</span> <span class="nf">push_val</span>(<span class="nf">type</span> : val_type | Unknown) =
+<div class="highlight-pseudo notranslate"><div class="highlight"><pre><span></span><span class="k">func</span> <span class="nf">push_val</span>(<span class="nf">type</span> : val_type) =
   vals.push(type)
 
-<span class="k">func</span> <span class="nf">pop_val</span>() : val_type | Unknown =
-  <span class="k">if</span> (vals.size() = ctrls[0].height &amp;&amp; ctrls[0].unreachable) <span class="k">return</span> Unknown
+<span class="k">func</span> <span class="nf">pop_val</span>() : val_type =
+  <span class="k">if</span> (vals.size() = ctrls[0].height &amp;&amp; ctrls[0].unreachable) <span class="k">return</span> Bot
   error_if(vals.size() = ctrls[0].height)
   <span class="k">return</span> vals.pop()
 
-<span class="k">func</span> <span class="nf">pop_val</span>(<span class="nf">expect</span> : val_type | Unknown) : val_type | Unknown =
+<span class="k">func</span> <span class="nf">pop_val</span>(<span class="nf">expect</span> : val_type) : val_type =
   <span class="k">let</span> <span class="nf">actual</span> = pop_val()
-  error_if(actual =/= expect &amp;&amp; actual =/= Unknown &amp;&amp; expect =/= Unknown)
+  error_if(not matches(actual, expect))
+  <span class="k">return</span> actual
+
+<span class="k">func</span> <span class="nf">pop_num</span>() : num_type | Bot =
+  <span class="k">let</span> <span class="nf">actual</span> = pop_val()
+  error_if(not is_num(actual))
+  <span class="k">return</span> actual
+
+<span class="k">func</span> <span class="nf">pop_ref</span>() : ref_type =
+  <span class="k">let</span> <span class="nf">actual</span> = pop_val()
+  error_if(not is_ref(actual))
+  <span class="k">if</span> actual = Bot then <span class="k">return</span> Ref(Bot, false)
   <span class="k">return</span> actual
 
 <span class="k">func</span> <span class="nf">push_vals</span>(<span class="nf">types</span> : list(val_type)) = <span class="k">foreach</span> (t <span class="k">in</span> types) push_val(t)
@@ -155,9 +198,9 @@ the latter surrounding <a class="reference internal" href="../syntax/instruction
 <p>Popping an operand value checks that the value stack does not underflow the current block and then removes one type.
 But first, a special case is handled where the block contains no known values, but has been marked as unreachable.
 That can occur after an unconditional branch, when the stack is typed <a class="reference internal" href="../valid/instructions.html#polymorphism"><span class="std std-ref">polymorphically</span></a>.
-In that case, an unknown type is returned.</p>
+In that case, the <code class="code docutils literal notranslate"><span class="pre">Bot</span></code> type is returned, because that is a <em>principal</em> choice trivially satisfying all use constraints.</p>
 <p>A second function for popping an operand value takes an expected type, which the actual operand type is checked against.
-The types may differ in case one of them is Unknown.
+The types may differ by subtyping, including the case where the actual type is <code class="code docutils literal notranslate"><span class="pre">Bot</span></code>, and thereby matches unconditionally.
 The function returns the actual type popped from the stack.</p>
 <p>Finally, there are accumulative functions for pushing or popping multiple operand types.</p>
 <div class="admonition note">
@@ -199,7 +242,7 @@ In that case, all existing operand types are purged from the value stack, in ord
 <p class="admonition-title">Note</p>
 <p>Even with the unreachable flag set, consecutive operands are still pushed to and popped from the operand stack.
 That is necessary to detect invalid <a class="reference internal" href="../valid/instructions.html#polymorphism"><span class="std std-ref">examples</span></a> like <span class="math notranslate nohighlight">\((\href{../syntax/instructions.html#syntax-instr-control}{\mathsf{unreachable}}~(\href{../syntax/types.html#syntax-valtype}{\mathsf{i32}}.\href{../syntax/instructions.html#syntax-instr-numeric}{\mathsf{const}})~\href{../syntax/types.html#syntax-valtype}{\mathsf{i64}}.\href{../syntax/instructions.html#syntax-instr-numeric}{\mathsf{add}})\)</span>.
-However, a polymorphic stack cannot underflow, but instead generates <code class="code docutils literal notranslate"><span class="pre">Unknown</span></code> types as needed.</p>
+However, a polymorphic stack cannot underflow, but instead generates <code class="code docutils literal notranslate"><span class="pre">Bot</span></code> types as needed.</p>
 </div>
 </section>
 <section id="validation-of-opcode-sequences">
@@ -225,15 +268,23 @@ That is an easy addition and therefore omitted from this presentation.</p>
       pop_val(I32)
       <span class="k">let</span> <span class="nf">t1</span> = pop_val()
       <span class="k">let</span> <span class="nf">t2</span> = pop_val()
-      error_if(not ((is_num(t1) &amp;&amp; is_num(t2)) || (is_vec(t1) &amp;&amp; is_vec(t2))))
-      error_if(t1 =/= t2 &amp;&amp; t1 =/= Unknown &amp;&amp; t2 =/= Unknown)
-      push_val(if (t1 = Unknown) t2 else t1)
+      error_if(not (is_num(t1) &amp;&amp; is_num(t2) || is_vec(t1) &amp;&amp; is_vec(t2)))
+      error_if(t1 =/= t2 &amp;&amp; t1 =/= Bot &amp;&amp; t2 =/= Bot)
+      push_val(if (t1 == Bot) t2 else t1)
 
     <span class="k">case</span> (select t)
       pop_val(I32)
       pop_val(t)
       pop_val(t)
       push_val(t)
+
+    <span class="k">case</span> (ref.is_null)
+      pop_ref()
+      push_val(I32)
+
+    <span class="k">case</span> (ref.as_non_null)
+      <span class="k">let</span> <span class="nf">rt</span> = pop_ref()
+      push_val(Ref(rt.heap, false))
 
     <span class="k">case</span> (unreachable)
       unreachable()
@@ -281,6 +332,21 @@ That is an easy addition and therefore omitted from this presentation.</p>
         push_vals(pop_vals(label_types(ctrls[n])))
       pop_vals(label_types(ctrls[m]))
       unreachable()
+
+    <span class="k">case</span> (br_on_null n)
+      error_if(ctrls.size() &lt; n)
+      <span class="k">let</span> <span class="nf">rt</span> = pop_ref()
+      pop_vals(label_types(ctrls[n]))
+      push_vals(label_types(ctrls[n]))
+      push_val(Ref(rt.heap, false))
+
+    <span class="k">case</span> (call_ref)
+      <span class="k">let</span> <span class="nf">rt</span> = pop_ref()
+      <span class="k">if</span> (rt.heap =/= Bot)
+        error_if(not is_def(rt.heap))
+        <span class="k">let</span> <span class="nf">ft</span> = lookup_func_type(rt.heap.idx)  // TODO
+        pop_vals(ft.params)
+        push_vals(ft.results)
 </pre></div>
 </div>
 <div class="admonition note">
@@ -300,7 +366,7 @@ Under such an extension, the above algorithm would need to be refined by replaci
     <div class="clearer"></div>
   </div>
     <div class="footer">
-      &copy;2017, WebAssembly Community Group.
+      &copy;2017-2021, WebAssembly Community Group.
       
     </div>
 

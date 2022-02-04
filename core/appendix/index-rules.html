@@ -99,31 +99,31 @@
 </thead>
 <tbody>
 <tr class="row-even"><td><p><a class="reference internal" href="../valid/types.html#valid-limits"><span class="std std-ref">Limits</span></a></p></td>
-<td><p><span class="math notranslate nohighlight">\(\href{../valid/types.html#valid-limits}{\vdash} \href{../syntax/types.html#syntax-limits}{\mathit{limits}} : k\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(C \href{../valid/types.html#valid-limits}{\vdash} \href{../syntax/types.html#syntax-limits}{\mathit{limits}} : k\)</span></p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../valid/types.html#valid-functype"><span class="std std-ref">Function type</span></a></p></td>
-<td><p><span class="math notranslate nohighlight">\(\href{../valid/types.html#valid-functype}{\vdash} \href{../syntax/types.html#syntax-functype}{\mathit{functype}} \mathrel{\mbox{ok}}\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(C \href{../valid/types.html#valid-functype}{\vdash} \href{../syntax/types.html#syntax-functype}{\mathit{functype}} \mathrel{\mbox{ok}}\)</span></p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../valid/types.html#valid-blocktype"><span class="std std-ref">Block type</span></a></p></td>
-<td><p><span class="math notranslate nohighlight">\(\href{../valid/types.html#valid-blocktype}{\vdash} \href{../syntax/instructions.html#syntax-blocktype}{\mathit{blocktype}} \mathrel{\mbox{ok}}\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(C \href{../valid/types.html#valid-blocktype}{\vdash} \href{../syntax/instructions.html#syntax-blocktype}{\mathit{blocktype}} \mathrel{\mbox{ok}}\)</span></p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../valid/types.html#valid-tabletype"><span class="std std-ref">Table type</span></a></p></td>
-<td><p><span class="math notranslate nohighlight">\(\href{../valid/types.html#valid-tabletype}{\vdash} \href{../syntax/types.html#syntax-tabletype}{\mathit{tabletype}} \mathrel{\mbox{ok}}\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(C \href{../valid/types.html#valid-tabletype}{\vdash} \href{../syntax/types.html#syntax-tabletype}{\mathit{tabletype}} \mathrel{\mbox{ok}}\)</span></p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../valid/types.html#valid-memtype"><span class="std std-ref">Memory type</span></a></p></td>
-<td><p><span class="math notranslate nohighlight">\(\href{../valid/types.html#valid-memtype}{\vdash} \href{../syntax/types.html#syntax-memtype}{\mathit{memtype}} \mathrel{\mbox{ok}}\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(C \href{../valid/types.html#valid-memtype}{\vdash} \href{../syntax/types.html#syntax-memtype}{\mathit{memtype}} \mathrel{\mbox{ok}}\)</span></p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../valid/types.html#valid-globaltype"><span class="std std-ref">Global type</span></a></p></td>
-<td><p><span class="math notranslate nohighlight">\(\href{../valid/types.html#valid-globaltype}{\vdash} \href{../syntax/types.html#syntax-globaltype}{\mathit{globaltype}} \mathrel{\mbox{ok}}\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(C \href{../valid/types.html#valid-globaltype}{\vdash} \href{../syntax/types.html#syntax-globaltype}{\mathit{globaltype}} \mathrel{\mbox{ok}}\)</span></p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../valid/types.html#valid-externtype"><span class="std std-ref">External type</span></a></p></td>
-<td><p><span class="math notranslate nohighlight">\(\href{../valid/types.html#valid-externtype}{\vdash} \href{../syntax/types.html#syntax-externtype}{\mathit{externtype}} \mathrel{\mbox{ok}}\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(C \href{../valid/types.html#valid-externtype}{\vdash} \href{../syntax/types.html#syntax-externtype}{\mathit{externtype}} \mathrel{\mbox{ok}}\)</span></p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../valid/instructions.html#valid-instr"><span class="std std-ref">Instruction</span></a></p></td>
-<td><p><span class="math notranslate nohighlight">\(S;C \href{../valid/instructions.html#valid-instr}{\vdash} \href{../syntax/instructions.html#syntax-instr}{\mathit{instr}} : \href{../syntax/types.html#syntax-stacktype}{\mathit{stacktype}}\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(S;C \href{../valid/instructions.html#valid-instr}{\vdash} \href{../syntax/instructions.html#syntax-instr}{\mathit{instr}} : \href{../syntax/types.html#syntax-functype}{\mathit{functype}}\)</span></p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../valid/instructions.html#valid-instr-seq"><span class="std std-ref">Instruction sequence</span></a></p></td>
-<td><p><span class="math notranslate nohighlight">\(S;C \href{../valid/instructions.html#valid-instr-seq}{\vdash} \href{../syntax/instructions.html#syntax-instr}{\mathit{instr}}^\ast : \href{../syntax/types.html#syntax-stacktype}{\mathit{stacktype}}\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(S;C \href{../valid/instructions.html#valid-instr-seq}{\vdash} \href{../syntax/instructions.html#syntax-instr}{\mathit{instr}}^\ast : \href{../syntax/types.html#syntax-functype}{\mathit{functype}}\)</span></p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../valid/instructions.html#valid-expr"><span class="std std-ref">Expression</span></a></p></td>
 <td><p><span class="math notranslate nohighlight">\(C \href{../valid/instructions.html#valid-expr}{\vdash} \href{../syntax/instructions.html#syntax-expr}{\mathit{expr}} : \href{../syntax/types.html#syntax-resulttype}{\mathit{resulttype}}\)</span></p></td>
@@ -269,11 +269,38 @@
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><a class="reference internal" href="../valid/types.html#match-externtype"><span class="std std-ref">External type</span></a></p></td>
-<td><p><span class="math notranslate nohighlight">\(\href{../exec/modules.html#match-externtype}{\vdash} \href{../syntax/types.html#syntax-externtype}{\mathit{externtype}}_1 \href{../exec/modules.html#match-externtype}{\leq} \href{../syntax/types.html#syntax-externtype}{\mathit{externtype}}_2\)</span></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../valid/matching.html#match-numtype"><span class="std std-ref">Number type</span></a></p></td>
+<td><p><span class="math notranslate nohighlight">\(C \href{../valid/matching.html#match-numtype}{\vdash} \href{../syntax/types.html#syntax-numtype}{\mathit{numtype}}_1 \href{../valid/matching.html#match-numtype}{\leq} \href{../syntax/types.html#syntax-numtype}{\mathit{numtype}}_2\)</span></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../valid/types.html#match-limits"><span class="std std-ref">Limits</span></a></p></td>
-<td><p><span class="math notranslate nohighlight">\(\href{../exec/modules.html#match-limits}{\vdash} \href{../syntax/types.html#syntax-limits}{\mathit{limits}}_1 \href{../exec/modules.html#match-limits}{\leq} \href{../syntax/types.html#syntax-limits}{\mathit{limits}}_2\)</span></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../valid/matching.html#match-heaptype"><span class="std std-ref">Heap type</span></a></p></td>
+<td><p><span class="math notranslate nohighlight">\(C \href{../valid/matching.html#match-heaptype}{\vdash} \href{../syntax/types.html#syntax-heaptype}{\mathit{heaptype}}_1 \href{../valid/matching.html#match-heaptype}{\leq} \href{../syntax/types.html#syntax-heaptype}{\mathit{heaptype}}_2\)</span></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../valid/matching.html#match-reftype"><span class="std std-ref">Reference type</span></a></p></td>
+<td><p><span class="math notranslate nohighlight">\(C \href{../valid/matching.html#match-reftype}{\vdash} \href{../syntax/types.html#syntax-reftype}{\mathit{reftype}}_1 \href{../valid/matching.html#match-reftype}{\leq} \href{../syntax/types.html#syntax-reftype}{\mathit{reftype}}_2\)</span></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../valid/matching.html#match-valtype"><span class="std std-ref">Value type</span></a></p></td>
+<td><p><span class="math notranslate nohighlight">\(C \href{../valid/matching.html#match-valtype}{\vdash} \href{../syntax/types.html#syntax-valtype}{\mathit{valtype}}_1 \href{../valid/matching.html#match-valtype}{\leq} \href{../syntax/types.html#syntax-valtype}{\mathit{valtype}}_2\)</span></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../valid/matching.html#match-resulttype"><span class="std std-ref">Result type</span></a></p></td>
+<td><p><span class="math notranslate nohighlight">\(C \href{../valid/matching.html#match-resulttype}{\vdash} \href{../syntax/types.html#syntax-resulttype}{\mathit{resulttype}}_1 \href{../valid/matching.html#match-resulttype}{\leq} \href{../syntax/types.html#syntax-resulttype}{\mathit{resulttype}}_2\)</span></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../valid/matching.html#match-functype"><span class="std std-ref">Function type</span></a></p></td>
+<td><p><span class="math notranslate nohighlight">\(C \href{../valid/matching.html#match-functype}{\vdash} \href{../syntax/types.html#syntax-functype}{\mathit{functype}}_1 \href{../valid/matching.html#match-functype}{\leq} \href{../syntax/types.html#syntax-functype}{\mathit{functype}}_2\)</span></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../valid/matching.html#match-tabletype"><span class="std std-ref">Table type</span></a></p></td>
+<td><p><span class="math notranslate nohighlight">\(C \href{../valid/matching.html#match-tabletype}{\vdash} \href{../syntax/types.html#syntax-tabletype}{\mathit{tabletype}}_1 \href{../valid/matching.html#match-tabletype}{\leq} \href{../syntax/types.html#syntax-tabletype}{\mathit{tabletype}}_2\)</span></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../valid/matching.html#match-memtype"><span class="std std-ref">Memory type</span></a></p></td>
+<td><p><span class="math notranslate nohighlight">\(C \href{../valid/matching.html#match-memtype}{\vdash} \href{../syntax/types.html#syntax-memtype}{\mathit{memtype}}_1 \href{../valid/matching.html#match-memtype}{\leq} \href{../syntax/types.html#syntax-memtype}{\mathit{memtype}}_2\)</span></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../valid/matching.html#match-globaltype"><span class="std std-ref">Global type</span></a></p></td>
+<td><p><span class="math notranslate nohighlight">\(C \href{../valid/matching.html#match-globaltype}{\vdash} \href{../syntax/types.html#syntax-globaltype}{\mathit{globaltype}}_1 \href{../valid/matching.html#match-globaltype}{\leq} \href{../syntax/types.html#syntax-globaltype}{\mathit{globaltype}}_2\)</span></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../valid/matching.html#match-externtype"><span class="std std-ref">External type</span></a></p></td>
+<td><p><span class="math notranslate nohighlight">\(C \href{../valid/matching.html#match-externtype}{\vdash} \href{../syntax/types.html#syntax-externtype}{\mathit{externtype}}_1 \href{../valid/matching.html#match-externtype}{\leq} \href{../syntax/types.html#syntax-externtype}{\mathit{externtype}}_2\)</span></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../valid/matching.html#match-limits"><span class="std std-ref">Limits</span></a></p></td>
+<td><p><span class="math notranslate nohighlight">\(C \href{../valid/matching.html#match-limits}{\vdash} \href{../syntax/types.html#syntax-limits}{\mathit{limits}}_1 \href{../valid/matching.html#match-limits}{\leq} \href{../syntax/types.html#syntax-limits}{\mathit{limits}}_2\)</span></p></td>
 </tr>
 </tbody>
 </table>
@@ -347,7 +374,7 @@
     <div class="clearer"></div>
   </div>
     <div class="footer">
-      &copy;2017, WebAssembly Community Group.
+      &copy;2017-2021, WebAssembly Community Group.
       
     </div>
 
