@@ -92,6 +92,10 @@ struct
 
   open Types
 
+  let var_type = function
+    | SynVar x -> vs33 x
+    | SemVar _ -> assert false
+
   let num_type = function
     | I32Type -> vs7 (-0x01)
     | I64Type -> vs7 (-0x02)
@@ -101,18 +105,29 @@ struct
   let vec_type = function
     | V128Type -> vs7 (-0x05)
 
+  let heap_type = function
+    | FuncHeapType -> vs7 (-0x10)
+    | ExternHeapType -> vs7 (-0x11)
+    | DefHeapType x -> var_type x
+    | BotHeapType -> assert false
+
   let ref_type = function
-    | FuncRefType -> vs7 (-0x10)
-    | ExternRefType -> vs7 (-0x11)
+    | (Nullable, FuncHeapType) -> vs7 (-0x10)
+    | (Nullable, ExternHeapType) -> vs7 (-0x11)
+    | (Nullable, t) -> vs7 (-0x14); heap_type t
+    | (NonNullable, t) -> vs7 (-0x15); heap_type t
 
   let value_type = function
     | NumType t -> num_type t
     | VecType t -> vec_type t
     | RefType t -> ref_type t
+    | BotType -> assert false
 
   let func_type = function
-    | FuncType (ts1, ts2) ->
-      vs7 (-0x20); vec value_type ts1; vec value_type ts2
+    | FuncType (ts1, ts2) -> vec value_type ts1; vec value_type ts2
+
+  let def_type = function
+    | FuncDefType ft -> vs7 (-0x20); func_type ft
 
   let limits vu {min; max} =
     bool (max <> None); vu min; opt vu max
@@ -130,11 +145,12 @@ struct
   let global_type = function
     | GlobalType (t, mut) -> value_type t; mutability mut
 
+
   (* Expressions *)
 
   open Source
   open Ast
-  open Values
+  open Value
   open V128
 
   let op n = u8 n
@@ -146,9 +162,17 @@ struct
   let var x = vu32 x.it
 
   let block_type = function
-    | VarBlockType x -> vs33 x.it
-    | ValBlockType None -> vs7 (-0x40)
+    | ValBlockType None -> vs33 (-0x40l)
     | ValBlockType (Some t) -> value_type t
+    | VarBlockType (SynVar x) -> vs33 x
+    | VarBlockType (SemVar _) -> assert false
+
+  let local (t, n) = len n; value_type t.it
+  let locals locs =
+  let combine t = function
+    | (t', n) :: ts when t.it = t'.it -> (t, n + 1) :: ts
+    | ts -> (t, 1) :: ts
+  in vec local (List.fold_right combine locs [])
 
   let rec instr e =
     match e.it with
@@ -161,13 +185,20 @@ struct
       op 0x04; block_type bt; list instr es1;
       if es2 <> [] then op 0x05;
       list instr es2; end_ ()
+    | Let (bt, locs, es) ->
+      op 0x17; block_type bt; locals locs; list instr es; end_ ()
 
     | Br x -> op 0x0c; var x
     | BrIf x -> op 0x0d; var x
     | BrTable (xs, x) -> op 0x0e; vec var xs; var x
+    | BrOnNull x -> op 0xd4; var x
+    | BrOnNonNull x -> op 0xd6; var x
     | Return -> op 0x0f
     | Call x -> op 0x10; var x
+    | CallRef -> op 0x14
     | CallIndirect (x, y) -> op 0x11; var y; var x
+    | ReturnCallRef -> op 0x15
+    | FuncBind x -> op 0x16; var x
 
     | Drop -> op 0x1a
     | Select None -> op 0x1b
@@ -287,9 +318,10 @@ struct
     | MemoryInit x -> op 0xfc; vu32 0x08l; var x; u8 0x00
     | DataDrop x -> op 0xfc; vu32 0x09l; var x
 
-    | RefNull t -> op 0xd0; ref_type t
-    | RefIsNull -> op 0xd1
+    | RefNull t -> op 0xd0; heap_type t
     | RefFunc x -> op 0xd2; var x
+    | RefIsNull -> op 0xd1
+    | RefAsNonNull -> op 0xd3
 
     | Const {it = I32 c; _} -> op 0x41; vs32 c
     | Const {it = I64 c; _} -> op 0x42; vs64 c
@@ -714,7 +746,7 @@ struct
     end
 
   (* Type section *)
-  let type_ t = func_type t.it
+  let type_ t = def_type t.it
 
   let type_section ts =
     section 1 (vec type_) ts (ts <> [])
@@ -784,19 +816,11 @@ struct
     section 8 (opt var) xo (xo <> None)
 
   (* Code section *)
-  let compress ts =
-    let combine t = function
-      | (t', n) :: ts when t = t' -> (t, n + 1) :: ts
-      | ts -> (t, 1) :: ts
-    in List.fold_right combine ts []
-
-  let local (t, n) = len n; value_type t
-
   let code f =
-    let {locals; body; _} = f.it in
+    let {locals = locs; body; _} = f.it in
     let g = gap32 () in
     let p = pos s in
-    vec local (compress locals);
+    locals locs;
     list instr body;
     end_ ();
     patch_gap32 g (pos s - p)
@@ -806,11 +830,11 @@ struct
 
   (* Element section *)
   let is_elem_kind = function
-    | FuncRefType -> true
+    | (NonNullable, FuncHeapType) -> true
     | _ -> false
 
   let elem_kind = function
-    | FuncRefType -> u8 0x00
+    | (NonNullable, FuncHeapType) -> u8 0x00
     | _ -> assert false
 
   let is_elem_index e =
@@ -829,7 +853,7 @@ struct
       match emode.it with
       | Passive ->
         vu32 0x01l; elem_kind etype; vec elem_index einit
-      | Active {index; offset} when index.it = 0l && etype = FuncRefType ->
+      | Active {index; offset} when index.it = 0l ->
         vu32 0x00l; const offset; vec elem_index einit
       | Active {index; offset} ->
         vu32 0x02l;
@@ -840,7 +864,7 @@ struct
       match emode.it with
       | Passive ->
         vu32 0x05l; ref_type etype; vec const einit
-      | Active {index; offset} when index.it = 0l && etype = FuncRefType ->
+      | Active {index; offset} when index.it = 0l && is_elem_kind etype ->
         vu32 0x04l; const offset; vec const einit
       | Active {index; offset} ->
         vu32 0x06l; var index; const offset; ref_type etype; vec const einit

@@ -14,6 +14,7 @@ Runtime Structure
 .. _syntax-ref:
 .. _syntax-ref.extern:
 .. _syntax-val:
+.. _syntax-null:
 
 Values
 ~~~~~~
@@ -277,7 +278,7 @@ It records its :ref:`type <syntax-tabletype>` and holds a vector of :ref:`refere
 
 Table elements can be mutated through :ref:`table instructions <syntax-instr-table>`, the execution of an active :ref:`element segment <syntax-elem>`, or by external means provided by the :ref:`embedder <embedder>`.
 
-It is an invariant of the semantics that all table elements have a type equal to the element type of :math:`\tabletype`.
+It is an invariant of the semantics that all table elements have a type :ref:`matching <match-reftype>` the element type of :math:`\tabletype`.
 It also is an invariant that the length of the element vector never exceeds the maximum size of :math:`\tabletype`, if present.
 
 
@@ -325,7 +326,7 @@ It records its :ref:`type <syntax-globaltype>` and holds an individual :ref:`val
 
 The value of mutable globals can be mutated through :ref:`variable instructions <syntax-instr-variable>` or by external means provided by the :ref:`embedder <embedder>`.
 
-It is an invariant of the semantics that the value has a type equal to the :ref:`value type <syntax-valtype>` of :math:`\globaltype`.
+It is an invariant of the semantics that the value has a type :ref:`matching <match-valtype>` the :ref:`value type <syntax-valtype>` of :math:`\globaltype`.
 
 
 .. index:: ! element instance, element segment, embedder, element expression

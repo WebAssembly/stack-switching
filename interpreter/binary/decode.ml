@@ -14,6 +14,7 @@ let stream name bs = {name; bytes = bs; pos = ref 0}
 let len s = String.length s.bytes
 let pos s = !(s.pos)
 let eos s = (pos s = len s)
+let reset s pos = s.pos := pos
 
 let check n s = if pos s + n > len s then raise EOS
 let skip n s = if n < 0 then raise EOS else check n s; s.pos := !(s.pos) + n
@@ -119,6 +120,13 @@ let rec list f n s = if n = 0 then [] else let x = f s in x :: list f (n - 1) s
 let opt f b s = if b then Some (f s) else None
 let vec f s = let n = len32 s in list f n s
 
+let rec either fs s =
+  match fs with
+  | [] -> assert false
+  | [f] -> f s
+  | f::fs' ->
+    let pos = pos s in try f s with Code _ -> reset s pos; either fs' s
+
 let name s =
   let pos = pos s in
   try Utf8.decode (string s) with Utf8.Utf8 ->
@@ -149,26 +157,48 @@ let vec_type s =
   | -0x05 -> V128Type
   | _ -> error s (pos s - 1) "malformed vector type"
 
+let heap_type s =
+  let pos = pos s in
+  match peek s with
+  | Some i when i land 0xc0 = 0x40 ->
+    (match vs7 s with
+    | -0x10 -> FuncHeapType
+    | -0x11 -> ExternHeapType
+    | _ -> error s pos "malformed heap type"
+    )
+  | _ ->
+    match vs33 s with
+    | i when i >= 0l -> DefHeapType (SynVar i)
+    | _ -> error s pos "malformed heap type"
+
 let ref_type s =
+  let pos = pos s in
   match vs7 s with
-  | -0x10 -> FuncRefType
-  | -0x11 -> ExternRefType
-  | _ -> error s (pos s - 1) "malformed reference type"
+  | -0x10 -> (Nullable, FuncHeapType)
+  | -0x11 -> (Nullable, ExternHeapType)
+  | -0x14 -> (Nullable, heap_type s)
+  | -0x15 -> (NonNullable, heap_type s)
+  | _ -> error s pos "malformed reference type"
 
 let value_type s =
-  match peek s with
-  | Some n when n >= ((-0x04) land 0x7f) -> NumType (num_type s)
-  | Some n when n >= ((-0x0f) land 0x7f) -> VecType (vec_type s)
-  | _ -> RefType (ref_type s)
+  either [
+    (fun s -> NumType (num_type s));
+    (fun s -> VecType (vec_type s));
+    (fun s -> RefType (ref_type s));
+  ] s
 
 let result_type s = vec value_type s
+
 let func_type s =
+  let ins = result_type s in
+  let out = result_type s in
+  FuncType (ins, out)
+
+let def_type s =
   match vs7 s with
-  | -0x20 ->
-    let ins = result_type s in
-    let out = result_type s in
-    FuncType (ins, out)
-  | _ -> error s (pos s - 1) "malformed function type"
+  | -0x20 -> FuncDefType (func_type s)
+  | _ -> error s (pos s - 1) "malformed definition type"
+
 
 let limits vu s =
   let has_max = bool s in
@@ -218,7 +248,20 @@ let block_type s =
   match peek s with
   | Some 0x40 -> skip 1 s; ValBlockType None
   | Some b when b land 0xc0 = 0x40 -> ValBlockType (Some (value_type s))
-  | _ -> VarBlockType (at vs33 s)
+  | _ -> VarBlockType (SynVar (vs33 s))
+
+let local s =
+  let n = vu32 s in
+  let t = at value_type s in
+  n, t
+
+let locals s =
+  let pos = pos s in
+  let nts = vec local s in
+  let ns = List.map (fun (n, _) -> I64_convert.extend_i32_u n) nts in
+  require (I64.lt_u (List.fold_left I64.add 0L ns) 0x1_0000_0000L)
+    s pos "too many locals";
+  List.flatten (List.map (Lib.Fun.uncurry Lib.List32.make) nts)
 
 let rec instr s =
   let pos = pos s in
@@ -267,7 +310,20 @@ let rec instr s =
     let x = at var s in
     call_indirect x y
 
-  | 0x12 | 0x13 | 0x14 | 0x15 | 0x16 | 0x17 | 0x18 | 0x19 as b -> illegal s pos b
+  | 0x12 | 0x13 as b -> illegal s pos b  (* return_call, return_call_indirect *)
+
+  | 0x14 -> call_ref
+  | 0x15 -> return_call_ref
+  | 0x16 -> func_bind (at var s)
+
+  | 0x17 ->
+    let bt = block_type s in
+    let locs = locals s in
+    let es = instr_block s in
+    end_ s;
+    let_ bt locs es
+
+  | 0x18 | 0x19 as b -> illegal s pos b
 
   | 0x1a -> drop
   | 0x1b -> select None
@@ -460,9 +516,13 @@ let rec instr s =
   | 0xc5 | 0xc6 | 0xc7 | 0xc8 | 0xc9 | 0xca | 0xcb
   | 0xcc | 0xcd | 0xce | 0xcf as b -> illegal s pos b
 
-  | 0xd0 -> ref_null (ref_type s)
+  | 0xd0 -> ref_null (heap_type s)
   | 0xd1 -> ref_is_null
   | 0xd2 -> ref_func (at var s)
+  | 0xd3 -> ref_as_non_null
+  | 0xd4 -> br_on_null (at var s)
+  | 0xd5 as b -> illegal s pos b
+  | 0xd6 -> br_on_non_null (at var s)
 
   | 0xfc as b ->
     (match vu32 s with
@@ -804,7 +864,7 @@ let id s =
 
 let section_with_size tag f default s =
   match id s with
-  | Some tag' when tag' = tag -> ignore (u8 s); sized f s
+  | Some tag' when tag' = tag -> skip 1 s; sized f s
   | _ -> default
 
 let section tag f default s =
@@ -813,7 +873,7 @@ let section tag f default s =
 
 (* Type section *)
 
-let type_ s = at func_type s
+let type_ s = at def_type s
 
 let type_section s =
   section `TypeSection (vec type_) [] s
@@ -903,18 +963,8 @@ let start_section s =
 
 (* Code section *)
 
-let local s =
-  let n = vu32 s in
-  let t = value_type s in
-  n, t
-
 let code _ s =
-  let pos = pos s in
-  let nts = vec local s in
-  let ns = List.map (fun (n, _) -> I64_convert.extend_i32_u n) nts in
-  require (I64.lt_u (List.fold_left I64.add 0L ns) 0x1_0000_0000L)
-    s pos "too many locals";
-  let locals = List.flatten (List.map (Lib.Fun.uncurry Lib.List32.make) nts) in
+  let locals = locals s in
   let body = instr_block s in
   end_ s;
   {locals; body; ftype = Source.((-1l) @@ Source.no_region)}
@@ -947,7 +997,7 @@ let elem_index s =
 
 let elem_kind s =
   match u8 s with
-  | 0x00 -> FuncRefType
+  | 0x00 -> (NonNullable, FuncHeapType)
   | _ -> error s (pos s - 1) "malformed element kind"
 
 let elem s =
@@ -955,7 +1005,7 @@ let elem s =
   | 0x00l ->
     let emode = at active_zero s in
     let einit = vec (at elem_index) s in
-    {etype = FuncRefType; einit; emode}
+    {etype = (NonNullable, FuncHeapType); einit; emode}
   | 0x01l ->
     let emode = at passive s in
     let etype = elem_kind s in
@@ -974,7 +1024,7 @@ let elem s =
   | 0x04l ->
     let emode = at active_zero s in
     let einit = vec const s in
-    {etype = FuncRefType; einit; emode}
+    {etype = (NonNullable, FuncHeapType); einit; emode}
   | 0x05l ->
     let emode = at passive s in
     let etype = ref_type s in
