@@ -3,7 +3,7 @@ WebAssembly Specification
 
 .. only:: html
 
-   | Release |release| + function references + tail calls + stack switching (Draft, |today|)
+   | Release |release|
 
    | Editor: Andreas Rossberg
 
