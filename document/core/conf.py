@@ -69,7 +69,7 @@ logo = 'static/webassembly.png'
 repo = 'stack-switching'
 
 # The name of the proposal it represents, if any
-proposal = 'stack-switching'
+proposal = 'function references + tail calls + stack-switching'
 
 # The draft version string (clear out for release cuts)
 draft = ' (Draft ' + date.today().strftime("%Y-%m-%d") + ')'
