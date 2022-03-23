@@ -34,6 +34,8 @@ They correspond to the respective binary floating-point representations, also kn
 Number types are *transparent*, meaning that their bit patterns can be observed.
 Values of number type can be stored in :ref:`memories <syntax-mem>`.
 
+.. _bitwidth:
+
 Conventions
 ...........
 
@@ -41,7 +43,59 @@ Conventions
   That is, :math:`|\I32| = |\F32| = 32` and :math:`|\I64| = |\F64| = 64`.
 
 
-.. index:: ! reference type, reference, table, function, function type, null
+.. index:: ! vector type, integer, floating-point, IEEE 754, bit width, memory, SIMD
+   pair: abstract syntax; number type
+   pair: number; type
+.. _syntax-vectype:
+
+Vector Types
+~~~~~~~~~~~~
+
+*Vector types* classify vectors of :ref:`numeric <syntax-numtype>` values processed by vector instructions (also known as *SIMD* instructions, single instruction multiple data).
+
+.. math::
+   \begin{array}{llll}
+   \production{vector type} & \vectype &::=&
+     \V128 \\
+   \end{array}
+
+The type |V128| corresponds to a 128 bit vector of packed integer or floating-point data. The packed data
+can be interpreted as signed or unsigned integers, single or double precision floating-point
+values, or a single 128 bit type. The interpretation is determined by individual operations.
+
+Vector types, like :ref:`number types <syntax-numtype>` are *transparent*, meaning that their bit patterns can be observed.
+Values of vector type can be stored in :ref:`memories <syntax-mem>`.
+
+Conventions
+...........
+
+* The notation :math:`|t|` for :ref:`bit width <bitwidth>` extends to vector types as well, that is, :math:`|\V128| = 128`.
+
+
+.. index:: ! heap type, store, type index
+   pair: abstract syntax; heap type
+.. _syntax-heaptype:
+
+
+Heap Types
+~~~~~~~~~~
+
+*Heap types* classify objects in the runtime :ref:`store <store>`.
+
+.. math::
+   \begin{array}{llll}
+   \production{heap type} & \heaptype &::=&
+     \FUNC ~|~ \EXTERN ~|~ \typeidx \\
+   \end{array}
+
+The type |FUNC| denotes the infinite union of all types of :ref:`functions <syntax-func>`, regardless of their concrete :ref:`function types <syntax-functype>`.
+
+The type |EXTERN| denotes the infinite union of all objects owned by the :ref:`embedder <embedder>` and that can be passed into WebAssembly under this type.
+
+A *concrete* heap type consists of a :ref:`type index <syntax-typeidx>` and classifies an object of the respective :ref:`type <syntax-type>` defined in the module.
+
+
+.. index:: ! reference type, heap type, reference, table, function, function type, null
    pair: abstract syntax; reference type
    pair: reference; type
 .. _syntax-reftype:
@@ -49,37 +103,43 @@ Conventions
 Reference Types
 ~~~~~~~~~~~~~~~
 
-*Reference types* classify first-class references to objects in the runtime :ref:`store <store>`.
+*Reference types* classify :ref:`values <syntax-value>` that are first-class references to objects in the runtime :ref:`store <store>`.
 
 .. math::
    \begin{array}{llll}
    \production{reference type} & \reftype &::=&
-     \FUNCREF ~|~ \EXTERNREF \\
+     \REF~\NULL^?~\heaptype \\
    \end{array}
 
-The type |FUNCREF| denotes the infinite union of all references to :ref:`functions <syntax-func>`, regardless of their :ref:`function types <syntax-functype>`.
+A reference type is characterised by the :ref:`heap type <syntax-heaptype>` it points to.
 
-The type |EXTERNREF| denotes the infinite union of all references to objects owned by the :ref:`embedder <embedder>` and that can be passed into WebAssembly under this type.
+In addition, a reference type of the form :math:`\REF \NULL \X{ht}` is *nullable*, meaning that it can either be a proper reference to :math:`\X{ht}` or :ref:`null <syntax-null>`.
+Other references are *non-null*.
 
 Reference types are *opaque*, meaning that neither their size nor their bit pattern can be observed.
 Values of reference type can be stored in :ref:`tables <syntax-table>`.
 
 
-.. index:: ! value type, number type, reference type
+.. index:: ! value type, number type, vector type, reference type, ! bottom type
    pair: abstract syntax; value type
    pair: value; type
 .. _syntax-valtype:
+.. _syntax-bottype:
 
 Value Types
 ~~~~~~~~~~~
 
 *Value types* classify the individual values that WebAssembly code can compute with and the values that a variable accepts.
-They are either :ref:`number types <syntax-numtype>` or :ref:`reference types <syntax-reftype>`.
+They are either :ref:`number types <syntax-numtype>`, :ref:`vector types <syntax-vectype>`, :ref:`reference types <syntax-reftype>`, or the unique *bottom type*, written :math:`\BOT`.
+
+The type :math:`\BOT` is a :ref:`subtype <match-valtype>` of all other types.
+By virtue of being representable in neither the :ref:`binary format <binary-valtype>` nor the :ref:`text format <text-valtype>`, it cannot be used in a program;
+it only occurs during :ref:`validation <valid>`, as a possible operand type for instructions.
 
 .. math::
    \begin{array}{llll}
    \production{value type} & \valtype &::=&
-     \numtype ~|~ \reftype \\
+     \numtype ~|~ \vectype ~|~ \reftype ~|~ \BOT \\
    \end{array}
 
 Conventions

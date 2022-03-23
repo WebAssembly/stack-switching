@@ -3,7 +3,7 @@
  *)
 
 open Types
-open Values
+open Value
 open Instance
 
 
@@ -14,19 +14,20 @@ let global (GlobalType (t, _) as gt) =
     | NumType I64Type -> Num (I64 666L)
     | NumType F32Type -> Num (F32 (F32.of_float 666.6))
     | NumType F64Type -> Num (F64 (F64.of_float 666.6))
-    | RefType t -> Ref (NullRef t)
+    | VecType V128Type -> Vec (V128 (V128.I32x4.of_lanes [666l; 666l; 666l; 666l]))
+    | RefType (_, t) -> Ref (NullRef t)
+    | BotType -> assert false
   in Global.alloc gt v
 
 let table =
-  Table.alloc (TableType ({min = 10l; max = Some 20l}, FuncRefType))
-    (NullRef FuncRefType)
+  Table.alloc (TableType ({min = 10l; max = Some 20l}, (Nullable, FuncHeapType)))
+    (NullRef FuncHeapType)
 let memory = Memory.alloc (MemoryType {min = 1l; max = Some 2l})
-let func f t = Func.alloc_host t (f t)
+let func f ft = Func.alloc_host (Types.alloc (FuncDefType ft)) (f ft)
 
 let print_value v =
   Printf.printf "%s : %s\n"
-    (Values.string_of_value v)
-    (Types.string_of_value_type (Values.type_of_value v))
+    (string_of_value v) (string_of_value_type (type_of_value v))
 
 let print (FuncType (_, out)) vs =
   List.iter print_value vs;
