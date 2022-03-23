@@ -10,7 +10,21 @@ add support for different patterns of non-local control flow to WebAssembly.
 
 * See the [modified spec](https://webassembly.github.io/stack-switching/) for details.
 
-Original `README` from upstream repository follows…
+## Typed Continuations Proposal for WebAssembly
+
+This is a proposed soultion addressing the aims of the stack-switching proposal.
+
+It is based on the [function references](proposals/function-references/Overview.md) and the [tail call](proposals/tail-call/Overview.md) proposals.
+
+A complete [implementation](https://github.com/effect-handlers/wasm-spec) is available as an extension to the reference interpreter.
+
+* See the [explainer](proposals/continuations/Explainer.md) for a high-level summary of the proposal.
+
+* See the [overview](proposals/continuations/Overview.md) for a more formal description of the proposal.
+
+* See the [examples](proposals/continuations/examples) for Wasm code for implementing various different features including lightweight threads, actors, and async/await.
+
+Original `README` from upstream repository follows.
 
 # spec
 
