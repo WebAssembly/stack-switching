@@ -7,17 +7,19 @@ Runtime Structure
 :ref:`Store <store>`, :ref:`stack <stack>`, and other *runtime structure* forming the WebAssembly abstract machine, such as :ref:`values <syntax-val>` or :ref:`module instances <syntax-moduleinst>`, are made precise in terms of additional auxiliary syntax.
 
 
-.. index:: ! value, number, reference, constant, number type, reference type, ! host address, value type, integer, floating-point, ! default value
+.. index:: ! value, number, reference, constant, number type, vector type, reference type, ! host address, value type, integer, floating-point, vector number, ! default value
    pair: abstract syntax; value
 .. _syntax-num:
+.. _syntax-vecc:
 .. _syntax-ref:
 .. _syntax-ref.extern:
 .. _syntax-val:
+.. _syntax-null:
 
 Values
 ~~~~~~
 
-WebAssembly computations manipulate *values* of either the four basic :ref:`number types <syntax-numtype>`, i.e., :ref:`integers <syntax-int>` and :ref:`floating-point data <syntax-float>` of 32 or 64 bit width each, or of :ref:`reference type <syntax-reftype>`.
+WebAssembly computations manipulate *values* of either the four basic :ref:`number types <syntax-numtype>`, i.e., :ref:`integers <syntax-int>` and :ref:`floating-point data <syntax-float>` of 32 or 64 bit width each, of :ref:`vectors <syntax-vecnum>` of 128 bit width, or of :ref:`reference type <syntax-reftype>`.
 
 In most places of the semantics, values of different types can occur.
 In order to avoid ambiguities, values are therefore represented with an abstract syntax that makes their type explicit.
@@ -34,12 +36,14 @@ or *external references* pointing to an uninterpreted form of :ref:`extern addre
      \I64.\CONST~\i64 \\&&|&
      \F32.\CONST~\f32 \\&&|&
      \F64.\CONST~\f64 \\
+   \production{(vector)} & \vecc &::=&
+     \V128.\CONST~\i128 \\
    \production{(reference)} & \reff &::=&
      \REFNULL~t \\&&|&
      \REFFUNCADDR~\funcaddr \\&&|&
      \REFEXTERNADDR~\externaddr \\
    \production{(value)} & \val &::=&
-     \num ~|~ \reff \\
+     \num ~|~ \vecc ~|~ \reff \\
    \end{array}
 
 .. note::
@@ -274,7 +278,7 @@ It records its :ref:`type <syntax-tabletype>` and holds a vector of :ref:`refere
 
 Table elements can be mutated through :ref:`table instructions <syntax-instr-table>`, the execution of an active :ref:`element segment <syntax-elem>`, or by external means provided by the :ref:`embedder <embedder>`.
 
-It is an invariant of the semantics that all table elements have a type equal to the element type of :math:`\tabletype`.
+It is an invariant of the semantics that all table elements have a type :ref:`matching <match-reftype>` the element type of :math:`\tabletype`.
 It also is an invariant that the length of the element vector never exceeds the maximum size of :math:`\tabletype`, if present.
 
 
@@ -322,7 +326,7 @@ It records its :ref:`type <syntax-globaltype>` and holds an individual :ref:`val
 
 The value of mutable globals can be mutated through :ref:`variable instructions <syntax-instr-variable>` or by external means provided by the :ref:`embedder <embedder>`.
 
-It is an invariant of the semantics that the value has a type equal to the :ref:`value type <syntax-valtype>` of :math:`\globaltype`.
+It is an invariant of the semantics that the value has a type :ref:`matching <match-valtype>` the :ref:`value type <syntax-valtype>` of :math:`\globaltype`.
 
 
 .. index:: ! element instance, element segment, embedder, element expression
@@ -535,6 +539,7 @@ In order to express the reduction of :ref:`traps <trap>`, :ref:`calls <syntax-ca
      \REFFUNCADDR~\funcaddr \\ &&|&
      \REFEXTERNADDR~\externaddr \\ &&|&
      \INVOKE~\funcaddr \\ &&|&
+     \RETURNINVOKE~\funcaddr \\ &&|&
      \LABEL_n\{\instr^\ast\}~\instr^\ast~\END \\ &&|&
      \FRAME_n\{\frame\}~\instr^\ast~\END \\
    \end{array}
@@ -546,6 +551,7 @@ The |REFFUNCADDR| instruction represents :ref:`function reference values <syntax
 
 The |INVOKE| instruction represents the imminent invocation of a :ref:`function instance <syntax-funcinst>`, identified by its :ref:`address <syntax-funcaddr>`.
 It unifies the handling of different forms of calls.
+Analogously, |RETURNINVOKE| represents the imminent tail invocation of a function instance.
 
 The |LABEL| and |FRAME| instructions model :ref:`labels <syntax-label>` and :ref:`frames <syntax-frame>` :ref:`"on the stack" <exec-notation>`.
 Moreover, the administrative syntax maintains the nesting structure of the original :ref:`structured control instruction <syntax-instr-control>` or :ref:`function body <syntax-func>` and their :ref:`instruction sequences <syntax-instr-seq>` with an |END| marker.

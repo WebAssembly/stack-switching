@@ -1,7 +1,9 @@
 type var = string Source.phrase
 
-type Values.ref_ += ExternRef of int32
-type literal = Values.value Source.phrase
+type Value.ref_ += ExternRef of int32
+type num = Value.num Source.phrase
+type ref_ = Value.ref_ Source.phrase
+type literal = Value.t Source.phrase
 
 type definition = definition' Source.phrase
 and definition' =
@@ -15,14 +17,26 @@ and action' =
   | Get of var option * Ast.name
 
 type nanop = nanop' Source.phrase
-and nanop' = (Lib.void, Lib.void, nan, nan) Values.op
+and nanop' = (Lib.void, Lib.void, nan, nan) Value.op
 and nan = CanonicalNan | ArithmeticNan
+
+type num_pat =
+  | NumPat of num
+  | NanPat of nanop
+
+type vec_pat =
+  | VecPat of (V128.shape * num_pat list) Value.vecop
+
+type ref_pat =
+  | RefPat of ref_
+  | RefTypePat of Types.heap_type
+  | NullPat
 
 type result = result' Source.phrase
 and result' =
-  | LitResult of literal
-  | NanResult of nanop
-  | RefResult of Types.ref_type
+  | NumResult of num_pat
+  | VecResult of vec_pat
+  | RefResult of ref_pat
 
 type assertion = assertion' Source.phrase
 and assertion' =
@@ -54,13 +68,20 @@ exception Syntax of Source.region * string
 
 
 let () =
-  let type_of_ref' = !Values.type_of_ref' in
-  Values.type_of_ref' := function
-    | ExternRef _ -> Types.ExternRefType
+  let type_of_ref' = !Value.type_of_ref' in
+  Value.type_of_ref' := function
+    | ExternRef _ -> Types.ExternHeapType
     | r -> type_of_ref' r
 
 let () =
-  let string_of_ref' = !Values.string_of_ref' in
-  Values.string_of_ref' := function
+  let string_of_ref' = !Value.string_of_ref' in
+  Value.string_of_ref' := function
     | ExternRef n -> "ref " ^ Int32.to_string n
     | r -> string_of_ref' r
+
+let () =
+  let eq_ref' = !Value.eq_ref' in
+  Value.eq_ref' := fun r1 r2 ->
+    match r1, r2 with
+    | ExternRef n1, ExternRef n2 -> n1 = n2
+    | _, _ -> eq_ref' r1 r2
