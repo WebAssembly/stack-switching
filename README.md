@@ -12,11 +12,11 @@ add support for different patterns of non-local control flow to WebAssembly.
 
 ## Typed Continuations Proposal for WebAssembly
 
-This is a concrete proposal for realising the aims of the stack-switching proposal.
+This is a proposed soultion addressing the aims of the stack-switching proposal.
 
-It is based on the [function references](proposals/function-references/Overview.md) and the [tail call](proposals/tail-call/Overview.md) proposals and includes all respective changes.
+It is based on the [function references](proposals/function-references/Overview.md) and the [tail call](proposals/tail-call/Overview.md) proposals.
 
-The proposal is fully [implemented](https://github.com/effect-handlers/wasm-spec) as part of the reference interpreter.
+A complete [implementation](https://github.com/effect-handlers/wasm-spec) is available as an extension to the reference interpreter.
 
 * See the [explainer](proposals/continuations/Explainer.md) for a high-level summary of the proposal.
 
