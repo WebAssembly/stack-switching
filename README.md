@@ -12,7 +12,7 @@ add support for different patterns of non-local control flow to WebAssembly.
 
 ## Typed Continuations Proposal for WebAssembly
 
-This is a proposed soultion addressing the aims of the stack-switching proposal.
+This is a proposed solution addressing the aims of the stack-switching proposal.
 
 It is based on the [function references](proposals/function-references/Overview.md) and the [tail call](proposals/tail-call/Overview.md) proposals.
 
