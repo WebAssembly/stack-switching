@@ -33,7 +33,7 @@ However, apart from when a significant event occurs within the computation, the 
 In our descriptions of task states it is convenient to identify an enumerated symbol that denotes the execution state of the task:
 
 ```
-typedef enum{
+typedef enum {
   suspended,
   active,
   moribund
