@@ -176,7 +176,9 @@ In WebAssembly, this becomes:
     
     (block $on-next ;; set up for the switch back on next
       (task.suspend (local.get $thisTask) ($yield 
-          (i32.load (i32.add (local.get $els) (local.get $ix)))))
+          (i32.load (i32.add (local.get $els) 
+                             (i32.mul (local.get $ix)
+                                      (i32.const 4))))))
       (event.switch ($next $on-next))
     )
     (local.set $ix (i32.add (local.get $ix) (i32.const 1)))
