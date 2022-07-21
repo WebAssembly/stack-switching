@@ -1437,7 +1437,7 @@ executing a variant of the `resume` instruction and is passed to the
 continuation:
 
 ```wasm
-  resume_with (tag $e $l)* : [ t1* (ref $ht) ] -> [ t2* ]
+  resume_with (tag $e $l)* : [ t1* (ref $ct) ] -> [ t2* ]
   where:
   - $ht = handler t2*
   - $ct = cont ([ (ref $ht) t1* ] -> [ t2* ])
