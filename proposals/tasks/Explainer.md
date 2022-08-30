@@ -663,6 +663,30 @@ We should not that this may not be the most efficient way of managing the collec
 
 ## Frequently Asked Questions
 
+### Why are we using 'lexical scoping' rather than 'dynamic scoping'
+A key property of this design is that, in order for a WebAssembly program to switch fibers, the target of the switch is explicitly identified. This so-called lexical scoping approach is in contract with a dynamic approach&mdash;commonly used for exception handling&mdash;where the engine is expected to search the current evaluation context to decide where to suspend to (say).
+
+#### Implementation
+In a lexically-scoped design, the engine is explicitly told by the program where to transfer control to.
+Thus, the only additional obligation the engine has to implement, besides the actual transfer of control, is validation that the target is _valid_ from the current control point.
+
+In a dynamically-scoped design, the engine has to search for the transfer target. This search is typically not a simple search to specify and/or implement since the _criteria_ for a successful search depends on the language, both current and future.
+
+By requiring the program to determine the target, the computation of this target becomes a burden for the toolchain rather than for the WebAssembly engine implementor.
+
+#### Symmetric coroutining (and its cousin: task chaining)
+With symmetric coroutines you can have a (often binary) collection of coroutines that directly yield to each other via application-specific messages. We saw a simple example of this in our [generator example](#generating-elements-of-an-array).
+
+Similar patterns arise when chaining tasks together, where one computation is intended to be followed by another. Involving a scheduler in this situation creates difficulties for types (the communication patterns between the tasks is often private and the types of data are not known to a general purpose scheduler).
+
+A lexically-scoped design more directly/simply/efficiently supports these common horizonal control-transfer patterns than a dynamically-scoped design.
+
+#### Composing Components
+In applications where multiple _components_ are combined to form an application the risks of dynamic scoping may be unacceptable. By definition, components have a _shared nothing_ interface where the only permitted communications are those permitted by a common _interface language_. This includes prohibiting exceptions to cross component boundaries&mdash;unless via coercion&mdash;and switching between tasks.
+
+By requiring explicit fiber identifiers we make the task (sic) of implementing component boundaries more manageable when coroutining is involved. In fact, this is envisaged in the components design by using _streaming_ and _future_ metaphors to allow for this kind of control flow between components.
+
+
 ### What is the difference between first class continuations and fibers?
 A continuation is semantically a function that, when entered with a value, will finish an identified computation. In effect, continuations represent snapshots of computations. A first class continuation is reified; i.e., it becomes a first class value and can be stored in tables and other locations.
 
@@ -763,6 +787,9 @@ Our use of the term is consistent with that definition; but our principal modifi
 Our conceptualization of fibers is also intended to support [Structured Concurrency](https://en.wikipedia.org/wiki/Structured_concurrency). I.e., we expect our fibers to have a hierachical relationship and we also support high-level programming patterns involving groups of fibers and single exit of multiple cooperative activities.
 
 ## Open Design Issues
+
+This section identifies areas of the design that are either not completely resolved or have significant potential for variability.
+
 ### The type signature of a fiber
 The type signature of a fiber has a return type associated with it. This is not an essential requirement and may, in fact, cause problems in systems that must manage fibers.
 
@@ -770,19 +797,21 @@ The reason for it is to accomodate the scenario of a fiber function returning. S
 
 Without the possiblity of returning normally, the only remaining recourse for a fiber would be to _retire_. We expect that, in many usage scenarios, this would be the correct way of ending the life of a fiber.
 
+### Exceptions are propagated
+When an exception is thrown in the context of a fiber that is _not_ handled by the code of the fiber then that exception is propagated out of the fiber&mdash;into the code of the resuming parent.
+
+The biggest issue with this is that, for many if not most applications, the resuming parent of a parent is typically ill-equipped to handle the exception or to be able to recover gracefully from it.
+
+The issue is exacerbated by the fact that functions are _not_ annotated with any indication that they may throw an exception let alone what type of exception they may throw.
+
 ### Fibers are started in suspended/running state
-This proposal allows fibers to be created in a suspended state and immediately entered when `spawn`ed.
+This proposal allows fibers to be created in a suspended state or they can be created and immediately entered when `spawn`ed.
 
 Allowing fibers to be created in suspended state causes significant architectural issues in this design: in particular, because such a fiber has no prior history of execution (it *is* a new fiber), the fiber function has to be structured differently to account for the fact that there will be a resume event with no corresponding suspend event.
 
 On the other hand, requiring fibers to be started immediately on creation raises its own questions. In particular, if the spawner of a fiber also needs to record the identity of the fiber then the fiber must immediately suspend with some form of `identify` event. We saw this in the generator example. There are enough applications where this would result in a significant performance penalty, for example in a green threading library that is explicitly managing its fiber identities.
 
 For this reason, we support both forms of fiber creation. However, this also represents a compromise and added cost for implementation.
-
-### Exceptions are propagated
-When an exception is thrown in the context of a fiber that is _not_ handled by the code of the fiber then that exception is propagated out of the fiber&mdash;into the code of the resuming parent.
-
-The biggest issue with this is that, for many if not most applications, the resuming parent of a parent is typically ill-equipped to handle the exception or to be able to recover gracefully from it.
 
 ### Using tables to avoid GC pressure
 
