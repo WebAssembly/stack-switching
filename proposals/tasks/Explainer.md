@@ -743,8 +743,38 @@ On the other hand, any approach based on reifing continuations must deal with a 
 ### How do fibers relate to the JS Promise integration API?
 A `Suspender` object, as documented in that API, corresponds reasonably well with a fiber. Like `Suspender`s, in order to suspend and resume fibers, there needs to be explicit communication between the top-level function of a fiber and the function that invokes suspension.
 
-A wrapped export in the JS Promise integration API can be realized using fibers quite straightforwardly: as code that creates a fiber and executes the wrapped export. Similarly, wrapping imports can be translated into code that looks for a `Promise` object and suspends the fiber as needed.
+A wrapped export in the JS Promise integration API can be realized using fibers
+quite straightforwardly: as code that creates a fiber and executes the wrapped
+export. This can be seen in the pseudo-JavaScript fragment for the export
+wrapper[^g]:
+```
+function makeAsyncExportWrapper(wasmFn) {
+  return function(...args) {
+    return new Promise((resolve,reject) => {
+      spawn Fiber((F) => {
+        try{
+          resolve(wasmFn(F,args));
+        } catch (E) {
+          reject(E);
+        }
+      })
+    })
+  }
+  }
+```
+[^g]: This code does not attempt to depict any _real_ JavaScript; if for no other reason than that we do not anticipate extending JavaScript with fibers.
 
+Similarly, wrapping imports can be translated into code that attaches a callback to the incoming `Promise` that will resume the fiber with the results of the `Promise`:
+```
+function makeAsyncImportWrapper(jsFn) {
+  return function(F,...args) {
+    jsFn(...args).then(result => {
+      F.resume(result);
+    });
+    F.suspend()
+  }
+}
+```
 However, as can be seen with the [asynchronous I/O example](#asynchronous-io), other complexities involving managing multiple `Promise`s have the combined effect of making the JSPI itself somewhat moot: for example, we had to multiplex multiple `Promise`s into a single one to ensure that, when an I/O `Promise` was resolved, our scheduler could be correctly woken up and it had to demultiplex the event into the correct sub-computation.
 
 ### How does one support opt-out and opt-in?
@@ -776,11 +806,11 @@ Because both the table entries and any potential search key are all determined s
 As a result, in practice, when switching between fibers and activating appropriate `event` blocks, there is no costly search involved. 
 
 ### How does this concept of fiber relate to Wikipedia's concept
-The Wikipedia definition of a [Fiber](https://en.wikipedia.org/wiki/Fiber_(computer_science)) is[^g]:
+The Wikipedia definition of a [Fiber](https://en.wikipedia.org/wiki/Fiber_(computer_science)) is[^h]:
 
 >In computer science, a fiber is a particularly lightweight thread of execution.
 
-[^g]: As of 8/5/2022.
+[^h]: As of 8/5/2022.
 
 Our use of the term is consistent with that definition; but our principal modification is the concept of a `fiber`. In particular, this allows us to clarify that computations modeled in terms of fibers may be explicitly suspended, resumed etc., and that there may be a chain of fibers connected to each other via the resuming relationship.
 
