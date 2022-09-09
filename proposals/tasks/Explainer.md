@@ -569,7 +569,7 @@ async fetcher(string url){
 In another extension to the C language, we have invented a new type of function&mdash;the `async` function. In our mythical extension, only `async` functions are permitted to use the `await` expression form. Our intention is that such a function has an implicit parameter: the `Fiber` that will be suspended when executing `await`.
 
 #### Importing `fetch`
-The actual Web `fetch` is quite complex; and we do not intend to explore that complexity. Instead, we will use a simplified `simple_fetch` that takes a url string and returns a `Promise` of a `string`. (Again, we ignore issues such as failures of `fetch` here.)
+The actual `fetch` Web API is quite complex; and we do not intend to explore that complexity. Instead, we will use a simplified `simple_fetch` that takes a url string and returns a `Promise` of a `string`. (Again, we ignore issues such as failures of `fetch` here.)
 
 In order to properly connect the `Promise` returned by `simple_fetch` with our `fetcher` fiber, we need to associate the two entities. Since managing `Promise`s in WebAssembly is tedious, we will do this in JavaScript&mdash;via the `imported_fetch` function:
 
@@ -599,7 +599,7 @@ string simple_fetch(fiber *f,string url){
 #### An async-aware scheduler
 Implementing async functions requires that a scheduler is implemented within the language runtime library. Given the indirect nature of how `Promise`s are managed in our example, this leads to additional complexities for the scheduler.
 
-Our async-aware shceduler must, in addition to scheduling the green threads under its control, also arrange to suspend to the non-WebAssembly world of the browser in order to allow the I/O operations that were started to complete.
+Our async-aware scheduler must, in addition to scheduling any green threads under its control, also arrange to suspend to the non-WebAssembly world of the browser in order to allow the I/O operations that were started to complete.
 
 The `currentFetches` list maintained by the JavaScript glue code has a mirror array that is used by the scheduler. This allows the scheduler to ensure that the correct fiber is resumed when the I/O operation completes.
 
@@ -686,7 +686,6 @@ In applications where multiple _components_ are combined to form an application 
 
 By requiring explicit fiber identifiers we make the task (sic) of implementing component boundaries more manageable when coroutining is involved. In fact, this is envisaged in the components design by using _streaming_ and _future_ metaphors to allow for this kind of control flow between components.
 
-
 ### What is the difference between first class continuations and fibers?
 A continuation is semantically a function that, when entered with a value, will finish an identified computation. In effect, continuations represent snapshots of computations. A first class continuation is reified; i.e., it becomes a first class value and can be stored in tables and other locations.
 
@@ -760,7 +759,7 @@ function makeAsyncExportWrapper(wasmFn) {
       })
     })
   }
-  }
+}
 ```
 [^g]: This code does not attempt to depict any _real_ JavaScript; if for no other reason than that we do not anticipate extending JavaScript with fibers.
 
