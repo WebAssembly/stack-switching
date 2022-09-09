@@ -556,7 +556,7 @@ The JavaScript Promise Integration API (JSPI) allows a WebAssembly module to cal
 
 However, we would like to enable applications where several fibers can make independant requests to a `fetch` import and only 'return' when we have issued them all. Specifically, our example will involve multiple fibers making `fetch` requests and responding when the requests complete.
 
-This implies a combination of local scheduling of tasks, possibly a _tree_ of schedulers reflecting a hierarchical structure to the application, and, as we shall see, some form of `Promise` management. This latter aspect is perhaps unexpected but is forced on us by the common Web browser embedding: only the browser's outermost event loop is empowered to actually schedule tasks when I/O activities complete.
+This implies a combination of local scheduling of tasks, possibly a _tree_ of schedulers reflecting a hierarchical structure to the application, and, as we shall see, some form of multiplexing of requests and demultiplexing of responses. This aspect is perhaps unexpected but is forced on us by the common Web browser embedding: only the browser's outermost event loop is empowered to actually schedule tasks when I/O activities complete.
 
 #### A `fetch`ing Fiber
 On the surface, our fibers that fetch data are very simple:
@@ -571,37 +571,45 @@ In another extension to the C language, we have invented a new type of function&
 #### Importing `fetch`
 The actual `fetch` Web API is quite complex; and we do not intend to explore that complexity. Instead, we will use a simplified `simple_fetch` that takes a url string and returns a `Promise` of a `string`. (Again, we ignore issues such as failures of `fetch` here.)
 
-In order to properly connect the `Promise` returned by `simple_fetch` with our `fetcher` fiber, we need to associate the two entities. Since managing `Promise`s in WebAssembly is tedious, we will do this in JavaScript&mdash;via the `imported_fetch` function:
+Since it is our intention to continue execution of our application even while we are waiting for the `fetch`, we have to somewhat careful in how we integrate with the browser's event loop. In particular, we need to be able to separate which fiber is being _suspended_&mdash;when we encounter the `fetch`es `Promise`&mdash;and which fiber is resumed when the fetch data becomes _available_.
 
+We can express this with the pseudo code:
 ```
-var currentFetches = [];
-function imported_fetch(url){
-  index = currentFetches.length;
-  P = fetch(url).then((Txt)=>{fiber:index,text:Txt});
-  currentFetches.push(P);
-  return index;
-}
-```
-We also record the fiber/promise pair in our list of `currentFetches`. Actually, we use an index as a proxy for the fiber identity. In part, this is because Fiber objects are not JavaScript objects; the async-aware scheduler will maintain the mapping between this index and the fiber that created the `Promise`.
-
-The importance of this will become apparent below when we look at suspending schedulers. In addition to recording the `Promise` we also have to implement the suspension implied by the `await`[^d]. Since we cannot implement suspensions in JavaScript, we do this with 'glue' code:
-```
-string simple_fetch(fiber *f,string url){
-  int index = imported_fetch(url);
-  switch(f suspend async_io(index)){
-    case io_result(Txt):
-      return Txt
+function simple_fetch(client,url){
+    fetch(url).then(response => {
+      scheduler resume io_notify(client,response.data);
+    });
+    switch(client.suspend async_request){
+      case io_result(text): return text;
+    }
   }
 }
 ```
-[^d]: On the Web, the convention is that creating a `Promise` _always_ results in a suspension; even if the item being waited for is already available.
+Notice how the `simple_fetch` function invokes `fetch` and attaches a callback to it that resumes the `scheduler` fiber, passing it the identity of the actual `client` fiber and the results of the `fetch`. Before returning, `simple_fetch` suspends the `client` fiber; and a continuation of _that_ suspension will result in `text` being delivered to the client code.
+
+It is, of course, going to be the responsibility of the `scheduler` to ensure that the data is routed to the correct client fiber.
+
+#### A note about the browser event loop
+It is worth digging in a little deeper why we have this extra level of indirection. Fundamentally, this arises due to a limitation[^d] of the Web browser architecture itself. The browser's event loop has many responsibilities; inluding the one of monitoring for the completion of asynchronous I/O activities initialized by the Web application. In addition, the _only_ way that an application can be informed of the completion (and success/failure) of an asynchronous operation is for the event loop to invoke the callback on a `Promise`.
+
+This creates a situation where our asynchronous WebAssembly application must ultimately return to the browser before any `fetch`es it has initiated can be delivered. However, this kind of return has to be through our application's own scheduler. And it must also be the case that any resumption of the WebAssembly application is initiated through the same scheduler.
+
+In particular, if the browser's event loop tries to directly resume the fiber that created the `Promise` we would end up in a situation that is very analogous to a _deadlock_: when that fiber is further suspended, or even if if completes, the application as a whole will stop&mdash;because other parts of the application are still waiting for the scheduler to be resumed; but that scheduler was waiting to be resumed by the browser's event loop scheduler.
+
+[^d]: A better phrasing of this might be an unexpected consequence of the browser's event model. This limitation does not apply, for example, to normal desktop applications running in regular operating systems.
+
+The net effect of this is that, for browser-based applicatios, we must ensure that we _multiplex_ all I/O requests through the scheduler and _demultiplex_ the results of those requests back to the appropriate leaf fibers. The demultiplex is the reason why the actual callback call looks like:
+```
+scheduler resume io_notify(client,response.data)
+```
+This `resume` tells the scheduler to resume `client` with the data `response.data`. I.e., it is a kind of indirect resume: we resume the scheduler with an event that asks it to resume a client fiber. One additional complication of this architecture is that the scheduler must be aware of the types of data that Web APIs return.
+
+It is expected that, in a non-browser setting, one would not need to distort the architecture so much. In that case, the same scheduler that decides which fiber to resume next could also keep track of I/O requests as they become available.
 
 #### An async-aware scheduler
-Implementing async functions requires that a scheduler is implemented within the language runtime library. Given the indirect nature of how `Promise`s are managed in our example, this leads to additional complexities for the scheduler.
+Implementing async functions requires that a scheduler is implemented within the language runtime library. This is actually a consequence of having a special syntax for `async` functions.
 
-Our async-aware scheduler must, in addition to scheduling any green threads under its control, also arrange to suspend to the non-WebAssembly world of the browser in order to allow the I/O operations that were started to complete.
-
-The `currentFetches` list maintained by the JavaScript glue code has a mirror array that is used by the scheduler. This allows the scheduler to ensure that the correct fiber is resumed when the I/O operation completes.
+Our async-aware scheduler must, in addition to scheduling any green threads under its control, also arrange to suspend to the non-WebAssembly world of the browser in order to allow the I/O operations that were started to complete. And we must also route the responses to the appropriate leaf fiber.
 
 A simple, probably naïve, scheduler walks through a circular list of fibers to run through. Our one does that, but also records whenever a fiber is suspending due to a `Promise`d I/O operation:
 
@@ -611,55 +619,68 @@ typedef struct{
   ResumeProtol reason;
 } FiberState;
 Queue<FiberState> fibers;
-Map<int,Fiber> delayed;
+List<Fiber> delayed;
 
 void naiveScheduler(){
-  while(!fibers.isEmpty()){
-    FiberState next = fibers.deQueue();
-    switch(next.f resume next.reason){
-      case pause:
-        fibers.push(FiberState{f:next,reason:go_ahead});
-        break;
-      case async_io(Ix):{
-        delayed.put(Ix,next);
-        break;
+  while(true){
+    while(!fibers.isEmpty()){
+      FiberState next = fibers.deQueue();
+      switch(next.f resume next.reason){
+        case pause:
+          fibers.push(FiberState{f:next,reason:go_ahead});
+          break;
+        case async_request:{
+          delayed.put(next);
+          break;
+        }
+      }
+      if(fibers.isEmpty() || pausing){
+        switch(scheduler suspend global_pause){
+          case io_notify(client,data):{
+            reschedule(client,data);
+          }
+        } 
       }
     }
-    if(fibers.isEmpty() || pausing)
-      return;
   }
 }
 ```
-The vast majority of the code for this scheduler is _boilerplate_ code that is manipulating data structures. We leave it as an exercise for the reader to translate it into WebAssembly.
 
 #### Reporting a paused execution
 The final piece of our scenario involves arranging for the WebAssembly application itself to pause so that browser's eventloop can complete the I/O operations and cause our code to be reentered.
 
 This is handled at the point where the WebAssembly is initially entered&mdash;i.e., through one of its exports. For the sake of exposition, we shall assume that we have a single export: `main`, which simply starts the scheduler:
 ```
-void main(){
-  startScheduler();
+void inner_main(fiber scheduler){
+  startScheduler(scheduler);
 }
 ```
-The interesting logic is actually in the JavaScript glue code that will be invoked by the wider JavaScript application:
+In fact, however, our application itself should be compatible with the overall browser architecture. This means that our actual toplevel function returns a `Promise`:
 ```
-var P = Promise.race(currentFetches).then((K)=> {
-  // We remove winning fetch from currentFetches ...
-  currentFetches[K.fiber] = undefined;
-  restart_scheduler(K.fiber,K.txt);
-});
+function outer_main() {
+  return new Promise((resolve,reject) => {
+    spawn Fiber((F) => {
+      try{
+        resolve(inner_main(F));
+      } catch (E) {
+        reject(E);
+      }
+    });
+  }
+}
 ```
-where `restart_scheduler` is a new auxilliary export that allows the top-level scheduler to resume a fiber with the appropriate text:
-```
-void restart_scheduler(int fiberNo,string txt){
-  Fiber next = delayed.get(fiberNo);
-  delayed.delete(fiberNo);
+We should not claim that this is the only way of managing the asynchronous activities; indeed, indiviual language toolchains will have their own language specific requirements. However, this example is primarily intended to explain how one might implement the integration between WebAPIs such as `fetch` and a `Fiber` aware programming language.
 
-  fibers.push(FiberState{f:next,reason:reason:io_result(Txt)});
-  start_scheduler();
-}
-```
-We should not that this may not be the most efficient way of managing the collection of `Promise`s. In particular, if operations such as `Promise.race` involve linear scans of the `currentFetches` list, then we risk being quadratic in the number of outstanding fetches. However, this example is primarily intended to explain how one might implement the integration between WebAPIs such as `fetch` and a `Fiber` aware programming language.
+#### The importance of stable identifiers
+One of the hallmarks of this example is the need to keep track of the identities of different computations; possibly over extended periods of time and across significant _code distances_.
+
+For example, we have to connect the scheduler to the import in order to ensure correct rescheduling of client code. At the time that we set up the callback to the `Promise` returned by `fetch` we reference the `scheduler` fiber. However, at that moment in time, the `scheduler` fiber is still technically running (i.e., it is not suspended). Of course, when the callback is invoked by the event loop the scheduler is suspended.
+
+This correlation is only possible because the identity of a fiber is stable&dash;regardless of its current execution state.
+
+#### Final note
+
+Finally, the vast majority of the code for this scheduler is _boilerplate_ code that is manipulating data structures. We leave it as an exercise for the reader to translate it into WebAssembly.
 
 ## Frequently Asked Questions
 
