@@ -148,18 +148,6 @@ As noted above, a function body is considered to be a `handle` block. This impli
 
 ### Fiber instructions
 
-#### `fiber.new` Create a new fiber
-
-The `fiber.new` instruction creates a new fiber. The instruction has a literal operand which is the index of a function of type `[[ref fiber  r*] t*]->[r*]`, together with corresponding values on the argument stack.
-
-The result of the `fiber.new` instruction is a `fiber` which is the identifier for the newly created fiber. The identity of the fiber is also the first argument to the fiber function itself&mdash;this allows fibers to know their own identity in a straightforward way.
-
-The return values that the fiber function returns represent the return values of the fiber. This is reflected in the type signatures of the `fiber` and the function.
-
-The new fiber is created in a suspended state: it must be the case that the function referenced has one or more `event` blocks within the top-level block of that function. When the fiber is resumed, one of those `event` blocks will be entered as a result of the `fiber.resume`&mdash;depending on the actual event used to resume the fiber.
-
->If a function is referenced in a `fiber.new` instruction has no `event` blocks at the toplevel, then this function will cause a trap when attempting to resume the new fiber&mdash;because, without any `event` blocks, the fiber will not be able to respond to the resume.
-
 #### `fiber.spawn` Create and enter a new fiber
 
 The `fiber.spawn` instruction creates a new fiber and immediately enters it. It requires a literal function operand of type `[[fiber r*] t*] -> [r*]`, together with values corresponding to `t*` on the value stack.
