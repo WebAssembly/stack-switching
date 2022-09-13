@@ -34,12 +34,7 @@ fiber are not accessible other than by normal operations.
 
 In addition to the frames and local variables, it is important to know whether a
 fiber is suspendable or not. In essence, only fibers that have been explicitly
-suspended may be resumed, and only fibers that are either currently executing or
-have resumed computations that are executing may be suspended.
-
-In general, validating that a suspended fiber may be resumed is a constant time
-operation but validating that an executing fiber may be suspended involves
-examining the chain of fiber resumptions.
+suspended may be resumed, and only the active fiber may be suspended.
 
 Even though a fiber may be referenced after it has completed, such references
 are not usable and the referenced fibers are asserted to be _moribund_[^b]. Any
@@ -56,9 +51,6 @@ the resume parent of the fiber.
 
 The root of the ancestor relation is the _root task_ and represents the initial
 entry point into WebAssembly execution.
-
-The root fiber does not have an explicit identity. This is because, in general,
-child fibers cannot manage their ancestors.
 
 ### The `event` concept
 
@@ -168,31 +160,19 @@ The `fiber.spawn` instruction is analogous to a `call` instruction, the effect o
 
 Notice that only the newly created fiber has access to the reference that identifies the new fiber. If it is desired that the parent has access to this the code generator would typically insert a `fiber.suspend` instruction at the start of the function and pass out the `fiber` in an appropriate event description.
 
-#### `fiber.suspend` Suspend an active fiber
+#### `fiber.suspend_to` Suspend the active fiber and switch to a new one
 
-The `fiber.suspend` instruction takes a fiber as an argument and suspends the fiber. The identified fiber must either be the `active` fiber, or a resume ancestor of the active fiber. 
+The `fiber.suspend_to` takes an event description as an immediate argument and event values and a target fiber as stack operands. It suspends the current fiber and switches control to the target fiber using the specified event, passing the event operands to the target fiber.
 
-The _root_ ancestor fiber does not have an explicit identifier; and so it may not be suspended.
+If the target fiber is not a resume ancestor of the current fiber, the target fiber's resume parent is set to be the current fiber. Otherwise the target fiber's resume parent is unchanged and all fibers that are resume ancestors of the current fiber and descendents of the target fiber are essentially popped off the resume stack. Determining whether a fiber is a resume ancestor of the current fiber can be done in constant time by tracking the resume stack depth of each suspended fiber and the depth of the current fiber.
 
-The fiber that is suspended is marked `suspended`, and the the immediate resume parent of that fiber becomes the active fiber.
+If the target fiber is moribund, `fiber.suspend_to` traps.
 
-`fiber.suspend` has two operands: the identity of the fiber being suspended and a description of the event it is signaling: the `event` tag and any arguments to the event. The event operands must be on the argument stack.
-
-Execution of a fiber that issues the `fiber.suspend` instruction will not continue until another fiber issues the appropriate `fiber.resume` instruction. In which case, execution of the suspending fiber will continue with the `event` block whose tag was used to resume it. In effect, this means that the instructions immediately following the `fiber.suspend` are _unreachable_.
-
-#### `fiber.resume` Resume a suspended fiber
-
-The `fiber.resume` instruction takes a fiber as argument, together with an `event` description&mdash;consisting of an event tag and appropriate values, and resumes its execution.
-
-The `fiber.resume` instruction takes a `suspended` fiber, together with any descendant fibers that were suspended along with it, and resumes its execution. The event is used to encode how the resumed fiber should react: for example, whether the fiber's requested information is available, or whether the fiber should enter into cancelation mode.
-
-A `fiber.resume` instruction may continue in one of two ways: if the resumed fiber returned normally, then execution continues with the next instruction. The values on the value stack will match the return signature of the fiber's function&mdash;and will match the signature of the `fiber` reference that was resumed.
-
-If the resumed fiber suspended itself, then the event tag associated with that `fiber.suspend` instruction is used to determine which of the available `event` blocks should be entered as part of the switch. The 'nearest' `event` block whose tag is equal to the supplied event is entered. If there is no appropriate `event` block in the execution scope of the fiber being resumed, then the engine _traps_.
+Execution of the current fiber executing `fiber.suspend_to` instruction will not resume until either another fiber switches back to it with another `fiber.suspend_to`  instruction or the if the target fiber returns normally and was not a resume ancestor of the current fiber. When the current fiber is resumed via `fiber.suspend_to`, its execution will continue with the `event` block whose tag was used to resume it. If the fiber is instead resumed via a normal return, execution will continue with the instruction after `fiber.suspend_to` with the values returned by the target fiber pushed onto the stack.
 
 #### `fiber.switch` Switch to a different fiber
 
-The `fiber.switch` instruction is a combination of a `fiber.suspend` and a `fiber.resume` to an identified fiber. This instruction is useful for circumstances where the suspending fiber knows which other fiber should be resumed.
+The `fiber.switch` instruction is a combination of a `fiber.suspend_to` to a resume ancestor of the current fiber and another `fiber.resume_to` to an identified fiber. This instruction is useful for circumstances where the suspending fiber knows which other fiber should be resumed but needs to truncate the resume stack first.
 
 The `fiber.switch` instruction has three arguments: the identity of the fiber being suspended, the identity of the fiber being resumed and the signaling event.
 
