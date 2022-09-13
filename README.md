@@ -24,9 +24,9 @@ A complete [implementation](https://github.com/effect-handlers/wasm-spec) is ava
 
 * See the [examples](proposals/continuations/examples) for Wasm code for implementing various different features including lightweight threads, actors, and async/await.
 
-## Task-based Stack Switching Proposal
+## Fiber-based Stack Switching Proposal
 
-An alternate approach to stack switching revolves around the concept of tasks rather than continuation functions. An explainer for this proposal can be seen [here](proposals/tasks/Explainer.md).
+An alternate approach to stack switching revolves around the concept of fibers rather than continuation functions. An explainer for this proposal can be seen [here](proposals/fibers/Explainer.md).
 
 Original `README` from upstream repository follows.
 
