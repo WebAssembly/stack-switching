@@ -369,7 +369,7 @@ The first task of `$addAllElements` is to establish a new fiber to handle the ge
 The main structure of the consumer takes the form of an unbounded loop, with a forced termination when the generator signals that there are no further elements to generate. This can happen in two ways: the generator function can simply return, or it can (typically) `fiber.retire` with an `$end` event. Our actual generator returns, but our consumer code can accomodate either approach.
 
 >In practice, the style of generators and consumers is dictated by the toolchain. It would have been possible to structure our generator differently. For example, if generators were created as suspended fibers&mdash;using `fiber.new` instructions&mdash;then the initial code of our generator would not have suspended using the `$identify` event. However, in that case, the top-level of the generator function should consist of an `event` block: corresponding to the first `$next` event the generator receives.
->In any case, generator functions enjor a somewhat special relationship with their callers and their structure reflects that.
+>In any case, generator functions enjoy a somewhat special relationship with their callers and their structure reflects that.
 
 Again, as with the generator, if an event is signaled to the consumer that does not match either event tag, the engine will trap.
 
@@ -669,7 +669,7 @@ function outer_main() {
   }
 }
 ```
-We should not claim that this is the only way of managing the asynchronous activities; indeed, indiviual language toolchains will have their own language specific requirements. However, this example is primarily intended to explain how one might implement the integration between WebAPIs such as `fetch` and a `Fiber` aware programming language.
+We should not claim that this is the only way of managing the asynchronous activities; indeed, individual language toolchains will have their own language specific requirements. However, this example is primarily intended to explain how one might implement the integration between WebAPIs such as `fetch` and a `Fiber` aware programming language.
 
 #### The importance of stable identifiers
 One of the hallmarks of this example is the need to keep track of the identities of different computations; possibly over extended periods of time and across significant _code distances_.
@@ -734,11 +734,11 @@ Fibers and fiber management have some conceptual overlap with exception handling
 
 When an I/O operation fails (say), and a requesting fiber needs to be resumed with that failure, then the resuming code (perhaps as part of an exception handler) resumes the suspended fiber with a suitable event. In general, all fibers, when they suspend, have to be prepared for three situations on their resumption: success, error and cancelation. This is best modeled in terms of an `event.switch` instruction listening for the three situations.
 
-One popular feature of exception handling systems is that of _automatic exception propagation`; where an exception is automatically propagated from its point of origin to an outer scope that is equipped to respond to it. This proposal follows this by allowing unhandled exceptions to be propagated out of an executing fiber and into its resuming parent.
+One popular feature of exception handling systems is that of _automatic exception propagation_; where an exception is automatically propagated from its point of origin to an outer scope that is equipped to respond to it. This proposal follows this by allowing unhandled exceptions to be propagated out of an executing fiber and into its resuming parent.
 
 However, this policy is generally incompatible with any form of computation manipulation. 
 
-The reason is that, when a fiber is resumed, it may be from a context that does not at all resemble the original situation; indeed it may be resumed from a context that cannot handle any application exceptions. This happens today in the browser, for example. When a `Promise` is resumed, it is typically from the context of the so-called micro fiber runner. If the resumed code throws an exception the micro fiber runner would be excepted to deal with it. In practice, the micro fiber runner will silently drop all exceptions raised in this way.
+The reason is that, when a fiber is resumed, it may be from a context that does not at all resemble the original situation; indeed it may be resumed from a context that cannot handle any application exceptions. This happens today in the browser, for example. When a `Promise` is resumed, it is typically from the context of the so-called microtask runner. If the resumed code throws an exception the microtask runner would be excepted to deal with it. In practice, the microtask runner will silently drop all exceptions raised in this way.
 
 A more appropriate strategy for handling exceptions is for a specified sibling fiber, or at least a fiber that the language runtime is aware of, to handle the exception. This can be arranged by the language runtime straightforwardly by having the failing fiber signal an appropriate event.
 
