@@ -202,19 +202,19 @@ This, in turn, means that a fiber manager may be relieved of the burden of commu
 
 #### `fiber.retire` Retire a fiber
 
-The `fiber.retire` instruction is used when a fiber has finished its work and wishes to inform its parent of any final results. Like `fiber.suspend` (and `fiber.resume`), `fiber.retire` has an event argument&mdash;together with associated values on the agument stack&mdash; that are communicated.
+The `fiber.retire` instruction is used when a fiber has finished its work and wishes to inform its parent of any final results. Like `fiber.suspend` (and `fiber.resume`), `fiber.retire` has an event argument&mdash;together with associated values on the argument stack&mdash; that are communicated.
 
 In addition, the retiring fiber is put into a moribund state and any computation resources associated with it are released. If the fiber has any active descendants then they too are made moribund.
 
 >It is not recommended that a fiber allows exceptions to be propagated out of the fiber function. Instead, the function should use a `fiber.retire` &mdash;together with an appropriate event description&mdash;to signal the exceptional return. This allows the resume ancestor to directly capture the exceptional event as part of its normal response to the resume.
 
->The reason that we don't recommend allowing exceptions to propagate is that an inapprpriate exception handler may be invoked as a result. This is especially dangerous in the case that the retiring fiber was switched to&mdash;with a `fiber.switch` instruction&mdash;rather than being resumed.
+>The reason that we don't recommend allowing exceptions to propagate is that an inappropriate exception handler may be invoked as a result. This is especially dangerous in the case that the retiring fiber was switched to&mdash;with a `fiber.switch` instruction&mdash;rather than being resumed.
 
 #### `fiber.retireto` Retire a fiber and directly switch
 
 The `fiber.retireto` instruction is used when a fiber has finished its work and wishes to switch to another fiber. This is analogous to tail recursive calls of functions: the current fiber is retiring and another fiber is resumed.
 
-The `fiber.retireto` instruction has three operands: the identity of the fiber being retired, the identity of the fiber being resumed and an event &mdash;together with associated values on the agument stack&mdash;to communicate to the newly resumed fiber.
+The `fiber.retireto` instruction has three operands: the identity of the fiber being retired, the identity of the fiber being resumed and an event &mdash;together with associated values on the argument stack&mdash;to communicate to the newly resumed fiber.
 
 In addition, the retiring fiber is put into a moribund state and any computation resources associated with it are released.
 
@@ -303,7 +303,7 @@ During normal execution, the `$arrayGenerator` is always waiting for an `$next` 
 
 Notice that the array generator has definite knowledge of its own fiber&mdash;it is given the identity of its fiber explictly. This is needed because when a fiber suspends, it must use the identity of the fiber that is suspending. There is no implicit searching for which computation to suspend.
 
-The end of the `$arrayGenerator`&mdashwhich is triggered when there are no more elements to generate&mdash;is marked by a simple `return`. This will terminate the fiber and also signal to the consumer that generation has finished.
+The end of the `$arrayGenerator`&mdash;which is triggered when there are no more elements to generate&mdash;is marked by a simple `return`. This will terminate the fiber and also signal to the consumer that generation has finished.
 
 #### Consuming generated elements
 The consumer side of the generator/consumer scenario is similar to the generator; with a few key differences:
