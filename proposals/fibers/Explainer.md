@@ -78,9 +78,9 @@ When the active fiber returns normally or exceptionally:
 
 The resume stack maintains several important invariants (with trivial proofs by induction on execution traces):
 
-    1. The active fiber is always on top of the resume stack.
-    2. The root fiber for the current computation is always at the base of the resume stack.
-    3. No fiber appears more than once in the resume stack, so uncaught exceptions always reach the root.
+ 1. The active fiber is always on top of the resume stack.
+ 2. The root fiber for the current computation is always at the base of the resume stack.
+ 3. No fiber appears more than once in the resume stack, so uncaught exceptions always reach the root.
 
 [^c]: Alternatively, we could have fibers trap when their top-level function returns or propagates an exception, but then we would have to special-case root fibers to allow them to return or propagate exceptions to the host normally. This would also inhibit optimizations that allow fibers that return without ever suspending to be no more expensive than function calls, since the only nontrapping way to leave a fiber would be suspending.
 
