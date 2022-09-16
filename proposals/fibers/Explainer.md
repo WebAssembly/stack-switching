@@ -10,203 +10,243 @@ This proposal refers solely to those features of the core WebAssembly virtual ma
 
 ## Fibers and Events
 
-The main concepts in this proposal are the _fiber_ and the _event_. A fiber is a first class value which denotes the resource used to support a computation. An event is used to signal a change in the flow of computation from one fiber to another. 
+The main concepts in this proposal are the _fiber_ and the _event_. A fiber is a first class value which denotes the resource used to support a computation. An event is used to signal a change in the flow of computation from one fiber to another.
 
 ### The `fiber` concept
 
-A `fiber` is a resource that is used to enable a computation that has an extent in time and has identity. The latter allows applications to manage their own computations and support patterns such as async/await, green threads and yield-style generators. 
+A `fiber` is a resource that is used to enable a computation that has an extent in time and has identity. The latter allows applications to manage their own computations and support patterns such as async/await, green threads and yield-style generators.
 
-Associated with fibers is a new reference type:
+Associated with fibers is a new heap type:
 
 ```
-fiber r0 .. rk
+fiber t*
 ```
-which denotes fibers that return a vector of values of types `r0` through `rk`.
+
+which denotes a fiber that returns types `t*`.
+
 
 #### The state of a fiber
 
-A fiber is inherently stateful; as the computation proceeds the fiber's state
-reflects that evolution. The state of a fiber includes function call frames and
-local variables that are currently live within the computation as well as
-whether the fiber is currently being executed. In keeping with the main design
-principles of WebAssembly, the frames and local variables represented within a
-fiber are not accessible other than by normal operations.
+A fiber is inherently stateful; as the computation proceeds the fiber's state reflects that evolution.
+The state of a fiber includes function call frames and local variables that are currently live within the computation as well as whether the fiber is currently being executed.
+In keeping with the main design principles of WebAssembly, the frames and local variables represented within a fiber are not accessible other than by normal operations.
 
-In addition to the frames and local variables, it is important to know whether a
-fiber is suspendable or not. In essence, only fibers that have been explicitly
-suspended may be resumed, and only the active fiber may be suspended.
+Fibers themselves are in one of three states: active, suspended, or moribund.
+All Wasm execution occurs on an _active_ fiber and there can only be one active fiber at a time in a given Wasm execution context.
+Other fibers are either _suspended_, which means they hold state and can become active in the future, or they are _moribund_, which means that all resources associated with the fiber have been released and attempts to make it the active fiber will trap.
 
-Even though a fiber may be referenced after it has completed, such references
-are not usable and the referenced fibers are asserted to be _moribund_[^b]. Any
-attempt to switch to a moribund fiber will result in a trap.
+#### Fiber relationships
 
-[^b]: However, [an alternate approach](#using-tables-to-avoid-gc-pressure) suggests an alternate approach for managing moribund fibers.
+It is convenient to identify some relationships between fibers: the _parent_ of a fiber is the fiber that first makes it active by switching into it[^b].
+From there we can define _child_, _ancestor_, and _descendant_ in the usual ways.
+Since each fiber explicitly switched into by the program has one parent (the fiber that first switched into it), these fibers form trees.
+At the root of each of these trees is a _root fiber_ that is the _root ancestor_ of all the fibers in that tree (including itself).
+A root fiber is implicitly created and made active by each call from the host to an exported function.
 
-#### Fibers, ancestors and children
+Note that during the life cycle of a Wasm instance there may be many calls from the host to exported functions, so there may be many root fibers.
+Note also that fibers that have been created but never switched into do not have parents—we do not consider these fibers to have ancestors or root ancestors at all.
 
-It is convenient to identify some relationships between fibers: the _resuming
-parent_ of a fiber is the fiber that most recently resumed that fiber. A _resume
-ancestor_ is either the _resume parent_ of the fiber, or is a resume ancestor of
-the resume parent of the fiber.
+[^b]: The parent of a fiber is usually the other fiber that originally created it, but with `fiber.new` it is possible to create a fiber, then switch to a different fiber, and only then switch into the new fiber. In this case the parent of the new fiber is not the fiber that created it.
 
-The root of the ancestor relation is the _root task_ and represents the initial
-entry point into WebAssembly execution.
+#### The resume stack
 
-### The `event` concept
+Although fibers can suspend themselves and switch to other fibers using mechanisms described below, control can also leave a fiber via a normal return from the fiber's top-level call frame or via an exception that propagates out of that top-level call frame.
+When that happens, execution needs to continue on a different fiber[^c].
+Normal and exceptional return mechanisms do not specify a target fiber to switch to, so in these cases Wasm semantics must prescribe a policy for choosing the fiber to switch to.
 
-An event is an occurrence where execution switches between fibers. Events also
-represent a communications opportunity between fibers: an event may communicate
-data as well as signal a change in fibers.
+The chosen policy can be described in terms of the _resume stack_, which is a stack of fibers.
 
-#### Event declaration
-Every change in computation is associated with an _event description_: whenever a fiber is suspended, the suspending fiber uses an event to signal both the reason for the suspension and to communicate any necessary data. Similarly, when a fiber is resumed, an event is used to signal to the resumed fiber the reason for the resumption.
+When a new root fiber is created by a host call to an export:
 
-An event description has a predeclared `tag` which determines the type of event
-and what values are associated with the event. Event tags are declared:
+ - a new resume stack is created containing just that root fiber[^d].
+
+When switching to a fiber _F_, the following occurs:
+
+ - If _F_ has a root ancestor but that root ancestor is not the root fiber at the base of the resume stack, trap.
+
+ - Otherwise, if _F_ is already in the resume stack, pop the stack until _F_ is at the top.
+
+ - In all other cases push _F_ onto the resume stack.
+
+When the active fiber returns normally or exceptionally:
+
+ - Pop the active fiber off the top of the resume stack and mark it moribund.
+
+ - If the resume stack is now empty, return (normally or exceptionally) to the host.
+
+ - Otherwise make the new top fiber active and return (normally or exceptionally) to it.
+
+The resume stack maintains several important invariants (with trivial proofs by induction on execution traces):
+
+    1. The active fiber is always on top of the resume stack.
+    2. The root fiber for the current computation is always at the base of the resume stack.
+    3. No fiber appears more than once in the resume stack, so uncaught exceptions always reach the root.
+
+[^c]: Alternatively, we could have fibers trap when their top-level function returns or propagates an exception, but then we would have to special-case root fibers to allow them to return or propagate exceptions to the host normally. This would also inhibit optimizations that allow fibers that return without ever suspending to be no more expensive than function calls, since the only nontrapping way to leave a fiber would be suspending.
+
+[^d]: In practice, engines are expected to maintain just one resume stack, just as they maintain just one call stack for MVP Wasm, even though the spec treats each host call to an export as the beginning of a fresh computation with a fresh stack.
+
+### Resumption events
+
+Every time a fiber suspends itself and resumes another fiber, that transfer of control is a _resumption event_ with an associated tag that indicates the reason for the event.
+It's possible for resumption events to carry values from the suspending fiber to the resuming fiber as well, and the event tag specifies the types of those values so the resuming fiber can receive them properly.
+
+Event tag declarations are the same as for the tags in the [exception handling proposal(https://github.com/WebAssembly/exception-handling):
 
 ```
 (tag $e (param t*))
 ```
-where the parameter types are the types of values communicated along with the event. Event tags may be exported from modules and imported into modules.
 
-When execution switches between fibers, the originating fiber must ensure that values corresponding to the event tag's signature are on the value stack prior to the switch. After the switch, the values are available to the newly executing fiber, also on the value stack, and will no longer be available to the originating fiber.
-
-For example, if an event description requires an `i32` parameter:
-
-```
-(tag $yield (param i32))
-```
-an `i32` value must be at the top of the value stack if the `$yield` event is signaled. If the switch event were a suspend (say), the suspending fiber must arrange to have the integer on the stack before issuing the `suspend` instruction. The resume parent of the suspending fiber will see this integer on the value stack&mdash;along with the `$yield` event itself. 
-
-Conversely, instructions that are _responding_ to an event can assume that the event tag's description are on the stack at the start of such a block. This is verified by the engine's validation algorithm which compares the block's signature with the event tag's signature. 
+where the parameter types are the types of values communicated by the event.
+As in exception handling, tags may be exported and imported from and into modules.
 
 ## Instructions
 
-We introduce instructions for creating, suspending, resuming and terminating fibers and instructions for responding to events.
+We introduce instructions for creating, switching, and terminating fibers and instructions for receiving values while resuming.
 
 ### Switching Blocks
 
-We manage the code that is responsible for handling switching events in terms of _handler blocks_. A handler block is a block that defines a localized context for handling switch events; in particular, within a handler block there may be zero or more _event_ blocks. Each event block contains code that is responsible for responding to a single event.
+We manage the code that is responsible for handling resumption events in terms of _handler blocks_. A handler block is a block that defines a localized context for handling resumptions.
+Within a handler block there are zero or more _event_ blocks, each of which contains code that is responsible for handling resumptions with a particular tag.
 
 This block organization is reminiscent of how `try`..`catch` blocks are structured to enable exception handling; although there are significant differences.
 
-#### `handle` blocks
+#### `handle-event` blocks
 
-A `handle` block introduces an execution scope where fibers may be suspended and/or resumed. Within a `handle` block, any event that arises as a result of a `suspend` or `resume` must be handled by a subsidiary `event` block.
+A `handle` block introduces an execution scope where fibers may be suspended and subsequently resumed.
+Within a `handle` block, any resumption event that arises must be handled by a subsidiary `event` block, otherwise the `handle` block will trap.
 
 The overall format of a `handle` block is:
 
 ```
-(handle $hdl_lbl hdl_type
-  ...
-  fiber.suspend ...
-  ...
-  fiber.resume ...
-  ...
-  (event $evt_lbla $tag $type
+(handle $label $blocktype
+  (do
+    ...
+    fiber.spawn ...
+    ...
+    fiber.suspend_to ...
+    ...
+  )
+  (event $tag
    ...
   )
-  (event $evt_lblb $tag $type
+  (event $tag
    ...
   )
-) ;; $hdl_lbl
+) ;; $label
 ```
 
-although the ordering that is shown here is not required.
+Function bodies are implicit handle blocks with no event handlers.
 
-Any `fiber.suspend`, `fiber.resume`, `fiber.spawn` instruction must be textually enclosed within a `handle` block. This is because those instructions can all result in switches between fibers. However, a function body may be considered to be equivalent to an outermost `handle` block. 
+`handle` blocks also have labels and types that work equivalently to labels and types on other control flow structures.
+Like `catch` blocks in exception handling, `event` blocks take type types from their tags as input and must produce the same output types as their enclosing `handle` block.
 
-Although it may be permitted to mix `suspend` and `resume` handling blocks, i.e., it is permitted to issue both `fiber.suspend` and `fiber.resume` instructions within a single `handle` block, in most cases they will not be mixed: a given `handle` block will be handling either a `fiber.suspend` or a `fiber.resume`, but not both. This is enforced, in part, by the assertion that instructions following a `fiber.suspend` instruction are not reachable.
+When control reaches a `handle-event` block, it executes the `do` portion normally.
+When control reaches the end of the `do` portion or when the label is branched to, control continues after the `handle-event` block.
+`event` blocks are executed in response to resumptions with matching tags inside the `do` portion of the `handle-event` and are never otherwise executed.
 
-As with regular blocks, `handle` blocks also have a type signature. The `param` part of that signature indicates which values the block may expect to be on the value stack, and the `return` part of the signature indicated what values will be on the value stack at exit; _regardless_ of whether the `handle` block exits normally or via an `event` block.
+`handle` blocks may be nested, in which case the available `event` blocks are the concatenation of all the `event` blocks in all the `handle` blocks that a given switching instruction is syntactically enclosed within[^f].
 
-#### `event` blocks
+[^e]: Although this further restricts function decomposition, so maybe suspending instructions should take immediate lists (tag, branch label) pairs instead of using `handle-event` blocks.
 
-An `event` block specifies code that should be executed when a particular event occurs. An `event` block is associated with an event tag and a block signature.
-
-The event tag&mdash;which must have been declared in the `tag` section&mdash;signals the kind of event the block is intended to respond to.
-
-The block signature&mdash;which takes the normal form of a block signature&mdash;must match the signature associated with the tag. I.e., the event's signature must form a suffix of the block's parameter signature. Any additional elements of the block signature must form a suffix of the enclosing `handle` block.
-
-If an `event` block has a `return` signature, that repesents the exit signature for the event block.
-
-`event` blocks are not executed if they are encountered normally: i.e., there is no fall-through into or between `event` blocks. In the case of an event block being encountered in the instruction stream, the immediately enclosing `handle` block is exited.
-
-When execution leaves an `event` block, the `handle` block in which it is located also exits. This is why the return signature of an `event` block must match the return signature of its enclosing `handle` block.
-
-As noted above, a function body is considered to be a `handle` block. This implies that there may be `event` blocks occurring within the top-level block of a function. In fact, we make use of this property for fibers that are created using the `fiber.new` instruction.
-
-`handle` blocks may be nested; in which case, the available `event` blocks are the concatenation of all the `event` blocks in all the `handle` blocks that a given switching instruction is textually enclosed within&mdash;up to and including the function body itself.
+[^f]: This seems weird. Revisit it.
 
 ### Fiber instructions
 
-#### `fiber.new` Create a new fiber
+### `fiber.current` Get the current fiber
 
-The `fiber.new` instruction creates a new fiber. The instruction has a literal operand which is the index of a function of type `[[ref fiber  r*] t*]->[r*]`, together with corresponding values on the argument stack.
+`fiber.current $F : [] -> [(ref $F)]`
 
-The result of the `fiber.new` instruction is a `fiber` which is the identifier for the newly created fiber. The identity of the fiber is also the first argument to the fiber function itself&mdash;this allows fibers to know their own identity in a straightforward way.
+ - where `$F = fiber t*`
 
-The return values that the fiber function returns represent the return values of the fiber. This is reflected in the type signatures of the `fiber` and the function.
+The `fiber.current` instruction dynamically checks the type of the current active fiber.
+If the type is `$F`, `fiber.current` returns a reference to the current fiber and otherwise it traps.
+The type parameter and dynamic type check are necessary so that `fiber.current` can be assigned a concrete fiber type during validation.
 
-The new fiber is created in a suspended state: it must be the case that the function referenced has one or more `event` blocks within the top-level block of that function. When the fiber is resumed, one of those `event` blocks will be entered as a result of the `fiber.resume`&mdash;depending on the actual event used to resume the fiber.
+#### `fiber.spawn` Create and switch to a new fiber
 
->If a function is referenced in a `fiber.new` instruction has no `event` blocks at the toplevel, then this function will cause a trap when attempting to resume the new fiber&mdash;because, without any `event` blocks, the fiber will not be able to respond to the resume.
+`fiber.spawn $f : [t*] -> [t'*]`
 
-#### `fiber.spawn` Create and enter a new fiber
+ - where `$f = func $sig`
+ - and `$sig = [t*] -> [t'*]`
 
-The `fiber.spawn` instruction creates a new fiber and immediately enters it. It requires a literal function operand of type `[[fiber r*] t*] -> [r*]`, together with values corresponding to `t*` on the value stack.
+The `fiber.spawn` instruction creates a new fiber from the function given as the literal argument and immediately switches to it, updating the resume stack accordingly.
 
-The `fiber.spawn` instruction is analogous to a `call` instruction, the effect of the instruction is to leave on the value stack the return values of the fiber's function. However, as with other fibers, the new fiber may suspend; in which case there should be appropriate `event` blocks in the instruction stream enclosing the `fiber.spawn` instruction.
+When the new fiber does not suspend, the `fiber.spawn` instruction is indistinguishable from a `call` instruction; the effect of the instruction is to leave on the value stack the return values of the fiber's function and to proceed with execution at the next instruction.
+However, if the fiber that executed `fiber.spawn` is resumed before the new fiber returns, execution resumes in the corresponding `event` block of the enclosing `handle-event`, if any.
+If there is no corresponding `event` block, the resumption traps.
 
-Notice that only the newly created fiber has access to the reference that identifies the new fiber. If it is desired that the parent has access to this the code generator would typically insert a `fiber.suspend` instruction at the start of the function and pass out the `fiber` in an appropriate event description.
+#### `fiber.new` Create a new suspended fiber
+
+`fiber.new $F $f : [t*] -> [(ref $F)]`
+
+ - where `$F = fiber t'*`
+ - and `$f = func $sig`
+ - and `$sig = [t*] -> [t'*]`
+
+TODO: either needs multi-entry functions or to take a list of (tag, function) pairs.
 
 #### `fiber.suspend_to` Suspend the active fiber and switch to a new one
 
-The `fiber.suspend_to` takes an event description as an immediate argument and event values and a target fiber as stack operands. It suspends the current fiber and switches control to the target fiber using the specified event, passing the event operands to the target fiber.
+`fiber.suspend_to $F $tag : [t* (ref null $F)] -> [t'*]`
 
-If the target fiber is not a resume ancestor of the current fiber, the target fiber's resume parent is set to be the current fiber. Otherwise the target fiber's resume parent is unchanged and all fibers that are resume ancestors of the current fiber and descendents of the target fiber are essentially popped off the resume stack. Determining whether a fiber is a resume ancestor of the current fiber can be done in constant time by tracking the resume stack depth of each suspended fiber and the depth of the current fiber.
+ - where `$F = fiber t'*`
+ - and `$tag = tag (param t*)`
 
-If the target fiber is moribund, `fiber.suspend_to` traps.
+The `fiber.suspend_to` instruction takes an event tag as an immediate argument and event values and a target fiber as stack operands.
 
-Execution of the current fiber executing `fiber.suspend_to` instruction will not resume until either another fiber switches back to it with another `fiber.suspend_to`  instruction or the if the target fiber returns normally and was not a resume ancestor of the current fiber. When the current fiber is resumed via `fiber.suspend_to`, its execution will continue with the `event` block whose tag was used to resume it. If the fiber is instead resumed via a normal return, execution will continue with the instruction after `fiber.suspend_to` with the values returned by the target fiber pushed onto the stack.
+ - If the target fiber reference is null, trap.
+ - If the target fiber is moribund, trap.
+ - If the target fiber is already the current fiber, trap.
+ - If the target fiber has a root ancestor but it is different from the current root ancestor, trap.
+ - Otherwise, suspend the current fiber and switch control to the target fiber using the specified event and event operands. Update the resume stack accordingly.
 
-#### `fiber.switch` Switch to a different fiber
-
-The `fiber.switch` instruction is a combination of a `fiber.suspend_to` to a resume ancestor of the current fiber and another `fiber.resume_to` to an identified fiber. This instruction is useful for circumstances where the suspending fiber knows which other fiber should be resumed but needs to truncate the resume stack first.
-
-The `fiber.switch` instruction has three arguments: the identity of the fiber being suspended, the identity of the fiber being resumed and the signaling event.
-
-Although it may be viewed as being a combination of the two instructions, there is an important distinction also: the signaling event. Under the common hierarchical organization, a suspending fiber does not know which fiber will be resumed. This means that the signaling event has to be of a form that the fiber's manager is ready to process. However, with a `fiber.switch` instruction, the fiber's manager is not informed of the switch and does not need to understand the signaling event.
-
-This, in turn, means that a fiber manager may be relieved of the burden of communicating between fibers. I.e., `fiber.switch` supports a symmetric coroutining pattern. However, precisely because the fiber's manager is not made aware of the switch between fibers, it must also be the case that this does not _matter_; in effect, the fiber manager may not directly be aware of any of the fibers that it is managing.  
-
-#### `fiber.retire` Retire a fiber
-
-The `fiber.retire` instruction is used when a fiber has finished its work and wishes to inform its parent of any final results. Like `fiber.suspend` (and `fiber.resume`), `fiber.retire` has an event argument&mdash;together with associated values on the agument stack&mdash; that are communicated.
-
-In addition, the retiring fiber is put into a moribund state and any computation resources associated with it are released. If the fiber has any active descendants then they too are made moribund.
-
->It is not recommended that a fiber allows exceptions to be propagated out of the fiber function. Instead, the function should use a `fiber.retire` &mdash;together with an appropriate event description&mdash;to signal the exceptional return. This allows the resume ancestor to directly capture the exceptional event as part of its normal response to the resume.
-
->The reason that we don't recommend allowing exceptions to propagate is that an inapprpriate exception handler may be invoked as a result. This is especially dangerous in the case that the retiring fiber was switched to&mdash;with a `fiber.switch` instruction&mdash;rather than being resumed.
-
-#### `fiber.retireto` Retire a fiber and directly switch
-
-The `fiber.retireto` instruction is used when a fiber has finished its work and wishes to switch to another fiber. This is analogous to tail recursive calls of functions: the current fiber is retiring and another fiber is resumed.
-
-The `fiber.retireto` instruction has three operands: the identity of the fiber being retired, the identity of the fiber being resumed and an event &mdash;together with associated values on the agument stack&mdash;to communicate to the newly resumed fiber.
-
-In addition, the retiring fiber is put into a moribund state and any computation resources associated with it are released.
+If the target fiber returns normally and the fiber that executed `fiber.suspend_to` is the next active fiber as determined by the resume stack, it will resume execution with the instruction following `fiber.suspend_to`.
+Otherwise, execution resumes in the corresponding `event` block of the enclosing `handle-event`, if any.
+If there is no corresponding `event` block, the resumption traps.
 
 #### `fiber.release` Destroy a suspended fiber
 
-The `fiber.release` instruction clears any computation resources associated with the identified fiber. The identified fiber must be in `suspended` state.
+`fiber.release $F : [t* (ref null $F)] -> [t*]`
 
-If the suspended fiber has current descendant fibers (such as when the fiber was suspended), then those fibers are `fiber.release`d also.
+ - where `$F = fiber t*`
 
-Since fiber references are wasm values, the reference itself remains valid. However, the fiber itself is now in a moribund state that cannot be resumed.
+The `fiber.release` instruction clears any computation resources associated with the identified fiber.
+To keep the resume stack in a consistent state if the target fiber is in the resume stack, this has to update the resume stack and transfer control as if a `fiber.resume_to` had been executed followed by a normal return of the given values from the target fiber.
+Since the next active fiber may not be the current fiber, this instruction may suspend[^g]
 
-The `fiber.release` instruction is primarily intended for situations where a fiber manager needs to eliminate unneeded fibers and does not wish to cancel them by resuming them with a cancellation event.
+ - If the target fiber reference is null, trap.
+ - If the target fiber is the current fiber, trap.
+ - If the target fiber has a root ancestor but it is different from the current root ancestor, trap.
+ - If the target fiber is already moribund, do nothing but push the `t*` operands back to the stack.
+ - Otherwise, update the resume stack as if switching to the target fiber, pop the target fiber off the resume stack, mark the target fiber as moribund, and return normally with the given `t*` values to the new active fiber.
+
+This instruction is primarily a performance optimization over killing a thread cooperatively by switching to it using `fiber.resume_to` with a cancellation event and then having it return normally.
+In particular, if the new active fiber after executing `fiber.release` is the same as the previous active fiber (i.e. if the target fiber was not in the resume stack), then the engine does not actually have to perform any context switches.
+
+[^g]: This is exceptionally weird. Maybe we should trap instead if the target fiber is in the resume stack? This would prevent children from killing their parent and spoofing normal return values as well.
+
+## Invariants and requirements
+
+Beyond the invariants ensured by the design of the resume stack alone, the instructions in this proposal ensure additional invariants as well.
+
+ 1. Normal return from fibers is type safe.
+
+     - Switching to a fiber either pops the previous active fiber off the resume stack or pushes the new fiber on top of the previous fiber in the resume stack.
+       - In the first case the previous fiber's last suspending instruction will not return, so its return type doesn't matter.
+       - In the second case, the suspending instruction expects to return the same types the new active fiber expects to return.
+     - There is no other way for a different fiber to become the resume child of our suspended fiber without the suspended fiber being resumed first and suspending itself again.
+
+ 2. Host frames are never suspended.
+
+     - All switching instructions trap if they would switch to a fiber with a different root ancestor than the current active fiber.
+     - The root ancestor of the current active fiber was created when the current computation was started by the host calling an export.
+     - Whenever a host import is called and the host then calls back into Wasm (putting a host frame on the stack), a new root ancestor is installed and any attempts to resume fibers that had been executed before that point will trap.
+
+ 3. If the identities of a fiber's ancestors are not provided to the fiber's descendants and the ancestors never resume the descendants directly, the descendants cannot transfer control to the ancestors without the fiber's cooperation (or by releasing the fiber).
+
+     - Transferring control via resumption events requires the target fiber's identity, so this is not an option.
+     - Since the ancestors always resume the fiber rather than the descendants, the fiber is always deeper in the resume stack than its descendants, so normal or exceptional return will reach the fiber before its ancestors.
 
 ## Examples
 
@@ -214,13 +254,17 @@ We look at three examples in order of increasing complexity and sophistication: 
 
 ### Yield-style generators
 
-The so-called yield style generator pattern consists of a pair: a generator function that generates elements and a consumer that consumes those elements. When the generator has found the next element it yields it to the consumer, and when the consumer needs the next element it waits for it. Yield-style generators represents the simplest use case for stack switching in general; which is why we lead with it here.
+The so-called yield style generator pattern consists of a pair: a generator function that generates elements and a consumer that consumes those elements.
+When the generator has found the next element it yields it to the consumer, and when the consumer needs the next element it waits for it.
+Yield-style generators represents the simplest use case for stack switching in general, which is why we lead with it here.
 
 #### Generating elements of an array
-We start with a simple C-style pseudo-code example of a generator that yields for every element of an array. For explanatory purposes, we introduce a new `generator` function type and a new ``yield` statement to C:
+
+We start with a simple C-style pseudo-code example of a generator that yields for every element of an array.
+For explanatory purposes, we introduce a new `generator` function type and a new ``yield` statement to C:
 ```
-void generator arrayGenerator(fiber *thisTask,int count,int els){
-  for(int ix=0;ix<count;ix++){
+void generator arrayGenerator(fiber *thisTask, int count, int els) {
+  for(int ix = 0; ix < count; ix++) {
     thisTask yield els[ix];
   }
 }
@@ -233,71 +277,93 @@ is hypothetical code that a generator might execute to yield a value from a gene
 
 In WebAssembly, this generator can be written:
 ```
-(type $generator (ref fiber i32))
-(tag $identify (param ref $generator))
+(type $generator (fiber i32))
+(tag $identify (param (ref $generator)))
 (tag $yield (param i32))
 (tag $next)
-(tag $end-gen)
 
-(func $arrayGenerator (param $thisTask $generator) (param $count i32) (param $els i32)
+(func $arrayGenerator (typeparam $F fiber) (param $parent (ref $F)) (param $count i32) (param $els i32)
+  (local $ix i32)
+
   (handle $on-init
-    (fiber.suspend (local.get $thisTask) $identify (local.get $thisTask))
-    (event $next)  ;; we are just waiting for the first next event
+    (do
+      ;; Suspend immediately back to the parent and send our identity along
+      (fiber.suspend_to $F $identify
+        (fiber.current $generator)
+        (local.get $parent)
+      )
+    )
+    (event $next)  ;; We are just waiting for the first next event
   )
 
-  (local $ix i32)
-  (local.set $ix (i32.const 0))
-  (loop $l
-    (local.get $ix)
-    (local.get $count)
-    (br_if $l (i32.ge (local.get $ix) (local.get $count)))
+  (block $break
+    (loop $l
+      (br_if $break (i32.ge (local.get $ix) (local.get $count)))
 
-    (handle
-      (fiber.suspend (local.get $thisTask)
-          $yield 
-          (i32.load (i32.add (local.get $els) 
-                             (i32.mul (local.get $ix)
-                                      (i32.const 4))))))
-      (event $on-next ;; set up for the next $next event
-        (local.set $ix (i32.add (local.get $ix) (i32.const 1)))
-        (br $l)
+      ;; Yield and wait for a next event
+      (handle
+        (do
+          (fiber.suspend_to $F $yield
+            (i32.load (i32.add (local.get $els)
+                               (i32.mul (local.get $ix)
+                                        (i32.const 4))))
+            (local.get $parent)
+          )
+        )
+        (event $next)
+      ) ;; handle
+
+      ;; Update the loop counter and continue
+      (local.set $ix (i32.add (local.get $ix) (i32.const 1)))
+      (br $l)
+    ) ;; $l
+  ) ;; $break
+
+  ;; Return normally to kill the fiber.
+)
+```
+When a fiber suspends, it must be in a `handle` context where one or more `event` handlers are available to it.
+In this case our generator has two such `handle` blocks; the first is used during the generator's initialization phase and the second during the main loop.
+
+Our generator will be created in a running state using the `fiber.spawn` instruction.
+This means that one of the generator function's first responsibilities is to communicate its identity to the caller.
+This is achieved through the fragment:
+
+```
+  (handle $on-init
+    (do
+      ;; Suspend immediately back to the parent and send our identity along
+      (fiber.suspend_to $F $identify
+        (fiber.current $generator)
+        (local.get $parent)
       )
-    ) ;; handle
-  ) ;; $l
-  ;; nothing to return
-  (return)
-)
+    )
+    (event $next)  ;; We are just waiting for the first next event
+  )
 ```
-When a fiber suspends, it must be in a `handle` context where one or more `event` handlers are available to it. In this case our generator has two such `handle` blocks; the first is used during the generator's initialization phase and the second during the main loop.
 
-Our generator will be created in a running state&mdash;using the `fiber.spawn` instruction. This means that one of the generator function's first responsibilities is to communicate its identity to the caller. This is achieved through the fragment:
-```
-(handle $on-init
-  (fiber.suspend (local.get $thisTask) $identify (local.get $thisTask))
-  (event $next)  ;; we are just waiting for the first next event
-)
-```
-The `$arrayGenerator` suspends itself, issuing an `identify` event that the caller will respond to. The generator function will continue execution only when the caller issues a `$next` event to it. Suspending with the `$identify` event allows the caller to record the identity of the generator's fiber.
+The `$arrayGenerator` suspends itself and resumes its parent, issuing an `identify` event to send its identity to the caller.
+The caller needs that identity so that it can resume the `$arrayGenerator` fiber with a `$next` event to continue execution.
+Note that `$arrayGenerator` similarly had to take its parent's identity as an argument so it could suspend back to the parent in the first place.
+Since the parent fiber could have any type, `$arrayGenerator` needs to be parameterized with that type `$F` so it can receive and use the parent's fiber reference.
 
-During normal execution, the `$arrayGenerator` is always waiting for an `$next` event to trigger the computation of the next element in the generated sequence. If a different event were signaled to the generator the engine would simply trap.
+During normal execution, the `$arrayGenerator` is always waiting for an `$next` event to trigger the computation of the next element in the generated sequence.
+If a different event were signaled to the generator the engine would simply trap.
 
-Notice that the array generator has definite knowledge of its own fiber&mdash;it is given the identity of its fiber explictly. This is needed because when a fiber suspends, it must use the identity of the fiber that is suspending. There is no implicit searching for which computation to suspend.
-
-The end of the `$arrayGenerator`&mdashwhich is triggered when there are no more elements to generate&mdash;is marked by a simple `return`. This will terminate the fiber and also signal to the consumer that generation has finished.
+The end of the `$arrayGenerator`, which is triggered when there are no more elements to generate, is marked by a simple `return`.
+This will terminate the fiber and also signal to the consumer that generation has finished.
 
 #### Consuming generated elements
-The consumer side of the generator/consumer scenario is similar to the generator; with a few key differences:
 
-* The consumer drives the overall choreography
-* The generator does not have a specific reference to the consumer; but the consumer knows and manages the generator. 
+The consumer side of the generator/consumer scenario is similar to the generator except that the consumer is driving the overall control flow.
 
 As before, we start with a C-style psuedo code that uses a generator to add up all the elements generated:
 ```
-int addAllElements(int count, int els[]){
-  fiber *generator = arrayGenerator(count,els);
+int addAllElements(int count, int els[]) {
+  fiber *generator = arrayGenerator(count, els);
   int total = 0;
-  while(true){
-    switch(generator resume next){
+  while (true) {
+    switch (generator resume next) {
       case yield(El):
         total += El;
         continue;
@@ -312,48 +378,55 @@ int addAllElements(int count, int els[]){
 >the event signaled by the resumed fiber when it suspends.
 
 In WebAssembly, the `addAllElements` function takes the form:
+
 ```
-(func $addAllElements (param $count i32) (param $els i32) (result i32)
-  (local $generator $generator)
-  (handle
-    (fiber.spawn $arrayGenerator (local.get $count) (local.get $els))
-    (trap) ;; do not expect generator to return yet 
-    (event $identify (param ref $generator)
-      (local.set $generator)
+(func $addAllElements (typeparam $F fiber) (param $count i32) (param $els i32) (result i32)
+  (local $generator (ref $generator))
+  (local $total i32)
+
+  (local.set $generator
+    (handle (result (ref $generator))
+      (do
+        (fiber.spawn $arrayGenerator $F
+          (fiber.current $F)
+          (local.get $count)
+          (local.get $els)
+        )
+        (unreachable) ;; do not expect generator to return yet
+      )
+      (event $identify) ;; receives (ref $generator) on the stack
     )
   )
 
-  (local $total i32)
-  (local.set $total i32.const 0)
   (loop $l
     (handle $body
-      (fiber.resume (local.get $generator) $next ())
-      ;; The generator returned, exit $body, $lp
-      (event $yield (param i32)
-        (local.get $total) ;; next entry to add is already on the stack
-        (i32.add)
-        (local.set $total)
-        (br $l)
+      (do
+        (fiber.suspend_to $generator $next (local.get $generator))
+        ;; The generator returned, exit $body, $l
       )
-      (event $end ;; not used in this example
-        (br $body)
+      (event $yield ;; i32 on stack
+        (local.set $total (i32.add (local.get $total)))
+        (br $l)
       )
     )
   )
   (local.get $total)
-  (return)
 )
 ```
-The first task of `$addAllElements` is to establish a new fiber to handle the generation of elements of the array. We start the generator running, which impies that we first of all need to wait for it to report back its identity. `fiber.spawn` is like `fiber.resume`, in that if the function returns, the next instruction will execute normally. However, we don't expect the generator to return yet, so we will trap if that occurs.
 
-The main structure of the consumer takes the form of an unbounded loop, with a forced termination when the generator signals that there are no further elements to generate. This can happen in two ways: the generator function can simply return, or it can (typically) `fiber.retire` with an `$end` event. Our actual generator returns, but our consumer code can accomodate either approach.
+The first task of `$addAllElements` is to establish a new fiber to handle the generation of elements of the array.
+We start the generator running, which implies that we first of all need to wait for it to report back its identity.
+If the function called by `fiber.spawn` returns without suspending, the next instruction will execute normally.
+However, we don't expect the generator to return yet, so we will trap if that occurs.
 
->In practice, the style of generators and consumers is dictated by the toolchain. It would have been possible to structure our generator differently. For example, if generators were created as suspended fibers&mdash;using `fiber.new` instructions&mdash;then the initial code of our generator would not have suspended using the `$identify` event. However, in that case, the top-level of the generator function should consist of an `event` block: corresponding to the first `$next` event the generator receives.
->In any case, generator functions enjor a somewhat special relationship with their callers and their structure reflects that.
+The main structure of the consumer takes the form of an unbounded loop with a forced termination when the generator signals that there are no further elements to generate by returning normally.
+
+>In practice, the style of generators and consumers is dictated by the toolchain. It would have been possible to structure our generator differently. For example, if generators were created as suspended fibers using `fiber.new` instructions then the initial code of our generator would not have suspended using the `$identify` event.
+>In any case, generator functions enjoy a somewhat special relationship with their callers and their structure reflects that.
 
 Again, as with the generator, if an event is signaled to the consumer that does not match either event tag, the engine will trap.
 
-### Cooperative Coroutines
+### Cooperative Coroutines (TODO: port to fiber.resume_to)
 
 Cooperative coroutines, sometimes known as _green threads_ allow an application to be structured in such a way that different responsibilities may be handled by different computations. The reasons for splitting into such threads may vary; but one common scenario is to allow multiple sessions to proceed at their own pace.
 
@@ -437,7 +510,7 @@ The WebAssembly version of `adderThread` is straightforward:
       ) ;; $body
     ) ;; $l
     (fiber.retire (local.get $thisThred) ($finish_ (local.get $total)))
-  ) 
+  )
 )
 ```
 The fiber function is structured to have an essentially empty top-level
@@ -491,7 +564,7 @@ The WebAssembly translation of this is complex but not involved:
     (local.set $ix (i32.const 0))
     (loop $for_ix
       (handle
-        (fiber.resume 
+        (fiber.resume
           (table.get $task_table (i32.add (local.get $fibers)(local.get $ix)))
           $go_ahead)
         (event $pause_
@@ -522,10 +595,10 @@ The WebAssembly translation of this is complex but not involved:
   )
 )
 ```
-The main additional complications here don't come from threads per se; but rather from the fact that we have to use a table to keep track of our fibers. 
+The main additional complications here don't come from threads per se; but rather from the fact that we have to use a table to keep track of our fibers.
 
-### Asynchronous I/O
-In our third example, we look at integrating fibers with access to asynchronous APIs; which are accessed from module imports. 
+### Asynchronous I/O (TODO: port to `fiber.suspend_to`)
+In our third example, we look at integrating fibers with access to asynchronous APIs; which are accessed from module imports.
 
 On the web, asynchronous functions use the `Promise` pattern: an asynchronous I/O operation operates by first of all returning a `Promise` that 'holds' the I/O request, and at some point after the I/O operation is resolved a callback function attached to the `Promise` is invoked.
 
@@ -619,7 +692,7 @@ void naiveScheduler(){
           case io_notify(client,data):{
             reschedule(client,data);
           }
-        } 
+        }
       }
     }
   }
@@ -662,7 +735,7 @@ This correlation is only possible because the identity of a fiber is stable&dash
 
 Finally, the vast majority of the code for this scheduler is _boilerplate_ code that is manipulating data structures. We leave it as an exercise for the reader to translate it into WebAssembly.
 
-## Frequently Asked Questions
+## Frequently Asked Questions (TODO: Edit for `fiber.resume_to`)
 
 ### Why are we using 'lexical scoping' rather than 'dynamic scoping'
 A key property of this design is that, in order for a WebAssembly program to switch fibers, the target of the switch is explicitly identified. This so-called lexical scoping approach is in contract with a dynamic approach&mdash;commonly used for exception handling&mdash;where the engine is expected to search the current evaluation context to decide where to suspend to (say).
@@ -690,11 +763,11 @@ By requiring explicit fiber identifiers we make the task (sic) of implementing c
 ### What is the difference between first class continuations and fibers?
 A continuation is semantically a function that, when entered with a value, will finish an identified computation. In effect, continuations represent snapshots of computations. A first class continuation is reified; i.e., it becomes a first class value and can be stored in tables and other locations.
 
-The snapshot nature of a continuation is especially apparent when you compare delimited continuations and fibers. A fiber may give rise to multiple continuations&mdash;each time it suspends[^e] there is a new continuation implied by the state of the fiber. However, in this proposal, the fiber is reified wheras continuations are not. 
+The snapshot nature of a continuation is especially apparent when you compare delimited continuations and fibers. A fiber may give rise to multiple continuations&mdash;each time it suspends[^e] there is a new continuation implied by the state of the fiber. However, in this proposal, the fiber is reified wheras continuations are not.
 
-One salient aspect of first class continuations is _restartability_. In principal, a reified continuation can be restarted more than once&mdash;simply by invoking it. 
+One salient aspect of first class continuations is _restartability_. In principal, a reified continuation can be restarted more than once&mdash;simply by invoking it.
 
-It would be possible to achieve the effect of restartability within a fibers design&mdash;by providing a means of _cloning_ fibers. 
+It would be possible to achieve the effect of restartability within a fibers design&mdash;by providing a means of _cloning_ fibers.
 
 However, this proposal, as well as others under consideration, does not support the restartability of continuations or cloning of fibers.
 
@@ -716,7 +789,7 @@ When an I/O operation fails (say), and a requesting fiber needs to be resumed wi
 
 One popular feature of exception handling systems is that of _automatic exception propagation`; where an exception is automatically propagated from its point of origin to an outer scope that is equipped to respond to it. This proposal follows this by allowing unhandled exceptions to be propagated out of an executing fiber and into its resuming parent.
 
-However, this policy is generally incompatible with any form of computation manipulation. 
+However, this policy is generally incompatible with any form of computation manipulation.
 
 The reason is that, when a fiber is resumed, it may be from a context that does not at all resemble the original situation; indeed it may be resumed from a context that cannot handle any application exceptions. This happens today in the browser, for example. When a `Promise` is resumed, it is typically from the context of the so-called micro fiber runner. If the resumed code throws an exception the micro fiber runner would be excepted to deal with it. In practice, the micro fiber runner will silently drop all exceptions raised in this way.
 
@@ -734,7 +807,7 @@ Stack switching can be viewed as a technology that can be used to support suspen
 
 [^f]:Although CPS transformations do not require any change to the underlying engine; and they more readily can support restartable computations.
 
-A fiber, as outlined here, can be viewed as a natural proxy for the stack in stack switching. I.e., a fiber entity would have an embedded link to the stacks used for that fiber. 
+A fiber, as outlined here, can be viewed as a natural proxy for the stack in stack switching. I.e., a fiber entity would have an embedded link to the stacks used for that fiber.
 
 Furthermore, since the lifetime of a stack is approximately that of a fiber (a deep fiber may involve multiple stacks), the alignment of the two is good. In particular, a stack can be discarded precisely when the fiber is complete&mdash;although the fiber entity may still be referenced even though it is moribund.
 
@@ -803,7 +876,7 @@ Associated with each potential suspension point in a `handle` block one can cons
 
 Because both the table entries and any potential search key are all determined statically, the table search can be implemented using a [_perfect hash_](https://en.wikipedia.org/wiki/Perfect_hash_function) algorithm. I.e., a situation-specific hash algorithm that can guarantee constant access to the correct event handler.
 
-As a result, in practice, when switching between fibers and activating appropriate `event` blocks, there is no costly search involved. 
+As a result, in practice, when switching between fibers and activating appropriate `event` blocks, there is no costly search involved.
 
 ### How does this concept of fiber relate to Wikipedia's concept
 The Wikipedia definition of a [Fiber](https://en.wikipedia.org/wiki/Fiber_(computer_science)) is[^h]:
@@ -842,13 +915,3 @@ Allowing fibers to be created in suspended state causes significant architectura
 On the other hand, requiring fibers to be started immediately on creation raises its own questions. In particular, if the spawner of a fiber also needs to record the identity of the fiber then the fiber must immediately suspend with some form of `identify` event. We saw this in the generator example. There are enough applications where this would result in a significant performance penalty, for example in a green threading library that is explicitly managing its fiber identities.
 
 For this reason, we support both forms of fiber creation. However, this also represents a compromise and added cost for implementation.
-
-### Using tables to avoid GC pressure
-
-One of the consequences of having first class references to resources is that there is a potential for memory leaks. In this case, it may be that an application 'holds on' to a `fiber` references after that `fiber` has terminated.
-
-When a `fiber` terminates, the stack resources it uses may be released; however, the reference itself remains. Recall that, in linear memory WebAssembly, any application that wishes to keep a reference to a `fiber` has three choices: to store the reference in a global variable, to store it in a table or to keep it in a local variable.
-
-An alternative approach could be based on _reusing_ `fiber` references. In particular, if we allow a moribund fiber to be reused then the issue of garbage collecting old `fiber` references becomes a problem for the toolchain to address: it would become responsible for managing the `fiber` references it has access to.
-
-A further restriction would enhance this: if the only place where a `fiber` reference could be stored was in a table, then, if the default value for a `fiber` table entry were a moribund `fiber`, complete reponsibility for managing `fiber` references could be left to the toolchain. 
