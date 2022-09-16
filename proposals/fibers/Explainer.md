@@ -91,7 +91,7 @@ The resume stack maintains several important invariants (with trivial proofs by 
 Every time a fiber suspends itself and resumes another fiber, that transfer of control is a _resumption event_ with an associated tag that indicates the reason for the event.
 It's possible for resumption events to carry values from the suspending fiber to the resuming fiber as well, and the event tag specifies the types of those values so the resuming fiber can receive them properly.
 
-Event tag declarations are the same as for the tags in the [exception handling proposal(https://github.com/WebAssembly/exception-handling):
+Event tag declarations are the same as for the tags in the [exception handling proposal](https://github.com/WebAssembly/exception-handling):
 
 ```
 (tag $e (param t*))
