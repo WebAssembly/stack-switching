@@ -141,15 +141,11 @@ struct
     | Immutable -> u8 0
     | Mutable -> u8 1
 
-  let resumability = function
-    | Terminal -> u8 0
-    | Resumable -> u8 1
-
   let global_type = function
     | GlobalType (t, mut) -> value_type t; mutability mut
 
-  let tag_type = function
-    | TagType (ft, res) -> resumability res; func_type ft  (* TODO *)
+  let tag_type (TagType x) =
+    vu32 0x00l; var_type x
 
   (* Expressions *)
 
@@ -192,14 +188,22 @@ struct
     | Let (bt, locs, es) ->
       op 0x17; block_type bt; locals locs; list instr es; end_ ()
 
-    | Try (bt, es1, xo, es2) ->
-      op 0x06; block_type bt; list instr es1;
-      (match xo with
-      | Some x -> op 0x07; var x
-      | None -> op 0x19
-      );
-      list instr es2; end_ ()
+    | TryCatch (bt, es, ct, ca) ->
+      op 0x06; block_type bt; list instr es;
+      let catch (tag, es) =
+        op 0x07; var tag; list instr es
+      in
+      list catch ct;
+      begin match ca with
+        | None -> ()
+        | Some es -> op 0x19; list instr es
+      end;
+      end_ ()
+    | TryDelegate (bt, es, x) ->
+      op 0x06; block_type bt; list instr es;
+      op 0x18; var x
     | Throw x -> op 0x08; var x
+    | Rethrow x -> op 0x09; var x
 
     | Br x -> op 0x0c; var x
     | BrIf x -> op 0x0d; var x
@@ -527,8 +531,7 @@ struct
 
   (* Tag section *)
   let tag tag =
-    let {tagtype} = tag.it in
-    tag_type tagtype
+    tag_type tag.it.tagtype
 
   let tag_section ts =
     section 13 (vec tag) ts (ts <> [])

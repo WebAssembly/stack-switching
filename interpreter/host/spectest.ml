@@ -25,8 +25,12 @@ let table =
 let memory = Memory.alloc (MemoryType {min = 1l; max = Some 2l})
 let func f ft = Func.alloc_host (Types.alloc (FuncDefType ft)) (f ft)
 
-let tag = Tag.alloc (TagType (FuncType ([NumType I32Type], [NumType I32Type]), Resumable))
-let except = Tag.alloc (TagType (FuncType ([NumType I32Type], []), Terminal))
+let tag =
+  let p = Types.alloc (FuncDefType (FuncType ([NumType I32Type], [NumType I32Type]))) in
+  Tag.alloc (TagType (SemVar p))
+let except =
+  let p = Types.alloc (FuncDefType (FuncType ([NumType I32Type], []))) in
+  Tag.alloc (TagType (SemVar p))
 
 let print_value v =
   Printf.printf "%s : %s\n"

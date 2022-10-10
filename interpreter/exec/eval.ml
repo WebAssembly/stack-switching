@@ -63,21 +63,25 @@ and admin_instr' =
   | Plain of instr'
   | Refer of ref_
   | Invoke of func_inst
-  | Label of int * instr list * code
-  | Local of int * value list * code
-  | Frame of int * frame * code
-  | Catch of int * tag_inst option * instr list * code
+  | Label of int32 * instr list * code
+  | Local of int32 * value list * code
+  | Frame of int32 * frame * code
   | Handle of (tag_inst * idx) list option * code
   | Trapping of string
   | Throwing of tag_inst * value stack
+  | Rethrowing of int32 * (admin_instr -> admin_instr)
   | Suspending of tag_inst * value stack * ctxt
   | Returning of value stack
   | ReturningInvoke of value stack * func_inst
   | Breaking of int32 * value stack
+  | Catch of int32 * (Tag.t * instr list) list * instr list option * code
+  | Caught of int32 * Tag.t * value stack * code
+  | Delegate of int32 * code
+  | Delegating of int32 * Tag.t * value stack
 
 and ctxt = code -> code
 
-type cont = int * ctxt  (* TODO: represent type properly *)
+type cont = int32 * ctxt  (* TODO: represent type properly *)
 type ref_ += ContRef of cont option ref
 
 let () =
@@ -151,10 +155,10 @@ let block_type inst bt at =
   | VarBlockType (SemVar x) -> as_func_def_type (def_of x)
 
 let take n (vs : 'a stack) at =
-  try Lib.List.take n vs with Failure _ -> Crash.error at "stack underflow"
+  try Lib.List32.take n vs with Failure _ -> Crash.error at "stack underflow"
 
 let drop n (vs : 'a stack) at =
-  try Lib.List.drop n vs with Failure _ -> Crash.error at "stack underflow"
+  try Lib.List32.drop n vs with Failure _ -> Crash.error at "stack underflow"
 
 let split n (vs : 'a stack) at = take n vs at, drop n vs at
 
@@ -201,14 +205,14 @@ let rec step (c : config) : config =
 
       | Block (bt, es'), vs ->
         let FuncType (ts1, ts2) = block_type c.frame.inst bt e.at in
-        let n1 = List.length ts1 in
-        let n2 = List.length ts2 in
+        let n1 = Lib.List32.length ts1 in
+        let n2 = Lib.List32.length ts2 in
         let args, vs' = take n1 vs e.at, drop n1 vs e.at in
         vs', [Label (n2, [], (args, List.map plain es')) @@ e.at]
 
       | Loop (bt, es'), vs ->
         let FuncType (ts1, ts2) = block_type c.frame.inst bt e.at in
-        let n1 = List.length ts1 in
+        let n1 = Lib.List32.length ts1 in
         let args, vs' = take n1 vs e.at, drop n1 vs e.at in
         vs', [Label (n1, [e' @@ e.at], (args, List.map plain es')) @@ e.at]
 
@@ -219,28 +223,39 @@ let rec step (c : config) : config =
           vs', [Plain (Block (bt, es1)) @@ e.at]
 
       | Let (bt, locals, es'), vs ->
-        let locs, vs' = split (List.length locals) vs e.at in
+        let locs, vs' = split (Lib.List32.length locals) vs e.at in
         let FuncType (ts1, ts2) = block_type c.frame.inst bt e.at in
-        let args, vs'' = split (List.length ts1) vs' e.at in
+        let args, vs'' = split (Lib.List32.length ts1) vs' e.at in
         vs'', [
-          Local (List.length ts2, List.rev locs,
+          Local (Lib.List32.length ts2, List.rev locs,
             (args, [Plain (Block (bt, es')) @@ e.at])
           ) @@ e.at
         ]
 
-      | Try (bt, es1, xo, es2), vs ->
-        let FuncType (ts1, ts2) = block_type c.frame.inst bt e.at in
-        let n1 = List.length ts1 in
-        let n2 = List.length ts2 in
-        let args, vs' = split n1 vs e.at in
-        let exno = Option.map (tag c.frame.inst) xo in
-        vs', [Catch (n2, exno, es2, ([], [Label (n2, [], (args, List.map plain es1)) @@ e.at])) @@ e.at]
-
       | Throw x, vs ->
         let tagt = tag c.frame.inst x in
-        let TagType (FuncType (ts, _), _) = Tag.type_of tagt in
-        let vs0, vs' = split (List.length ts) vs e.at in
+        let TagType x' = Tag.type_of tagt in
+        let FuncType (ts, _) = as_func_def_type (def_of (as_sem_var x')) in
+        let vs0, vs' = split (Lib.List32.length ts) vs e.at in
         vs', [Throwing (tagt, vs0) @@ e.at]
+
+      | Rethrow x, vs ->
+        vs, [Rethrowing (x.it, fun e -> e) @@ e.at]
+
+      | TryCatch (bt, es', cts, ca), vs ->
+        let FuncType (ts1, ts2) = block_type c.frame.inst bt e.at in
+        let n1 = Lib.List32.length ts1 in
+        let n2 = Lib.List32.length ts2 in
+        let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+        let cts' = List.map (fun (x, es'') -> ((tag c.frame.inst x), es'')) cts in
+        vs', [Label (n2, [], ([], [Catch (n2, cts', ca, (args, List.map plain es')) @@ e.at])) @@ e.at]
+
+      | TryDelegate (bt, es', x), vs ->
+        let FuncType (ts1, ts2) = block_type c.frame.inst bt e.at in
+        let n1 = Lib.List32.length ts1 in
+        let n2 = Lib.List32.length ts2 in
+        let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+        vs', [Label (n2, [], ([], [Delegate (x.it, (args, List.map plain es')) @@ e.at])) @@ e.at]
 
       | Br x, vs ->
         [], [Breaking (x.it, vs) @@ e.at]
@@ -303,7 +318,7 @@ let rec step (c : config) : config =
         let FuncType (ts, _) = Func.type_of f in
         let FuncType (ts', _) = func_type c.frame.inst x in
         let args, vs' =
-          try split (List.length ts - List.length ts') vs e.at
+          try split (Int32.sub (Lib.List32.length ts) (Lib.List32.length ts')) vs e.at
           with Failure _ -> Crash.error e.at "type mismatch at function bind"
         in
         let f' = Func.alloc_closure (type_ c.frame.inst x) f args in
@@ -315,7 +330,7 @@ let rec step (c : config) : config =
       | ContNew x, Ref (FuncRef f) :: vs ->
         let FuncType (ts, _) = Func.type_of f in
         let ctxt code = compose code ([], [Invoke f @@ e.at]) in
-        Ref (ContRef (ref (Some (List.length ts, ctxt)))) :: vs, []
+        Ref (ContRef (ref (Some (Lib.List32.length ts, ctxt)))) :: vs, []
 
       | ContBind x, Ref (NullRef _) :: vs ->
         vs, [Trapping "null continuation reference" @@ e.at]
@@ -327,17 +342,18 @@ let rec step (c : config) : config =
         let ContType z = cont_type c.frame.inst x in
         let FuncType (ts', _) = as_func_def_type (def_of (as_sem_var z)) in
         let args, vs' =
-          try split (n - List.length ts') vs e.at
+          try split (Int32.sub n (Lib.List32.length ts')) vs e.at
           with Failure _ -> Crash.error e.at "type mismatch at continuation bind"
         in
         cont := None;
         let ctxt' code = ctxt (compose code (args, [])) in
-        Ref (ContRef (ref (Some (n - List.length args, ctxt')))) :: vs', []
+        Ref (ContRef (ref (Some (Int32.sub n (Lib.List32.length args), ctxt')))) :: vs', []
 
       | Suspend x, vs ->
         let tagt = tag c.frame.inst x in
-        let TagType (FuncType (ts, _), _) = Tag.type_of tagt in
-        let args, vs' = split (List.length ts) vs e.at in
+        let TagType x' = Tag.type_of tagt in
+        let FuncType (ts, _) = as_func_def_type (def_of (as_sem_var x')) in
+        let args, vs' = split (Lib.List32.length ts) vs e.at in
         vs', [Suspending (tagt, args, fun code -> code) @@ e.at]
 
       | Resume xls, Ref (NullRef _) :: vs ->
@@ -360,15 +376,16 @@ let rec step (c : config) : config =
 
       | ResumeThrow x, Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
         let tagt = tag c.frame.inst x in
-        let TagType (FuncType (ts, _), _) = Tag.type_of tagt in
-        let args, vs' = split (List.length ts) vs e.at in
+        let TagType x' = Tag.type_of tagt in
+        let FuncType (ts, _) = as_func_def_type (def_of (as_sem_var x')) in
+        let args, vs' = split (Lib.List32.length ts) vs e.at in
         let vs1', es1' = ctxt (args, [Plain (Throw x) @@ e.at]) in
         cont := None;
         vs1' @ vs', es1'
 
       | Barrier (bt, es'), vs ->
         let FuncType (ts1, _) = block_type c.frame.inst bt e.at in
-        let args, vs' = split (List.length ts1) vs e.at in
+        let args, vs' = split (Lib.List32.length ts1) vs e.at in
         vs', [
           Handle (None,
             (args, [Plain (Block (bt, es')) @@ e.at])
@@ -702,7 +719,7 @@ let rec step (c : config) : config =
     | Local (n, vs0, code'), vs ->
       let frame' = {c.frame with locals = List.map ref vs0 @ c.frame.locals} in
       let c' = step {c with frame = frame'; code = code'} in
-      let vs0' = List.map (!) (take (List.length vs0) c'.frame.locals e.at) in
+      let vs0' = List.map (!) (take (Lib.List32.length vs0) c'.frame.locals e.at) in
       vs, [Local (n, vs0', c'.code) @@ e.at]
 
     | Frame (n, frame', (vs', [])), vs ->
@@ -717,7 +734,7 @@ let rec step (c : config) : config =
 
     | Frame (n, frame', (vs', {it = ReturningInvoke (vs0, f); at} :: es')), vs ->
       let FuncType (ts1, _) = Func.type_of f in
-      take (List.length ts1) vs0 e.at @ vs, [Invoke f @@ at]
+      take (Lib.List32.length ts1) vs0 e.at @ vs, [Invoke f @@ at]
 
     | Frame (n, fame', (vs', {it = Breaking _; at} :: es')), vs ->
       Crash.error at "undefined label"
@@ -729,12 +746,66 @@ let rec step (c : config) : config =
       let c' = step {frame = frame'; code = code'; budget = c.budget - 1} in
       vs, [Frame (n, frame', c'.code) @@ e.at]
 
+    | Catch (n, cts, ca, (vs', [])), vs ->
+      vs' @ vs, []
+
+    | Catch (n, cts, ca, (vs', ({it = Trapping _ | Breaking _ | Returning _ | Delegating _; at} as e) :: es')), vs ->
+      vs, [e]
+
+    | Catch (n, cts, ca, (vs', {it = Rethrowing (k, cont); at} :: es')), vs ->
+      vs, [Rethrowing (k, (fun e -> Catch (n, cts, ca, (vs', (cont e) :: es')) @@ e.at)) @@ at]
+
+    | Catch (n, (a', es'') :: cts, ca, (vs', {it = Throwing (a, vs0); at} :: es')), vs ->
+      if a == a' then
+        vs, [Caught (n, a, vs0, (vs0, List.map plain es'')) @@ at]
+      else
+        vs, [Catch (n, cts, ca, (vs', {it = Throwing (a, vs0); at} :: es')) @@ e.at]
+
+    | Catch (n, [], Some es'', (vs', {it = Throwing (a, vs0); at} :: es')), vs ->
+      vs, [Caught (n, a, vs0, (vs0, List.map plain es'')) @@ at]
+
+    | Catch (n, [], None, (vs', {it = Throwing (a, vs0); at} :: es')), vs ->
+      vs, [Throwing (a, vs0) @@ at]
+
+    | Catch (n, cts, ca, code'), vs ->
+      let c' = step {c with code = code'} in
+      vs, [Catch (n, cts, ca, c'.code) @@ e.at]
+
+    | Caught (n, a, vs0, (vs', [])), vs ->
+      vs' @ vs, []
+
+    | Caught (n, a, vs0, (vs', ({it = Trapping _ | Breaking _ | Returning _ | Throwing _ | Delegating _; at} as e) :: es')), vs ->
+      vs, [e]
+
+    | Caught (n, a, vs0, (vs', {it = Rethrowing (0l, cont); at} :: es')), vs ->
+      vs, [Caught (n, a, vs0, (vs', (cont (Throwing (a, vs0) @@ at)) :: es')) @@ e.at]
+
+    | Caught (n, a, vs0, (vs', {it = Rethrowing (k, cont); at} :: es')), vs ->
+      vs, [Rethrowing (k, (fun e -> Caught (n, a, vs0, (vs', (cont e) :: es')) @@ e.at)) @@ at]
+
+    | Caught (n, a, vs0, code'), vs ->
+      let c' = step {c with code = code'} in
+      vs, [Caught (n, a, vs0, c'.code) @@ e.at]
+
+    | Delegate (l, (vs', [])), vs ->
+      vs' @ vs, []
+
+    | Delegate (l, (vs', ({it = Trapping _ | Breaking _ | Returning _ | Rethrowing _ | Delegating _; at} as e) :: es')), vs ->
+      vs, [e]
+
+    | Delegate (l, (vs', {it = Throwing (a, vs0); at} :: es')), vs ->
+      vs, [Delegating (l, a, vs0) @@ e.at]
+
+    | Delegate (l, code'), vs ->
+      let c' = step {c with code = code'} in
+      vs, [Delegate (l, c'.code) @@ e.at]
+
     | Invoke f, vs when c.budget = 0 ->
       Exhaustion.error e.at "call stack exhausted"
 
     | Invoke f, vs ->
       let FuncType (ts1, ts2) = Func.type_of f in
-      let args, vs' = split (List.length ts1) vs e.at in
+      let args, vs' = split (Lib.List32.length ts1) vs e.at in
       (match f with
       | Func.AstFunc (_, inst', func) ->
         let {locals; body; _} = func.it in
@@ -744,7 +815,7 @@ let rec step (c : config) : config =
         let locals' = List.map (fun t -> t @@ func.at) ts1 @ locals in
         let bt = VarBlockType (SemVar (alloc (FuncDefType (FuncType ([], ts2))))) in
         let es0 = [Plain (Let (bt, locals', body)) @@ func.at] in
-        vs', [Frame (List.length ts2, frame m, (List.rev vs0, es0)) @@ e.at]
+        vs', [Frame (Lib.List32.length ts2, frame m, (List.rev vs0, es0)) @@ e.at]
 
       | Func.HostFunc (_, f) ->
         (try List.rev (f (List.rev args)) @ vs', []
@@ -754,27 +825,6 @@ let rec step (c : config) : config =
         args @ args' @ vs', [Invoke f' @@ e.at]
       )
 
-    | Catch (n, exno, es0, (vs', [])), vs ->
-      vs' @ vs, []
-
-    | Catch (n, exno, es0, (vs', {it = Suspending (tagt, vs1, ctxt); at} :: es')), vs ->
-      let ctxt' code = [], [Catch (n, exno, es0, compose (ctxt code) (vs', es')) @@ e.at] in
-      vs, [Suspending (tagt, vs1, ctxt') @@ at]
-
-    | Catch (n, None, es0, (vs', {it = Throwing (exn, vs0); at} :: _)), vs ->
-      vs, [Label (n, [], ([], List.map plain es0)) @@ e.at]
-
-    | Catch (n, Some exn, es0, (vs', {it = Throwing (exn0, vs0); at} :: _)), vs
-      when exn0 == exn ->
-      vs, [Label (n, [], (vs0, List.map plain es0)) @@ e.at]
-
-    | Catch (n, exno, es0, (vs', e' :: es')), vs when is_jumping e' ->
-      vs, [e']
-
-    | Catch (n, exno, es0, code'), vs ->
-      let c' = step {c with code = code'} in
-      vs, [Catch (n, exno, es0, c'.code) @@ e.at]
-
     | Handle (hso, (vs', [])), vs ->
       vs' @ vs, []
 
@@ -783,9 +833,10 @@ let rec step (c : config) : config =
 
     | Handle (Some hs, (vs', {it = Suspending (tagt, vs1, ctxt); at} :: es')), vs
       when List.mem_assq tagt hs ->
-      let TagType (FuncType (_, ts), _) = Tag.type_of tagt in
+      let TagType x' = Tag.type_of tagt in
+      let FuncType (_, ts) = as_func_def_type (def_of (as_sem_var x')) in
       let ctxt' code = compose (ctxt code) (vs', es') in
-      [Ref (ContRef (ref (Some (List.length ts, ctxt'))))] @ vs1 @ vs,
+      [Ref (ContRef (ref (Some (Lib.List32.length ts, ctxt'))))] @ vs1 @ vs,
       [Plain (Br (List.assq tagt hs)) @@ e.at]
 
     | Handle (hso, (vs', {it = Suspending (tagt, vs1, ctxt); at} :: es')), vs ->
@@ -798,6 +849,11 @@ let rec step (c : config) : config =
     | Handle (hso, code'), vs ->
       let c' = step {c with code = code'} in
       vs, [Handle (hso, c'.code) @@ e.at]
+
+    | Rethrowing _, _ ->
+      Crash.error e.at "undefined catch label"
+    | Delegating _, _ ->
+      Crash.error e.at "undefined delegate label"
 
     | Trapping _, _
     | Throwing _, _

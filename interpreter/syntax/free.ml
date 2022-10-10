@@ -63,7 +63,7 @@ let zero = Set.singleton 0l
 let shift s = Set.map (Int32.add (-1l)) (Set.remove 0l s)
 
 let (++) = union
-let opt free xo = Lib.Option.get (Option.map free xo) empty
+let _opt free xo = Lib.Option.get (Option.map free xo) empty
 let list free xs = List.fold_left union empty (List.map free xs)
 
 let var_type = function
@@ -91,7 +91,7 @@ let cont_type (ContType x) = var_type x
 let global_type (GlobalType (t, _mut)) = value_type t
 let table_type (TableType (_lim, t)) = ref_type t
 let memory_type (MemoryType (_lim)) = empty
-let tag_type (TagType (ft, _res)) = func_type ft
+let tag_type (TagType x) = var_type x
 
 let def_type = function
   | FuncDefType ft -> func_type ft
@@ -114,9 +114,15 @@ let rec instr (e : instr) =
   | Let (bt, ts, es) ->
     let free = block_type bt ++ block es in
     {free with locals = Lib.Fun.repeat (List.length ts) shift free.locals}
-  | Try (bt, es1, xo, es2) ->
-    block_type bt ++ block es1 ++ opt (fun x -> tags (idx x)) xo ++ block es2
+  | TryCatch (bt, es, ct, ca) ->
+    let catch (tag, es) = tags (idx tag) ++ block es in
+    let catch_all = function
+      | None -> empty
+      | Some es -> block es in
+    block es ++ (list catch ct) ++ catch_all ca
+  | TryDelegate (bt, es, x) -> block es ++ tags (idx x)
   | Throw x | ResumeThrow x | Suspend x -> tags (idx x)
+  | Rethrow x -> labels (idx x)
   | Br x | BrIf x | BrOnNull x -> labels (idx x)
   | BrTable (xs, x) -> list (fun x -> labels (idx x)) (x::xs)
   | Return | CallRef | ReturnCallRef -> empty

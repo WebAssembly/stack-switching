@@ -74,10 +74,6 @@ let def_type dt =
   | FuncDefType ft -> func_type ft
   | ContDefType ct -> cont_type ct
 
-let resumability = function
-  | Terminal -> " exception"
-  | Resumable -> ""
-
 let limits nat {min; max} =
   String.concat " " (nat min :: opt nat max)
 
@@ -254,15 +250,18 @@ let rec instr e =
     | Let (bt, locals, es) ->
       "let", block_type bt @ decls "local" (List.map Source.it locals) @
         list instr es
-    | Try (bt, es1, xo, es2) ->
-      let catch, exn =
-        match xo with
-        | Some x -> "catch", [Node ("exception " ^ var x, [])]
-        | None -> "catch_all", []
-      in
-      "try", block_type bt @
-        [Node ("do", list instr es1); Node (catch, exn @ list instr es2)]
+    | TryCatch (bt, es, ct, ca) ->
+      let catch (tag, es) = Node ("catch " ^ var tag, list instr es) in
+      let catch_all = match ca with
+        | Some es -> [Node ("catch_all", list instr es)]
+        | None -> [] in
+      let handler = list catch ct @ catch_all in
+      "try", block_type bt @ [Node ("do", list instr es)] @ handler
+    | TryDelegate (bt, es, x) ->
+      let delegate = [Node ("delegate " ^ var x, [])] in
+      "try", block_type bt @ [Node ("do", list instr es)] @ delegate
     | Throw x -> "throw " ^ var x, []
+    | Rethrow x -> "rethrow " ^ var x, []
     | Br x -> "br " ^ var x, []
     | BrIf x -> "br_if " ^ var x, []
     | BrTable (xs, x) ->
@@ -357,9 +356,9 @@ let memory off i mem =
   Node ("memory $" ^ nat (off + i) ^ " " ^ limits nat32 lim, [])
 
 let tag off i tag =
-  let {tagtype = TagType (FuncType (ins, out), res)} = tag.it in
-  Node ("tag $" ^ nat (off + i) ^ resumability res,
-    decls "param" ins @ decls "result" out
+  let {tagtype = TagType x} = tag.it in
+  Node ("tag $" ^ nat (off + i),
+    [Node ("type", [atom var_type x])]
   )
 
 let is_elem_kind = function

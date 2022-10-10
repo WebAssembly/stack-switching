@@ -1,7 +1,7 @@
 ;; Unhandled tags & guards
 
 (module
-  (exception $exn)
+  (tag $exn)
   (tag $e1)
   (tag $e2)
 

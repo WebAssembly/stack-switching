@@ -15,6 +15,8 @@ let require b at s = if not b then error at s
 
 (* Context *)
 
+type label_kind = BlockLabel | CatchLabel
+
 type context =
 {
   types : def_type list;
@@ -27,7 +29,7 @@ type context =
   datas : unit list;
   locals : value_type list;
   results : value_type list;
-  labels : result_type list;
+  labels : (label_kind * result_type) list;
   refs : Free.t;
 }
 
@@ -128,10 +130,8 @@ let check_memory_type (c : context) (mt : memory_type) at =
     "memory size must be at most 65536 pages (4GiB)"
 
 let check_tag_type (c : context) (et : tag_type) at =
-  let TagType (ft, res) = et in
-  let FuncType (_, ts2) = ft in
-  check_func_type c ft at;
-  require (res = Resumable || ts2 = []) at "exception type must not have results"
+  let TagType x = et in
+  ignore (func_type c (as_syn_var x @@ at))
 
 let check_global_type (c : context) (gt : global_type) at =
   let GlobalType (t, mut) = gt in
@@ -330,18 +330,18 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : op_type 
 
   | Block (bt, es) ->
     let FuncType (ts1, ts2) as ft = check_block_type c bt e.at in
-    check_block {c with labels = ts2 :: c.labels} es ft e.at;
+    check_block {c with labels = (BlockLabel, ts2) :: c.labels} es ft e.at;
     ts1 --> ts2
 
   | Loop (bt, es) ->
     let FuncType (ts1, ts2) as ft = check_block_type c bt e.at in
-    check_block {c with labels = ts1 :: c.labels} es ft e.at;
+    check_block {c with labels = (BlockLabel, ts1) :: c.labels} es ft e.at;
     ts1 --> ts2
 
   | If (bt, es1, es2) ->
     let FuncType (ts1, ts2) as ft = check_block_type c bt e.at in
-    check_block {c with labels = ts2 :: c.labels} es1 ft e.at;
-    check_block {c with labels = ts2 :: c.labels} es2 ft e.at;
+    check_block {c with labels = (BlockLabel, ts2) :: c.labels} es1 ft e.at;
+    check_block {c with labels = (BlockLabel, ts2) :: c.labels} es2 ft e.at;
     (ts1 @ [NumType I32Type]) --> ts2
 
   | Let (bt, locals, es) ->
@@ -349,49 +349,58 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : op_type 
     List.iter (check_local c false) locals;
     let c' =
       { c with
-        labels = ts2 :: c.labels;
+        labels = (BlockLabel, ts2) :: c.labels;
         locals = List.map Source.it locals @ c.locals;
       }
     in check_block c' es ft e.at;
     (ts1 @ List.map Source.it locals) --> ts2
 
-  | Try (bt, es1, xo, es2) ->
-    let FuncType (ts1, ts2) as ft1 = check_block_type c bt e.at in
-    check_block {c with labels = ts2 :: c.labels} es1 ft1 e.at;
-    let ts1' =
-      match xo with
-      | None -> []
-      | Some x ->
-        let TagType (FuncType (ts1', _), res) = tag c x in
-        require (res = Terminal) e.at "catching a non-exception tag";
-        ts1'
-    in
-    let ft2 = FuncType (ts1', ts2) in
-    check_block {c with labels = ts2 :: c.labels} es2 ft2 e.at;
+  | Throw x ->
+    let TagType y = tag c x in
+    let FuncType (ts1, _) = func_type c (as_syn_var y @@ e.at) in
+    ts1 -->... []
+
+  | Rethrow x ->
+    let (kind, _) = label c x in
+    require (kind = CatchLabel) e.at "invalid rethrow label";
+    [] -->... []
+
+  | TryCatch (bt, es, cts, ca) ->
+    let FuncType (ts1, ts2) as ft = check_block_type c bt e.at in
+    let c_try = {c with labels = (BlockLabel, ts2) :: c.labels} in
+    let c_catch = {c with labels = (CatchLabel, ts2) :: c.labels} in
+    check_block c_try es ft e.at;
+    List.iter (fun ct -> check_catch ct c_catch ft e.at) cts;
+    Lib.Option.app (fun es -> check_block c_catch es ft e.at) ca;
     ts1 --> ts2
 
-  | Throw x ->
-    let TagType (FuncType (ts1, ts2), res) = tag c x in
-    require (res = Terminal) e.at "throwing a non-exception tag";
-    ts1 -->... ts2
+  | TryDelegate (bt, es, x) ->
+    let FuncType (ts1, ts2) as ft = check_block_type c bt e.at in
+    ignore (label c x);
+    check_block {c with labels = (BlockLabel, ts2) :: c.labels} es ft e.at;
+    ts1 --> ts2
 
   | Br x ->
-    label c x -->... []
+    let (_, ts) = label c x in
+    ts -->... []
 
   | BrIf x ->
-    (label c x @ [NumType I32Type]) --> label c x
+    let (_, ts) = label c x in
+    (ts @ [NumType I32Type]) --> ts
 
   | BrTable (xs, x) ->
-    let n = List.length (label c x) in
-    let ts = Lib.List.table n (fun i -> peek (n - i) s) in
-    check_stack c ts (label c x) x.at;
-    List.iter (fun x' -> check_stack c ts (label c x') x'.at) xs;
+    let (_, ts) = label c x in
+    let n = List.length ts in
+    let ts' = Lib.List.table n (fun i -> peek (n - i) s) in
+    check_stack c ts' ts x.at;
+    List.iter (fun x' -> check_stack c ts' (snd (label c x')) x'.at) xs;
     (ts @ [NumType I32Type]) -->... []
 
   | BrOnNull x ->
     let (_, t) = peek_ref 0 s e.at in
-    (label c x @ [RefType (Nullable, t)]) -->
-      (label c x @ [RefType (NonNullable, t)])
+    let (_, ts) = label c x in
+    (ts @ [RefType (Nullable, t)]) -->
+      (ts @ [RefType (NonNullable, t)])
 
   | Return ->
     c.results -->... []
@@ -503,8 +512,8 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : op_type 
     )
 
   | Suspend x ->
-    let TagType (FuncType (ts1, ts2), res) = tag c x in
-    require (res = Resumable) e.at "suspending with a non-resumable tag";
+    let TagType x' = tag c x in
+    let FuncType (ts1, ts2) = func_type c (as_syn_var x' @@ x.at) in
     ts1 --> ts2
 
   | Resume xys ->
@@ -513,19 +522,20 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : op_type 
       let ContType z = cont_type c (y @@ e.at) in
       let FuncType (ts1, ts2) = func_type c (as_syn_var z @@ e.at) in
       List.iter (fun (x1, x2) ->
-        let TagType (FuncType (ts3, ts4), res) = tag c x1 in
-        require (res = Resumable) x1.at "handling a non-resumable tag";
-        match Lib.List.last_opt (label c x2) with
+        let TagType x1' = tag c x1 in
+        let FuncType (ts3, ts4) = func_type c (as_syn_var x1' @@ x1.at) in
+        let (_, ts') = label c x2 in
+        match Lib.List.last_opt ts'  with
         | Some (RefType (nul', DefHeapType (SynVar y'))) ->
           let ContType z' = cont_type c (y' @@ x2.at) in
           let ft' = func_type c (as_syn_var z' @@ x2.at) in
           require (match_func_type c.types [] (FuncType (ts4, ts2)) ft') x2.at
             "type mismatch in continuation type";
-          check_stack c (ts3 @ [RefType (nul', DefHeapType (SynVar y'))]) (label c x2) x2.at
+          check_stack c (ts3 @ [RefType (nul', DefHeapType (SynVar y'))]) ts' x2.at
         | _ ->
          error e.at
            ("type mismatch: instruction requires continuation reference type" ^
-            " but label has " ^ string_of_result_type (label c x2))
+            " but label has " ^ string_of_result_type ts')
       ) xys;
       (ts1 @ [RefType (nul, DefHeapType (SynVar y))]) --> ts2
     | _, BotHeapType ->
@@ -537,8 +547,8 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : op_type 
     )
 
   | ResumeThrow x ->
-    let TagType (FuncType (ts0, _), res) = tag c x in
-    require (res = Terminal) e.at "throwing a non-exception tag";
+    let TagType x' = tag c x in
+    let FuncType (ts0, _) = func_type c (as_syn_var x' @@ x.at) in
     (match peek_ref 0 s e.at with
     | nul, DefHeapType (SynVar y) ->
       let ContType z = cont_type c (y @@ e.at) in
@@ -554,7 +564,7 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : op_type 
 
   | Barrier (bt, es) ->
     let FuncType (ts1, ts2) as ft = check_block_type c bt e.at in
-    check_block {c with labels = ts2 :: c.labels} es ft e.at;
+    check_block {c with labels = (BlockLabel, ts2) :: c.labels} es ft e.at;
     ts1 --> ts2
 
   | LocalGet x ->
@@ -710,6 +720,12 @@ and check_block (c : context) (es : instr list) (ft : func_type) at =
     ("type mismatch: block requires " ^ string_of_result_type ts2 ^
      " but stack has " ^ string_of_result_type (snd s))
 
+and check_catch (ct : idx * instr list) (c : context) (ft : func_type) at =
+  let (x, es) = ct in
+  let TagType y = tag c x in
+  let FuncType (ts1, _) = func_type c (as_syn_var y @@ at) in
+  let FuncType (_, ts2) = ft in
+  check_block c es (FuncType (ts1, ts2)) at
 
 (* Functions & Constants *)
 
@@ -733,7 +749,7 @@ let check_func (c : context) (f : func) =
     { c with
       locals = ts1 @ List.map Source.it locals;
       results = ts2;
-      labels = [ts2]
+      labels = [(BlockLabel, ts2)]
     }
   in check_block c' body (FuncType ([], ts2)) f.at
 

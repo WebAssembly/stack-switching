@@ -147,6 +147,8 @@ let func_type (c : context) x =
   | _ -> error x.at ("non-function type " ^ Int32.to_string x.it)
   | exception Failure _ -> error x.at ("unknown type " ^ Int32.to_string x.it)
 
+let handlers (c : context) h =
+  List.map (fun (l, i) -> (l c tag, i c)) h
 
 let bind_abs category space x =
   if VarMap.mem x.it space.map then
@@ -209,14 +211,15 @@ let inline_func_type_explicit (c : context) x ft at =
     error at "inline function type does not match explicit type";
   x
 
+
 %}
 
 %token LPAR RPAR
 %token NAT INT FLOAT STRING VAR
 %token NUM_TYPE FUNCREF EXTERNREF REF EXTERN NULL MUT CONT
 %token UNREACHABLE NOP DROP SELECT
-%token BLOCK END IF THEN ELSE LOOP LET
-%token THROW TRY DO CATCH CATCH_ALL
+%token BLOCK END IF THEN ELSE LOOP LET TRY DO CATCH CATCH_ALL
+%token DELEGATE
 %token CONT_NEW CONT_BIND SUSPEND RESUME RESUME_THROW BARRIER
 %token BR BR_IF BR_TABLE BR_ON_NULL
 %token CALL CALL_REF CALL_INDIRECT
@@ -229,7 +232,8 @@ let inline_func_type_explicit (c : context) x ft at =
 %token LOAD STORE OFFSET_EQ_NAT ALIGN_EQ_NAT
 %token CONST UNARY BINARY TEST COMPARE CONVERT
 %token REF_NULL REF_FUNC REF_EXTERN REF_IS_NULL REF_AS_NON_NULL
-%token FUNC START TYPE PARAM RESULT LOCAL GLOBAL TAG EXCEPTION
+%token THROW RETHROW
+%token FUNC START TYPE PARAM RESULT LOCAL GLOBAL TAG
 %token TABLE ELEM MEMORY DATA DECLARE OFFSET ITEM IMPORT EXPORT
 %token MODULE BIN QUOTE
 %token SCRIPT REGISTER INVOKE GET
@@ -352,10 +356,10 @@ func_type :
       FuncType ($4 c :: ins, out) }
 
 tag_type :
+  | type_use
+    { fun c -> TagType (SynVar ($1 c type_).it) }
   | func_type
-    { fun c -> TagType ($1 c, Resumable) }
-  | EXCEPTION func_type
-    { fun c -> TagType ($2 c, Terminal) }
+    { let at = at () in fun c -> TagType (SynVar (inline_func_type c ($1 c) at).it) }
 
 table_type :
   | limits ref_type { fun c -> TableType ($1, $2 c) }
@@ -438,6 +442,7 @@ plain_instr :
   | NOP { fun c -> nop }
   | DROP { fun c -> drop }
   | THROW var { fun c -> throw ($2 c tag) }
+  | RETHROW var { fun c -> rethrow ($2 c label)  }
   | BR var { fun c -> br ($2 c label) }
   | BR_IF var { fun c -> br_if ($2 c label) }
   | BR_TABLE var var_list
@@ -596,6 +601,44 @@ call_instr_results_instr :
   | instr
     { fun c -> [], $1 c }
 
+handler_instr :
+  | catch_list_instr END
+    { fun bt es c -> try_catch bt es (handlers c $1) None }
+  | catch_list_instr catch_all END
+    { fun bt es c -> try_catch bt es (handlers c $1) (Some ($2 c)) }
+  | catch_all END
+    { fun bt es c -> try_catch bt es [] (Some ($1 c)) }
+  | END { fun bt es c -> try_catch bt es [] None }
+
+
+catch_list_instr :
+  | catch catch_list_instr { $1 :: $2 }
+  | catch { [$1] }
+
+handler :
+  | catch_list
+      { fun bt es _ c' ->
+        let cs = (List.map (fun (l, i) -> (l c' tag, i c')) $1) in
+        try_catch bt es cs None }
+  | catch_list LPAR catch_all RPAR
+    { fun bt es _ c' ->
+      let cs = (List.map (fun (l, i) -> (l c' tag, i c')) $1) in
+      try_catch bt es cs (Some ($3 c')) }
+  | LPAR catch_all RPAR
+    { fun bt es _ c' -> try_catch bt es [] (Some ($2 c')) }
+  | LPAR DELEGATE var RPAR
+    { fun bt es c _ -> try_delegate bt es ($3 c label) }
+  | /* empty */ { fun bt es c _ -> try_catch bt es [] None }
+
+catch_list :
+  | catch_list LPAR catch RPAR { $1 @ [$3] }
+  | LPAR catch RPAR { [$2] }
+
+catch :
+  | CATCH var instr_list { ($2, $3) }
+
+catch_all :
+  | CATCH_ALL instr_list { $2 }
 
 resume_instr :
   | RESUME resume_instr_handler
@@ -634,12 +677,12 @@ block_instr :
     { let at = at () in
       fun c -> let c' = enter_let ($2 c $5) at in
       let ts, ls, es = $3 c c' in let_ ts ls es }
-  | TRY labeling_opt block CATCH_ALL labeling_end_opt instr_list END labeling_end_opt
-    { fun c -> let c' = $2 c ($5 @ $8) in
-      let ts, es1 = $3 c' in try_ ts es1 None ($6 c') }
-  | TRY labeling_opt block CATCH labeling_end_opt LPAR EXCEPTION var RPAR instr_list END labeling_end_opt
-    { fun c -> let c' = $2 c ($5 @ $12) in
-      let ts, es1 = $3 c' in try_ ts es1 (Some ($8 c' tag)) ($10 c') }
+  | TRY labeling_opt block handler_instr
+    { fun c -> let c' = $2 c [] in
+      let ts, es = $3 c' in  $4 ts es c' }
+  | TRY labeling_opt block DELEGATE var
+    { fun c -> let c' = $2 c [] in
+      let ts, es = $3 c' in try_delegate ts es ($5 c label) }
   | BARRIER labeling_opt block END labeling_end_opt
     { fun c -> let c' = $2 c $5 in let bt, es = $3 c' in barrier bt es }
 
@@ -759,10 +802,8 @@ expr1 :  /* Sugar */
     { let at = at () in
       fun c -> let c' = enter_let ($2 c []) at in
       let bt, ls, es = $3 c c' in [], let_ bt ls es }
-  | TRY try_block
-    { fun c ->
-      let bt, (es1, xo, es2) = $2 c in
-      [], try_ bt es1 xo es2 }
+  | TRY labeling_opt try_block
+    { fun c -> let c' = $2 c [] in [], $3 c c' }
   | BARRIER labeling_opt block
     { fun c -> let c' = $2 c [] in let bt, es = $3 c' in [], barrier bt es }
 
@@ -802,45 +843,6 @@ resume_expr_handler :
   | expr_list
     { fun c -> [], $1 c }
 
-
-
-try_block :
-  | type_use try_block_param_body
-    { let at = at () in
-      fun c ->
-      let t = $1 c type_ in
-      let ft, es = $2 c in
-      let x = SynVar (inline_func_type_explicit c t ft at).it in
-      VarBlockType x, es }
-  | try_block_param_body  /* Sugar */
-    { let at = at () in
-      fun c ->
-      let bt =
-        match fst ($1 c) with
-        | FuncType ([], []) -> ValBlockType None
-        | FuncType ([], [t]) -> ValBlockType (Some t)
-        | ft ->  VarBlockType (SynVar (inline_func_type c ft at).it)
-      in bt, snd ($1 c) }
-try_block_param_body :
-  | try_block_result_body { $1 }
-  | LPAR PARAM value_type_list RPAR try_block_param_body
-    { fun c ->
-      let FuncType (ins, out), es = $5 c in
-      let ins' = snd $3 c in
-      FuncType (ins' @ ins, out), es }
-try_block_result_body :
-  | try_ { fun c -> FuncType ([], []), $1 c }
-  | LPAR RESULT value_type_list RPAR try_block_result_body
-    { fun c ->
-      let FuncType (ins, out), es = $5 c in
-      let out' = snd $3 c in
-      FuncType (ins, out' @ out), es }
-try_ :
- | LPAR DO instr_list RPAR LPAR CATCH LPAR EXCEPTION var RPAR instr_list RPAR
-   { fun c -> $3 c, Some ($9 c tag), $11 c }
- | LPAR DO instr_list RPAR LPAR CATCH_ALL instr_list RPAR
-   { fun c -> $3 c, None, $7 c }
-
 if_block :
   | type_use if_block_param_body
     { let at = at () in
@@ -879,6 +881,44 @@ if_ :
     { fun c c' -> [], $3 c', $7 c' }
   | LPAR THEN instr_list RPAR  /* Sugar */
     { fun c c' -> [], $3 c', [] }
+
+try_block :
+  | type_use try_block_param_body
+    { let at = at () in
+      fun c c' ->
+      let body = $2 c in
+      let bt = VarBlockType (SynVar (inline_func_type_explicit c' ($1 c' type_) (fst body) at).it) in
+      snd body bt c c' }
+  | try_block_param_body  /* Sugar */
+    { let at = at () in
+      fun c c' ->
+      let body = $1 c in
+      let bt =
+        match fst body with
+        | FuncType ([], []) -> ValBlockType None
+        | FuncType ([], [t]) -> ValBlockType (Some t)
+        | ft ->  VarBlockType (SynVar (inline_func_type c' ft at).it)
+      in snd body bt c c' }
+
+try_block_param_body :
+  | try_block_result_body { $1 }
+  | LPAR PARAM value_type_list RPAR try_block_param_body
+    { fun c ->
+      let FuncType (ins, out) = fst ($5 c) in
+      FuncType ((snd $3) c @ ins, out), snd ($5 c) }
+
+try_block_result_body :
+  | try_ { fun _c -> FuncType ([], []), $1 }
+  | LPAR RESULT value_type_list RPAR try_block_result_body
+    { fun c ->
+      let FuncType (ins, out) = fst ($5 c) in
+      let vs = (snd $3) c in
+      FuncType (ins, vs @ out), snd ($5 c) }
+
+try_ :
+  | LPAR DO instr_list RPAR handler
+    { fun bt c c' -> $5 bt ($3 c') c c' }
+
 
 instr_list :
   | /* empty */ { fun c -> [] }
@@ -1141,10 +1181,6 @@ tag :
     { let at = at () in
       fun c -> let x = $3 c anon_tag bind_tag @@ at in
       fun () -> $4 c x at }
-  | LPAR EXCEPTION bind_var_opt exception_fields RPAR  /* Sugar */
-    { let at = at () in
-      fun c -> let x = $3 c anon_tag bind_tag @@ at in
-      fun () -> $4 c x at }
 
 tag_fields :
   | tag_type
@@ -1157,19 +1193,6 @@ tag_fields :
   | inline_export tag_fields  /* Sugar */
     { fun c x at -> let evts, ims, exs = $2 c x at in
       evts, ims, $1 (TagExport x) c :: exs }
-
-exception_fields :  /* Sugar */
-  | func_type
-    { fun c x at -> [{tagtype = TagType ($1 c, Terminal)} @@ at], [], [] }
-  | inline_import func_type
-    { fun c x at ->
-      [],
-      [{ module_name = fst $1; item_name = snd $1;
-         idesc = TagImport (TagType ($2 c, Terminal)) @@ at } @@ at], [] }
-  | inline_export exception_fields
-    { fun c x at -> let evts, ims, exs = $2 c x at in
-      evts, ims, $1 (TagExport x) c :: exs }
-
 
 /* Imports & Exports */
 
@@ -1193,9 +1216,6 @@ import_desc :
   | LPAR TAG bind_var_opt tag_type RPAR
     { fun c -> ignore ($3 c anon_tag bind_tag);
       fun () -> TagImport ($4 c) }
-  | LPAR EXCEPTION bind_var_opt func_type RPAR  /* Sugar */
-    { fun c -> ignore ($3 c anon_tag bind_tag);
-      fun () -> TagImport (TagType ($4 c, Terminal)) }
 
 import :
   | LPAR IMPORT name name import_desc RPAR
@@ -1212,7 +1232,6 @@ export_desc :
   | LPAR MEMORY var RPAR { fun c -> MemoryExport ($3 c memory) }
   | LPAR GLOBAL var RPAR { fun c -> GlobalExport ($3 c global) }
   | LPAR TAG var RPAR { fun c -> TagExport ($3 c tag) }
-  | LPAR EXCEPTION var RPAR { fun c -> TagExport ($3 c tag) }  /* Sugar */
 
 export :
   | LPAR EXPORT name export_desc RPAR

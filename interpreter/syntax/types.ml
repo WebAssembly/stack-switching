@@ -20,11 +20,10 @@ and def_type = FuncDefType of func_type | ContDefType of cont_type
 
 type 'a limits = {min : 'a; max : 'a option}
 type mutability = Immutable | Mutable
-type resumability = Terminal | Resumable
 type table_type = TableType of Int32.t limits * ref_type
 type memory_type = MemoryType of Int32.t limits
 type global_type = GlobalType of value_type * mutability
-type tag_type = TagType of func_type * resumability  (* TODO: use index *)
+type tag_type = TagType of var
 type extern_type =
   | ExternFuncType of func_type
   | ExternTableType of table_type
@@ -163,8 +162,8 @@ let sem_func_type c (FuncType (ins, out)) =
 let sem_cont_type c (ContType x) =
   ContType (sem_var_type c x)
 
-let sem_tag_type c (TagType (ft, res)) =
-  TagType (sem_func_type c ft, res)
+let sem_tag_type c (TagType x) =
+  TagType (sem_var_type c x)
 
 let sem_extern_type c = function
   | ExternFuncType ft -> ExternFuncType (sem_func_type c ft)
@@ -276,9 +275,7 @@ let string_of_global_type = function
   | GlobalType (t, Immutable) -> string_of_value_type t
   | GlobalType (t, Mutable) -> "(mut " ^ string_of_value_type t ^ ")"
 
-let string_of_tag_type = function
-  | TagType (ft, Terminal) -> "exception " ^ string_of_func_type ft
-  | TagType (ft, Resumable) -> string_of_func_type ft
+let string_of_tag_type (TagType x) = string_of_var x
 
 let string_of_extern_type = function
   | ExternFuncType ft -> "func " ^ string_of_func_type ft

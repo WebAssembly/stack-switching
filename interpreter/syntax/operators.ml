@@ -21,8 +21,10 @@ let loop bt es = Loop (bt, es)
 let if_ bt es1 es2 = If (bt, es1, es2)
 let let_ bt ts es = Let (bt, ts, es)
 
-let try_ bt es1 xo es2 = Try (bt, es1, xo, es2)
+let try_catch bt es ct ca = TryCatch (bt, es, ct, ca)
+let try_delegate bt es x = TryDelegate (bt, es, x)
 let throw x = Throw x
+let rethrow x = Rethrow x
 
 let br x = Br x
 let br_if x = BrIf x

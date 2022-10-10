@@ -211,11 +211,13 @@ rule token = parse
   | "return_call_indirect" { RETURN_CALL_INDIRECT }
   | "func.bind" { FUNC_BIND }
 
-  | "throw" { THROW }
   | "try" { TRY }
   | "do" { DO }
   | "catch" { CATCH }
   | "catch_all" { CATCH_ALL }
+  | "delegate" { DELEGATE }
+  | "throw" { THROW }
+  | "rethrow" { RETHROW }
 
   | "cont.new" { CONT_NEW }
   | "cont.bind" { CONT_BIND }
@@ -382,7 +384,6 @@ rule token = parse
   | "table" { TABLE }
   | "memory" { MEMORY }
   | "tag" { TAG }
-  | "exception" { EXCEPTION }
   | "elem" { ELEM }
   | "data" { DATA }
   | "declare" { DECLARE }

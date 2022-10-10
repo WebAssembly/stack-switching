@@ -138,6 +138,9 @@ let sized f s =
 
 open Types
 
+let var s = vu32 s
+let zero s = expect 0x00 s "zero byte expected"
+
 let var_type s =
   let pos = pos s in
   match vs33 s with
@@ -204,16 +207,10 @@ let memory_type s =
   let lim = limits vu32 s in
   MemoryType lim
 
-let resumability s =
-  match u8 s with
-  | 0 -> Terminal
-  | 1 -> Resumable
-  | _ -> error s (pos s - 1) "malformed resumability"
-
 let tag_type s =
-  let res = resumability s in
-  let ft = func_type s in  (* TODO *)
-  TagType (ft, res)
+  zero s;
+  let x = var_type s in
+  TagType x
 
 let mutability s =
   match u8 s with
@@ -232,11 +229,8 @@ let global_type s =
 open Ast
 open Operators
 
-let var s = vu32 s
-
 let op s = u8 s
 let end_ s = expect 0x0b s "END opcode expected"
-let zero s = expect 0x00 s "zero byte expected"
 
 let memop s =
   let align = vu32 s in
@@ -301,24 +295,29 @@ let rec instr s =
 
   | 0x06 ->
     let bt = block_type s in
-    let es1 = instr_block s in
-    let xo =
-      if peek s = Some 0x07 then begin
-        expect 0x07 s "CATCH or CATCH_ALL opcode expected";
-        Some (at var s)
-      end
-      else begin
-        expect 0x19 s "CATCH or CATCH_ALL opcode expected";
+    let es = instr_block s in
+    let ct = catch_list s in
+    let ca =
+      if peek s = Some 0x19 then begin
+        ignore (u8 s);
+        Some (instr_block s)
+      end else
         None
-      end
     in
-    let es2 = instr_block s in
-    end_ s;
-    try_ bt es1 xo es2
+    if ct <> [] || ca <> None then begin
+      end_ s;
+      try_catch bt es ct ca
+    end else begin
+      match op s with
+      | 0x0b -> try_catch bt es [] None
+      | 0x18 -> try_delegate bt es (at var s)
+      | b -> illegal s pos b
+    end
   | 0x07 -> error s pos "misplaced CATCH opcode"
   | 0x08 -> throw (at var s)
+  | 0x09 -> rethrow (at var s)
 
-  | 0x09 | 0x0a as b -> illegal s pos b
+  | 0x0a as b -> illegal s pos b
   | 0x0b -> error s pos "misplaced END opcode"
 
   | 0x0c -> br (at var s)
@@ -351,8 +350,7 @@ let rec instr s =
     end_ s;
     let_ bt locs es
 
-  | 0x18 as b -> illegal s pos b
-
+  | 0x18 -> error s pos "misplaced DELEGATE opcode"
   | 0x19 -> error s pos "misplaced CATCH_ALL opcode"
 
   | 0x1a -> drop
@@ -607,6 +605,14 @@ and instr_block' s es =
     let pos = pos s in
     let e' = instr s in
     instr_block' s (Source.(e' @@ region s pos pos) :: es)
+and catch_list s =
+  if peek s = Some 0x07 then begin
+    ignore (u8 s);
+    let tag = at var s in
+    let instrs = instr_block s in
+    (tag, instrs) :: catch_list s
+  end else
+    []
 
 let const s =
   let c = at instr_block s in
