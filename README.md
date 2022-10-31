@@ -14,7 +14,7 @@ add support for different patterns of non-local control flow to WebAssembly.
 
 This is a proposed solution addressing the aims of the stack-switching proposal.
 
-It is based on the [function references](proposals/function-references/Overview.md) and the [tail call](proposals/tail-call/Overview.md) proposals.
+It depends on the [function references](proposals/function-references/Overview.md) and the [exception handling](https://github.com/WebAssembly/exception-handling/blob/main/proposals/exception-handling/Exceptions.md) proposals.
 
 A complete [implementation](https://github.com/effect-handlers/wasm-spec) is available as an extension to the reference interpreter.
 
