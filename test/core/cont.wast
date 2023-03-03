@@ -86,18 +86,18 @@
     (unreachable)
   )
   (func $nl3 (param $k (ref $k1))
+    (local $k' (ref null $k1))
     (block $h1 (result (ref $k1))
       (resume (tag $e1 $h1) (local.get $k))
       (unreachable)
     )
-    (let (local $k' (ref $k1))
-      (block $h2 (result (ref $k1))
-        (resume (tag $e1 $h2) (local.get $k'))
-        (unreachable)
-      )
-      (resume (local.get $k'))
+    (local.set $k')
+    (block $h2 (result (ref $k1))
+      (resume (tag $e1 $h2) (local.get $k'))
       (unreachable)
     )
+    (resume (local.get $k'))
+    (unreachable)
   )
   (func $nl4 (param $k (ref $k1))
     (drop (cont.bind (type $k1) (local.get $k)))
@@ -214,6 +214,8 @@
 
   (func (export "sum") (param $i i64) (param $j i64) (result i64)
     (local $sum i64)
+    (local $n i64)
+    (local $k (ref null $cont))
     (local.get $i)
     (cont.new (type $cont0) (ref.func $gen))
     (block $on_first_yield (param i64 (ref $cont0)) (result i64 (ref $cont))
@@ -221,11 +223,11 @@
       (unreachable)
     )
     (loop $on_yield (param i64) (param (ref $cont))
-      (let (result i32 (ref $cont))
-        (local $n i64) (local $k (ref $cont))
-        (local.set $sum (i64.add (local.get $sum) (local.get $n)))
-        (i64.eq (local.get $n) (local.get $j)) (local.get $k)
-      )
+      (local.set $k)
+      (local.set $n)
+      (local.set $sum (i64.add (local.get $sum) (local.get $n)))
+      (i64.eq (local.get $n) (local.get $j))
+      (local.get $k)
       (resume (tag $yield $on_yield))
     )
     (return (local.get $sum))
@@ -248,7 +250,7 @@
   (type $cont (cont $proc))
 
   (tag $yield (export "yield"))
-  (tag $spawn (export "spawn") (param (ref $proc)))
+  (tag $spawn (export "spawn") (param (ref $cont)))
 
   ;; Table as simple queue (keeping it simple, no ring buffer)
   (table $queue 0 (ref null $cont))
@@ -302,12 +304,12 @@
     (global.set $qback (i32.add (global.get $qback) (i32.const 1)))
   )
 
-  (func $scheduler (export "scheduler") (param $main (ref $proc))
-    (call $enqueue (cont.new (type $cont) (local.get $main)))
+  (func $scheduler (export "scheduler") (param $main (ref $cont))
+    (call $enqueue (local.get $main))
     (loop $l
       (if (call $queue-empty) (then (return)))
       (block $on_yield (result (ref $cont))
-        (block $on_spawn (result (ref $proc) (ref $cont))
+        (block $on_spawn (result (ref $cont) (ref $cont))
           (resume (tag $yield $on_yield) (tag $spawn $on_spawn)
             (call $dequeue)
           )
@@ -315,7 +317,6 @@
         )
         ;; on $spawn, proc and cont on stack
         (call $enqueue)             ;; continuation of old thread
-        (cont.new (type $cont))
         (call $enqueue)             ;; new thread
         (br $l)
       )
@@ -330,10 +331,12 @@
 
 (module
   (type $proc (func))
+  (type $pproc (func (param i32))) ;; parameterised proc
   (type $cont (cont $proc))
+  (type $pcont (cont $pproc)) ;; parameterised continuation proc
   (tag $yield (import "scheduler" "yield"))
-  (tag $spawn (import "scheduler" "spawn") (param (ref $proc)))
-  (func $scheduler (import "scheduler" "scheduler") (param $main (ref $proc)))
+  (tag $spawn (import "scheduler" "spawn") (param (ref $cont)))
+  (func $scheduler (import "scheduler" "scheduler") (param $main (ref $cont)))
 
   (func $log (import "spectest" "print_i32") (param i32))
 
@@ -344,11 +347,11 @@
 
   (func $main
     (call $log (i32.const 0))
-    (suspend $spawn (ref.func $thread1))
+    (suspend $spawn (cont.new (type $cont) (ref.func $thread1)))
     (call $log (i32.const 1))
-    (suspend $spawn (func.bind (type $proc) (global.get $depth) (ref.func $thread2)))
+    (suspend $spawn (cont.bind (type $cont) (global.get $depth) (cont.new (type $pcont) (ref.func $thread2))))
     (call $log (i32.const 2))
-    (suspend $spawn (ref.func $thread3))
+    (suspend $spawn (cont.new (type $cont) (ref.func $thread3)))
     (call $log (i32.const 3))
   )
 
@@ -375,9 +378,9 @@
           (suspend $yield)
           (call $log (i32.const 23))
           (suspend $spawn
-            (func.bind (type $proc)
+            (cont.bind (type $cont)
               (i32.sub (local.get $d) (i32.const 1))
-              (ref.func $thread2)
+              (cont.new (type $pcont) (ref.func $thread2))
             )
           )
           (call $log (i32.const 24))
@@ -401,7 +404,7 @@
     (global.set $depth (local.get $depth))
     (global.set $width (local.get $width))
     (call $log (i32.const -1))
-    (call $scheduler (ref.func $main))
+    (call $scheduler (cont.new (type $cont) (ref.func $main)))
     (call $log (i32.const -2))
   )
 )
@@ -419,8 +422,8 @@
   (func $log (import "spectest" "print_i64") (param i64))
 
   (tag $syield (import "scheduler" "yield"))
-  (tag $spawn (import "scheduler" "spawn") (param (ref $proc)))
-  (func $scheduler (import "scheduler" "scheduler") (param $main (ref $proc)))
+  (tag $spawn (import "scheduler" "spawn") (param (ref $cont)))
+  (func $scheduler (import "scheduler" "scheduler") (param $main (ref $cont)))
 
   (type $ghook (func (param i64)))
   (func $gsum (import "generator" "sum") (param i64 i64) (result i64))
@@ -447,17 +450,20 @@
   )
 
   (func $main (param $i i64) (param $j i64)
-    (suspend $spawn (ref.func $bg-thread))
+    (suspend $spawn (cont.new (type $cont) (ref.func $bg-thread)))
     (global.set $ghook (ref.func $syield))
     (global.set $result (call $gsum (local.get $i) (local.get $j)))
     (global.set $done (i32.const 1))
   )
 
   (type $proc (func))
+  (type $pproc (func (param i64 i64)))
+  (type $cont (cont $proc))
+  (type $pcont (cont $pproc))
   (func (export "sum") (param $i i64) (param $j i64) (result i64)
     (call $log (i64.const -1))
     (call $scheduler
-      (func.bind (type $proc) (local.get $i) (local.get $j) (ref.func $main))
+      (cont.bind (type $cont) (local.get $i) (local.get $j) (cont.new (type $pcont) (ref.func $main)))
     )
     (call $log (i64.const -2))
     (global.get $result)
