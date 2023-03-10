@@ -6,8 +6,8 @@ Types
 -----
 
 .. note::
-   In future versions of WebAssembly, value types may include types denoted by :ref:`type indices <syntax-typeidx>`.
-   Thus, the binary format for types corresponds to the encodings of small negative :math:`\xref{binary/values}{binary-sint}{\sN}` values, so that they can coexist with (positive) type indices in the future.
+   In some places, possible types include both type constructors or types denoted by :ref:`type indices <syntax-typeidx>`.
+   Thus, the binary format for type constructors corresponds to the encodings of small negative :math:`\xref{binary/values}{binary-sint}{\sN}` values, such that they can unambiguously occur in the same place as (positive) type indices.
 
 
 .. index:: number type
@@ -29,6 +29,40 @@ Number Types
    \end{array}
 
 
+.. index:: vector type
+   pair: binary format; vector type
+.. _binary-vectype:
+
+Vector Types
+~~~~~~~~~~~~
+
+:ref:`Vector types <syntax-vectype>` are also encoded by a single byte.
+
+.. math::
+   \begin{array}{llclll@{\qquad\qquad}l}
+   \production{vector type} & \Bvectype &::=&
+     \hex{7B} &\Rightarrow& \V128 \\
+   \end{array}
+
+
+.. index:: heap type
+   pair: binary format; heap type
+.. _binary-heaptype:
+
+Heap Types
+~~~~~~~~~~
+
+:ref:`Heap types <syntax-reftype>` are encoded as either a single byte, or as a :ref:`type index <binary-typeidx>` encoded as a positive :ref:`signed integer <binary-sint>`.
+
+.. math::
+   \begin{array}{llclll@{\qquad\qquad}l}
+   \production{heap type} & \Bheaptype &::=&
+     \hex{6F} &\Rightarrow& \EXTERN \\ &&|&
+     \hex{70} &\Rightarrow& \FUNC \\ &&|&
+     x{:}\Bs33 &\Rightarrow& x & (\iff x \geq 0) \\
+   \end{array}
+
+
 .. index:: reference type
    pair: binary format; reference type
 .. _binary-reftype:
@@ -36,13 +70,15 @@ Number Types
 Reference Types
 ~~~~~~~~~~~~~~~
 
-:ref:`Reference types <syntax-reftype>` are also encoded by a single byte.
+:ref:`Reference types <syntax-reftype>` are either encoded by a single byte followed by a :ref:`heap type <binary-heaptype>`, or, as a short form, directly as a non-index heap type.
 
 .. math::
    \begin{array}{llclll@{\qquad\qquad}l}
    \production{reference type} & \Breftype &::=&
-     \hex{70} &\Rightarrow& \FUNCREF \\ &&|&
-     \hex{6F} &\Rightarrow& \EXTERNREF \\
+     \hex{6B}~~\X{ht}{:}\Bheaptype &\Rightarrow& \REF~\X{ht} \\ &&|&
+     \hex{6C}~~\X{ht}{:}\Bheaptype &\Rightarrow& \REF~\NULL~\X{ht} \\ &&|&
+     \hex{6F} &\Rightarrow& \EXTERNREF \\ &&|&
+     \hex{70} &\Rightarrow& \FUNCREF \\
    \end{array}
 
 
@@ -53,12 +89,13 @@ Reference Types
 Value Types
 ~~~~~~~~~~~
 
-:ref:`Value types <syntax-valtype>` are encoded with their respective encoding as a :ref:`number type <binary-numtype>` or :ref:`reference type <binary-reftype>`.
+:ref:`Value types <syntax-valtype>` are encoded with their respective encoding as a :ref:`number type <binary-numtype>`, :ref:`vector type <binary-vectype>`, or :ref:`reference type <binary-reftype>`.
 
 .. math::
    \begin{array}{llclll@{\qquad\qquad}l}
    \production{value type} & \Bvaltype &::=&
      t{:}\Bnumtype &\Rightarrow& t \\ &&|&
+     t{:}\Bvectype &\Rightarrow& t \\ &&|&
      t{:}\Breftype &\Rightarrow& t \\
    \end{array}
 
@@ -76,7 +113,7 @@ Value Types
 Result Types
 ~~~~~~~~~~~~
 
-:ref:`Result types <syntax-resulttype>` are encoded by the respective :ref:`vectors <binary-vec>` of :ref:`value types `<binary-valtype>`.
+:ref:`Result types <syntax-resulttype>` are encoded by the respective :ref:`vectors <binary-vec>` of :ref:`value types <binary-valtype>`.
 
 .. math::
    \begin{array}{llclll@{\qquad\qquad}l}
