@@ -130,11 +130,11 @@ struct
     | FuncT (ts1, ts2) -> vec val_type ts1; vec val_type ts2
 
   let cont_type = function
-    | ContType x -> var_type x
+    | ContT x -> var_type x
 
   let def_type = function
     | DefFuncT ft -> s7 (-0x20); func_type ft
-    | ContDefType ct -> vs7 (-0x21); cont_type ct
+    | DefContT ct -> s7 (-0x21); cont_type ct (* TODO(dhil): I think the GC proposal claims opcode -0x21 for one of the struct/array types. *)
 
   let limits vu {min; max} =
     bool (max <> None); vu min; opt vu max
@@ -152,8 +152,8 @@ struct
   let global_type = function
     | GlobalT (mut, t) -> val_type t; mutability mut
 
-  let tag_type (TagType x) =
-    vu32 0x00l; var_type x
+  let tag_type (TagT x) =
+    u32 0x00l; var_type x
 
   (* Instructions *)
 

@@ -90,11 +90,11 @@ let val_type = function
   | BotT -> empty
 
 let func_type (FuncT (ins, out)) = list val_type ins ++ list val_type out
-let cont_type (ContType x) = var_type x
+let cont_type (ContT x) = var_type x
 let global_type (GlobalT (_mut, t)) = val_type t
 let table_type (TableT (_lim, t)) = ref_type t
 let memory_type (MemoryT (_lim)) = empty
-let tag_type (TagType x) = var_type x
+let tag_type (TagT x) = var_type x
 
 let def_type = function
   | DefFuncT ft -> func_type ft

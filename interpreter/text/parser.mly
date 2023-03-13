@@ -163,7 +163,7 @@ let label (c : context) x = lookup "label " c.labels x
 let func_type (c : context) x =
   match (Lib.List32.nth c.types.list x.it).it with
   | DefFuncT ft -> ft
-  | DefContT ct -> ct
+  | _ -> error x.at ("non-function type " ^ Int32.to_string x.it)
   | exception Failure _ -> error x.at ("unknown type " ^ Int32.to_string x.it)
 
 let handlers (c : context) h =
@@ -263,7 +263,7 @@ let inline_func_type_explicit (c : context) x ft at =
 %token<Ast.instr'> VEC_SHIFT VEC_BITMASK VEC_SPLAT
 %token VEC_SHUFFLE
 %token<int -> Ast.instr'> VEC_EXTRACT VEC_REPLACE
-%token FUNC START TYPE PARAM RESULT LOCAL GLOBAL TAG
+%token FUNC START TYPE PARAM RESULT LOCAL GLOBAL TAG CONT
 %token TABLE ELEM MEMORY DATA DECLARE OFFSET ITEM IMPORT EXPORT
 %token MODULE BIN QUOTE
 %token SCRIPT REGISTER INVOKE GET
@@ -321,15 +321,15 @@ global_type :
 
 def_type :
   | LPAR FUNC func_type RPAR { fun c -> DefFuncT ($3 c) }
-  | LPAR CONT cont_type RPAR { fun c -> DefContT (ContT (SynVar ($3 c).it)) }
+  | LPAR CONT cont_type RPAR { fun c -> DefContT (ContT (Stat ($3 c).it)) }
 
 cont_type :
   | type_use cont_type_params
     { let at1 = ati 1 in
       fun c ->
       match $2 c with
-      | FuncType ([], []) -> $1 c type_
-      | ft -> inline_func_type_explicit c ($1 c type_) ft at1 }
+      | FuncT ([], []) -> $1 c
+      | ft -> inline_func_type_explicit c ($1 c) ft at1 }
   | cont_type_params
     /* TODO: the inline type is broken for now */
     { let at = at () in fun c -> inline_func_type c ($1 c) at }
@@ -337,18 +337,17 @@ cont_type :
     { fun c -> $1 c type_ }
 
 cont_type_params :
-  | LPAR PARAM value_type_list RPAR cont_type_params
-    { fun c -> let FuncType (ts1, ts2) = $5 c in
-      FuncType (snd $3 c @ ts1, ts2) }
+  | LPAR PARAM val_type_list RPAR cont_type_params
+    { fun c -> let FuncT (ts1, ts2) = $5 c in
+      FuncT (snd $3 c @ ts1, ts2) }
   | cont_type_results
-    { fun c -> FuncType ([], $1 c) }
+    { fun c -> FuncT ([], $1 c) }
 
 cont_type_results :
-  | LPAR RESULT value_type_list RPAR cont_type_results
+  | LPAR RESULT val_type_list RPAR cont_type_results
     { fun c -> snd $3 c @ $5 c }
   | /* empty */
     { fun c -> [] }
-
 
 func_type :
   | func_type_result
@@ -368,9 +367,9 @@ func_type_result :
 
 tag_type :
   | type_use
-    { fun c -> TagType (SynVar ($1 c type_).it) }
+    { fun c -> TagT (Stat ($1 c).it) }
   | func_type
-    { let at = at () in fun c -> TagType (SynVar (inline_func_type c ($1 c) at).it) }
+    { let at = at () in fun c -> TagT (Stat (inline_func_type c ($1 c) at).it) }
 
 table_type :
   | limits ref_type { fun c -> TableT ($1, $2 c) }
@@ -631,16 +630,15 @@ catch :
 catch_all :
   | CATCH_ALL instr_list { $2 }
 
-resume_instr :
-  | RESUME resume_instr_handler
-    { let at = at () in fun c -> resume ($2 c) @@ at }
+/* resume_instr : */
+/*   | RESUME resume_instr_handler */
+/*     { let at = at () in fun c -> resume ($2 c) @@ at } */
 
-resume_instr_handler :
-  | LPAR TAG var var RPAR resume_instr_handler
-    { fun c -> ($3 c tag, $4 c label) :: $6 c }
-  | /* empty */
-    { fun c -> [] }
-
+/* resume_instr_handler : */
+/*   | LPAR TAG var var RPAR resume_instr_handler */
+/*     { fun c -> ($3 c tag, $4 c label) :: $6 c } */
+/*   | /\* empty *\/ */
+/*     { fun c -> [] } */
 
 resume_instr_instr :
   | RESUME resume_instr_handler_instr
@@ -650,9 +648,8 @@ resume_instr_instr :
 resume_instr_handler_instr :
   | LPAR TAG var var RPAR resume_instr_handler_instr
     { fun c -> let hs, es = $6 c in ($3 c tag, $4 c label) :: hs, es }
-  | instr
+  | instr1
     { fun c -> [], $1 c }
-
 
 block_instr :
   | BLOCK labeling_opt block END labeling_end_opt
@@ -812,7 +809,7 @@ try_block :
     { let at = at () in
       fun c c' ->
       let body = $2 c in
-      let bt = VarBlockType (SynVar (inline_func_type_explicit c' ($1 c' type_) (fst body) at).it) in
+      let bt = VarBlockType (inline_func_type_explicit c' ($1 c') (fst body) at) in
       snd body bt c c' }
   | try_block_param_body  /* Sugar */
     { let at = at () in
@@ -822,19 +819,19 @@ try_block :
         match fst body with
         | FuncT ([], []) -> ValBlockType None
         | FuncT ([], [t]) -> ValBlockType (Some t)
-        | ft ->  VarBlockT (SynVar (inline_func_type c' ft at).it)
+        | ft ->  VarBlockType (inline_func_type c' ft at)
       in snd body bt c c' }
 
 try_block_param_body :
   | try_block_result_body { $1 }
-  | LPAR PARAM value_type_list RPAR try_block_param_body
+  | LPAR PARAM val_type_list RPAR try_block_param_body
     { fun c ->
       let FuncT (ins, out) = fst ($5 c) in
       FuncT ((snd $3) c @ ins, out), snd ($5 c) }
 
 try_block_result_body :
   | try_ { fun _c -> FuncT ([], []), $1 }
-  | LPAR RESULT value_type_list RPAR try_block_result_body
+  | LPAR RESULT val_type_list RPAR try_block_result_body
     { fun c ->
       let FuncT (ins, out) = fst ($5 c) in
       let vs = (snd $3) c in

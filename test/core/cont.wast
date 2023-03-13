@@ -204,7 +204,7 @@
   (func $gen (export "start") (param $i i64)
     (loop $l
       (br_if 1 (suspend $yield (local.get $i)))
-      (call_ref (local.get $i) (global.get $hook))
+      (call_ref $gen (local.get $i) (global.get $hook))
       (local.set $i (i64.add (local.get $i) (i64.const 1)))
       (br $l)
     )

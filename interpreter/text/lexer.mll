@@ -154,6 +154,7 @@ rule token = parse
       | "ref" -> REF
       | "null" -> NULL
       | "mut" -> MUT
+      | "tag" -> TAG
       | "cont" -> CONT
 
       | "nop" -> NOP
@@ -711,6 +712,8 @@ rule token = parse
       | "assert_return" -> ASSERT_RETURN
       | "assert_trap" -> ASSERT_TRAP
       | "assert_exhaustion" -> ASSERT_EXHAUSTION
+      | "assert_exception" -> ASSERT_EXCEPTION
+      | "assert_suspension" -> ASSERT_SUSPENSION
       | "nan:canonical" -> NAN Script.CanonicalNan
       | "nan:arithmetic" -> NAN Script.ArithmeticNan
       | "input" -> INPUT

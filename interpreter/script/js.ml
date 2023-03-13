@@ -288,6 +288,7 @@ let null_heap_type_of = function
   | Types.DefHT (Dyn a) ->
     match Types.def_of a with
     | Types.DefFuncT _ -> FuncHT
+    | Types.DefContT _ -> assert false
 
 let value v =
   match v.it with

@@ -66,7 +66,7 @@ let extern_type_of c = function
   | ExternTable tab -> ExternTableT (Table.type_of tab)
   | ExternMemory mem -> ExternMemoryT (Memory.type_of mem)
   | ExternGlobal glob -> ExternGlobalT (Global.type_of glob)
-  | ExternTag tag -> ExternTagType (Tag.type_of tag)
+  | ExternTag tag -> ExternTagT (Tag.type_of tag)
 
 let export inst name =
   try Some (List.assoc name inst.exports) with Not_found -> None

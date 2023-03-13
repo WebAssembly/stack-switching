@@ -144,14 +144,7 @@ let sized f s =
 
 open Types
 
-let var s = vu32 s
 let zero s = expect 0x00 s "zero byte expected"
-
-let var_type s =
-  let pos = pos s in
-  match vs33 s with
-  | i when i >= 0l -> SynVar i
-  | _ -> error s pos "malformed type index"
 
 let num_type s =
   match s7 s with
@@ -208,12 +201,12 @@ let func_type s =
   FuncT (ts1, ts2)
 
 let cont_type s =
-  ContType (var_type s)
+  ContT (Stat (var_type s))
 
 let def_type s =
   match s7 s with
   | -0x20 -> DefFuncT (func_type s)
-  | -0x21 -> ContDefType (cont_type s)
+  | -0x21 -> DefContT (cont_type s)
   | _ -> error s (pos s - 1) "malformed definition type"
 
 
@@ -234,8 +227,8 @@ let memory_type s =
 
 let tag_type s =
   zero s;
-  let x = var_type s in
-  TagType x
+  let x = Stat (var_type s) in
+  TagT x
 
 let mutability s =
   match byte s with
@@ -329,7 +322,7 @@ let rec instr s =
     let ct = catch_list s in
     let ca =
       if peek s = Some 0x19 then begin
-        ignore (u8 s);
+        ignore (byte s);
         Some (instr_block s)
       end else
         None
@@ -372,12 +365,10 @@ let rec instr s =
   | 0x14 -> call_ref (at var s)
   | 0x15 -> return_call_ref (at var s)
 
-  | 0x16 as b -> illegal s pos b
+  | (0x16 | 0x17) as b -> illegal s pos b
 
   | 0x18 -> error s pos "misplaced DELEGATE opcode"
   | 0x19 -> error s pos "misplaced CATCH_ALL opcode"
-
-  | 0x17 | 0x19 as b -> illegal s pos b
 
   | 0x1a -> drop
   | 0x1b -> select None
@@ -900,7 +891,7 @@ and instr_block' s es =
     instr_block' s (Source.(e' @@ region s pos pos) :: es)
 and catch_list s =
   if peek s = Some 0x07 then begin
-    ignore (u8 s);
+    ignore (byte s);
     let tag = at var s in
     let instrs = instr_block s in
     (tag, instrs) :: catch_list s
@@ -1244,7 +1235,7 @@ let module_ s =
     s (len s) "data count section required";
   let funcs =
     List.map2 (fun t f -> {f.it with ftype = t} @@ f.at) func_types func_bodies
-  in {types; tables; memories; globals; funcs; imports; exports; elems; datas; start}
+  in {types; tables; memories; tags; globals; funcs; imports; exports; elems; datas; start}
 
 
 let decode name bs = at module_ (stream name bs)

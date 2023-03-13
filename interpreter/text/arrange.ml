@@ -576,7 +576,7 @@ let memory off i mem =
   Node ("memory $" ^ nat (off + i) ^ " " ^ limits nat32 lim, [])
 
 let tag off i tag =
-  let {tagtype = TagType x} = tag.it in
+  let {tagtype = TagT x} = tag.it in
   Node ("tag $" ^ nat (off + i),
     [Node ("type", [atom var_type x])]
   )

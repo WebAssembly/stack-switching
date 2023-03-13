@@ -64,7 +64,8 @@ and eq_cont_type c (ContT x1) (ContT x2) =
 and eq_def_type c dt1 dt2 =
   match dt1, dt2 with
   | DefFuncT ft1, DefFuncT ft2 -> eq_func_type c ft1 ft2
-  | DefContT ct1, ContDefT ct2 -> eq_cont_type c ct1 ct2
+  | DefContT ct1, DefContT ct2 -> eq_cont_type c ct1 ct2
+  | _, _ -> false
 
 and eq_var_type c x1 x2 =
   eq_var x1 x2 ||
@@ -80,7 +81,7 @@ let eq_memory_type c (MemoryT lim1) (MemoryT lim2) =
 let eq_global_type c (GlobalT (mut1, t1)) (GlobalT (mut2, t2)) =
   eq_mutability c mut1 mut2 && eq_val_type c t1 t2
 
-and eq_tag_type c (TagT x1) (TagT x2) =
+let eq_tag_type c (TagT x1) (TagT x2) =
   eq_var_type c x1 x2
 
 let eq_extern_type c et1 et2 =
@@ -147,6 +148,8 @@ and match_func_type c ft1 ft2 =
 and match_def_type c dt1 dt2 =
   match dt1, dt2 with
   | DefFuncT ft1, DefFuncT ft2 -> match_func_type c ft1 ft2
+  | DefContT ct1, DefContT ct2 -> match_cont_type c ct1 ct2
+  | _, _ -> false
 
 and match_var_type c x1 x2 =
   eq_var x1 x2 ||
@@ -167,8 +170,8 @@ let match_global_type c (GlobalT (mut1, t1)) (GlobalT (mut2, t2)) =
   | Cons -> match_val_type c t1 t2
   | Var -> eq_val_type c t1 t2
 
-and match_tag_type c (TagT x1) (TagT x2) =
-  match_var_type c x1 x2
+let match_tag_type c tt1 tt2 =
+  eq_tag_type c tt1 tt2
 
 let match_extern_type c et1 et2 =
   match et1, et2 with

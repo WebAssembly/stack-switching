@@ -70,30 +70,6 @@ let defaultable : val_type -> bool = function
   | BotT -> assert false
 
 
-(* Projections *)
-
-let as_syn_var = function
-  | SynVar x -> x
-  | SemVar _ -> assert false
-
-let as_sem_var = function
-  | SynVar _ -> assert false
-  | SemVar x -> x
-
-let as_func_def_type (dt : def_type) : func_type =
-  match dt with
-  | DefFuncT ft -> ft
-  | _ -> assert false
-
-let as_cont_def_type (dt : def_type) : cont_type =
-  match dt with
-  | DefContT ct -> ct
-  | _ -> assert false
-
-let extern_type_of_import_type (ImportT (et, _, _)) = et
-let extern_type_of_export_type (ExportT (et, _)) = et
-
-
 (* Filters *)
 
 let funcs (ets : extern_type list) : func_type list =
@@ -106,6 +82,96 @@ let globals (ets : extern_type list) : global_type list =
   Lib.List.map_filter (function ExternGlobalT gt -> Some gt | _ -> None) ets
 let tags (ets : extern_type list) : tag_type list =
   Lib.List.map_filter (function ExternTagT t -> Some t | _ -> None) ets
+
+(* String conversion *)
+
+let string_of_idx x =
+  I32.to_string_u x
+
+let string_of_name n =
+  let b = Buffer.create 16 in
+  let escape uc =
+    if uc < 0x20 || uc >= 0x7f then
+      Buffer.add_string b (Printf.sprintf "\\u{%02x}" uc)
+    else begin
+      let c = Char.chr uc in
+      if c = '\"' || c = '\\' then Buffer.add_char b '\\';
+      Buffer.add_char b c
+    end
+  in
+  List.iter escape n;
+  Buffer.contents b
+
+let string_of_null : null -> string = function
+  | NoNull -> ""
+  | Null -> "null "
+
+let string_of_addr' = ref (fun (a : type_addr) -> assert false)
+let string_of_addr a = !string_of_addr' a
+
+let string_of_var : var -> string = function
+  | Stat x -> I32.to_string_u x
+  | Dyn a -> string_of_addr a
+
+let string_of_num_type : num_type -> string = function
+  | I32T -> "i32"
+  | I64T -> "i64"
+  | F32T -> "f32"
+  | F64T -> "f64"
+
+let string_of_vec_type : vec_type -> string = function
+  | V128T -> "v128"
+
+let string_of_heap_type : heap_type -> string = function
+  | FuncHT -> "func"
+  | ExternHT -> "extern"
+  | DefHT x -> string_of_var x
+  | BotHT -> "something"
+
+let string_of_ref_type : ref_type -> string = function
+  | (nul, t) ->
+    "(ref " ^ string_of_null nul ^ string_of_heap_type t ^ ")"
+
+let string_of_val_type : val_type -> string = function
+  | NumT t -> string_of_num_type t
+  | VecT t -> string_of_vec_type t
+  | RefT t -> string_of_ref_type t
+  | BotT -> "(something)"
+
+let string_of_result_type : result_type -> string = function
+  | ts -> "[" ^ String.concat " " (List.map string_of_val_type ts) ^ "]"
+
+let string_of_func_type : func_type -> string = function
+  | FuncT (ts1, ts2) ->
+    string_of_result_type ts1 ^ " -> " ^ string_of_result_type ts2
+
+let string_of_cont_type = function
+  | ContT x -> string_of_var x
+
+let string_of_def_type : def_type -> string = function
+  | DefFuncT ft -> "func " ^ string_of_func_type ft
+  | DefContT ct -> "cont " ^ string_of_cont_type ct
+
+let string_of_tag_type (TagT x) = string_of_var x
+
+let string_of_limits : I32.t limits -> string = function
+  | {min; max} ->
+    I32.to_string_u min ^
+    (match max with None -> "" | Some n -> " " ^ I32.to_string_u n)
+
+let string_of_memory_type : memory_type -> string = function
+  | MemoryT lim -> string_of_limits lim
+
+let string_of_table_type : table_type -> string = function
+  | TableT (lim, t) -> string_of_limits lim ^ " " ^ string_of_ref_type t
+
+let string_of_global_type : global_type -> string = function
+  | GlobalT (Cons, t) -> string_of_val_type t
+  | GlobalT (Var, t) -> "(mut " ^ string_of_val_type t ^ ")"
+
+let string_of_local_type : local_type -> string = function
+  | LocalT (Set, t) -> string_of_val_type t
+  | LocalT (Unset, t) -> "(unset " ^ string_of_val_type t ^ ")"
 
 let string_of_extern_type : extern_type -> string = function
   | ExternFuncT ft -> "func " ^ string_of_func_type ft
@@ -131,11 +197,6 @@ let string_of_module_type : module_type -> string = function
       List.map (fun it -> "import " ^ string_of_import_type it ^ "\n") its @
       List.map (fun et -> "export " ^ string_of_export_type et ^ "\n") ets
     )
-
-let string_of_tag_type (TagT x) = string_of_var x
-
-let string_of_cont_type = function
-  | ContT x -> string_of_var x
 
 (* Dynamic Types *)
 
@@ -238,3 +299,25 @@ let dyn_module_type = function
     let its = List.map (dyn_import_type c) its in
     let ets = List.map (dyn_export_type c) ets in
     ModuleT ([], its, ets)
+
+(* Projections *)
+let as_stat_var = function
+  | Stat x -> x
+  | Dyn _ -> assert false
+
+let as_dyn_var = function
+  | Dyn a -> a
+  | Stat _ -> assert false
+
+let as_func_def_type (dt : def_type) : func_type =
+  match dt with
+  | DefFuncT ft -> ft
+  | _ -> assert false
+
+let as_cont_def_type (dt : def_type) : cont_type =
+  match dt with
+  | DefContT ct -> ct
+  | _ -> assert false
+
+let extern_type_of_import_type (ImportT (et, _, _)) = et
+let extern_type_of_export_type (ExportT (et, _)) = et

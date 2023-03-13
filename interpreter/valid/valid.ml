@@ -76,9 +76,6 @@ let cont_type (c : context) x =
   | DefContT ct -> ct
   | _ -> error x.at ("non-continuation type " ^ Int32.to_string x.it)
 
-
-let func (c : context) x = func_type c (func_var c x @@ x.at)
-
 let refer category (s : Free.Set.t) x =
   if not (Free.Set.mem x.it s) then
     error x.at
@@ -133,7 +130,7 @@ let check_func_type (c : context) (ft : func_type) at =
 
 let check_cont_type (c : context) (ct : cont_type) at =
   let ContT x = ct in
-  ignore (func_type c (as_syn_var x @@ at))
+  ignore (func_type c (as_stat_var x @@ at))
 
 let check_table_type (c : context) (tt : table_type) at =
   let TableT (lim, t) = tt in
@@ -146,8 +143,8 @@ let check_memory_type (c : context) (mt : memory_type) at =
     "memory size must be at most 65536 pages (4GiB)"
 
 let check_tag_type (c : context) (et : tag_type) at =
-  let TagType x = et in
-  ignore (func_type c (as_syn_var x @@ at))
+  let TagT x = et in
+  ignore (func_type c (as_stat_var x @@ at))
 
 let check_global_type (c : context) (gt : global_type) at =
   let GlobalT (_mut, t) = gt in
@@ -178,6 +175,7 @@ type infer_instr_type = infer_func_type * idx list
 
 let stack ts = (NoEllipses, ts)
 let (-->) ts1 ts2 = {ins = NoEllipses, ts1; outs = NoEllipses, ts2}
+let (-->..) ts1 ts2 = {ins = Ellipses, ts1; outs = NoEllipses, ts2}
 let (-->...) ts1 ts2 = {ins = Ellipses, ts1; outs = Ellipses, ts2}
 
 let check_stack (c : context) ts1 ts2 at =
@@ -360,72 +358,76 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
 
   | Block (bt, es) ->
     let InstrT (ts1, ts2, xs) as it = check_block_type c bt e.at in
-    check_block {c with labels = ts2 :: c.labels} es it e.at;
+    check_block {c with labels = (BlockLabel, ts2) :: c.labels} es it e.at;
     ts1 --> ts2, List.map (fun x -> x @@ e.at) xs
 
   | Loop (bt, es) ->
     let InstrT (ts1, ts2, xs) as it = check_block_type c bt e.at in
-    check_block {c with labels = ts1 :: c.labels} es it e.at;
+    check_block {c with labels = (BlockLabel, ts1) :: c.labels} es it e.at;
     ts1 --> ts2, List.map (fun x -> x @@ e.at) xs
 
   | If (bt, es1, es2) ->
     let InstrT (ts1, ts2, xs) as it = check_block_type c bt e.at in
-    check_block {c with labels = ts2 :: c.labels} es1 it e.at;
-    check_block {c with labels = ts2 :: c.labels} es2 it e.at;
+    check_block {c with labels = (BlockLabel, ts2) :: c.labels} es1 it e.at;
+    check_block {c with labels = (BlockLabel, ts2) :: c.labels} es2 it e.at;
     (ts1 @ [NumT I32T]) --> ts2, List.map (fun x -> x @@ e.at) xs
 
   | Throw x ->
-    let TagType y = tag c x in
-    let FuncType (ts1, _) = func_type c (as_syn_var y @@ e.at) in
-    ts1 -->... []
+    let TagT y = tag c x in
+    let FuncT (ts1, _) = func_type c (as_stat_var y @@ e.at) in
+    ts1 -->... [], []
 
   | Rethrow x ->
     let (kind, _) = label c x in
     require (kind = CatchLabel) e.at "invalid rethrow label";
-    [] -->... []
+    [] -->... [], []
 
   | TryCatch (bt, es, cts, ca) ->
-    let FuncType (ts1, ts2) as ft = check_block_type c bt e.at in
+    let InstrT (ts1, ts2, xs) as ft = check_block_type c bt e.at in
     let c_try = {c with labels = (BlockLabel, ts2) :: c.labels} in
     let c_catch = {c with labels = (CatchLabel, ts2) :: c.labels} in
     check_block c_try es ft e.at;
     List.iter (fun ct -> check_catch ct c_catch ft e.at) cts;
     Lib.Option.app (fun es -> check_block c_catch es ft e.at) ca;
-    ts1 --> ts2
+    ts1 --> ts2, List.map (fun x -> x @@ e.at) xs
 
   | TryDelegate (bt, es, x) ->
-    let FuncType (ts1, ts2) as ft = check_block_type c bt e.at in
+    let InstrT (ts1, ts2, xs) as ft = check_block_type c bt e.at in
     ignore (label c x);
     check_block {c with labels = (BlockLabel, ts2) :: c.labels} es ft e.at;
-    ts1 --> ts2
+    ts1 --> ts2, List.map (fun x -> x @@ e.at) xs
 
   | Br x ->
-    label c x -->... [], []
+    let (_, ts) = label c x in
+    ts -->... [], []
 
   | BrIf x ->
-    (label c x @ [NumT I32T]) --> label c x, []
+    let (_, ts) = label c x in
+    (ts @ [NumT I32T]) --> ts, []
 
   | BrTable (xs, x) ->
-    let n = List.length (label c x) in
+    let n = List.length (snd (label c x)) in
     let ts = Lib.List.table n (fun i -> peek (n - i) s) in
-    check_stack c ts (label c x) x.at;
-    List.iter (fun x' -> check_stack c ts (label c x') x'.at) xs;
+    check_stack c ts (snd (label c x)) x.at;
+    List.iter (fun x' -> check_stack c ts (snd (label c x')) x'.at) xs;
     (ts @ [NumT I32T]) -->... [], []
 
   | BrOnNull x ->
     let (_, ht) = peek_ref 0 s e.at in
-    (label c x @ [RefT (Null, ht)]) --> (label c x @ [RefT (NoNull, ht)]), []
+    let (_, ts) = label c x in
+    (ts @ [RefT (Null, ht)]) --> (ts @ [RefT (NoNull, ht)]), []
 
   | BrOnNonNull x ->
     let (_, ht) = peek_ref 0 s e.at in
     let t' = RefT (NoNull, ht) in
-    require (label c x <> []) e.at
+    let (_, ts) = label c x in
+    require (ts <> []) e.at
       ("type mismatch: instruction requires type " ^ string_of_val_type t' ^
-       " but label has " ^ string_of_result_type (label c x));
-    let ts0, t1 = Lib.List.split_last (label c x) in
+       " but label has " ^ string_of_result_type ts);
+    let ts0, t1 = Lib.List.split_last ts in
     require (match_val_type c.types t' t1) e.at
       ("type mismatch: instruction requires type " ^ string_of_val_type t' ^
-       " but label has " ^ string_of_result_type (label c x));
+       " but label has " ^ string_of_result_type ts);
     (ts0 @ [RefT (Null, ht)]) --> ts0, []
 
   | Return ->
@@ -474,86 +476,86 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
 
   | ContNew x ->
     let ContT y = cont_type c x in
-    [RefType (NonNullable, DefHeapType y)] -->
-    [RefType (NonNullable, DefHeapType (SynVar x.it))]
+    [RefT (NoNull, DefHT y)] -->
+    [RefT (NoNull, DefHT (Stat x.it))], []
 
   | ContBind x ->
     (match peek_ref 0 s e.at with
-    | nul, DefHeapType (SynVar y) ->
+    | nul, DefHT (Stat y) ->
       let ContT z = cont_type c (y @@ e.at) in
-      let FuncT (ts1, ts2) = func_type c (as_syn_var z @@ e.at) in
+      let FuncT (ts1, ts2) = func_type c (as_stat_var z @@ e.at) in
       let ContT z' = cont_type c x in
-      let FuncT (ts1', _) as ft' = func_type c (as_syn_var z' @@ x.at) in
+      let FuncT (ts1', _) as ft' = func_type c (as_stat_var z' @@ x.at) in
       require (List.length ts1 >= List.length ts1') x.at
         "type mismatch in continuation arguments";
       let ts11, ts12 = Lib.List.split (List.length ts1 - List.length ts1') ts1 in
-      require (match_func_type c.types [] (FuncType (ts12, ts2)) ft') e.at
+      require (match_func_type c.types (FuncT (ts12, ts2)) ft') e.at
         "type mismatch in continuation type";
-      (ts11 @ [RefType (nul, DefHeapType (SynVar y))]) -->
-        [RefType (NonNullable, DefHeapType (SynVar x.it))]
-    | (_, BotHeapType) as rt ->
-      [RefType rt] -->.. [RefType (NonNullable, DefHeapType (SynVar x.it))]
+      (ts11 @ [RefT (nul, DefHT (Stat y))]) -->
+        [RefT (NoNull, DefHT (Stat x.it))], []
+    | (_, BotHT) as rt ->
+      [RefT rt] -->.. [RefT (NoNull, DefHT (Stat x.it))], []
     | rt ->
       error e.at
         ("type mismatch: instruction requires continuation reference type" ^
-         " but stack has " ^ string_of_value_type (RefType rt))
+         " but stack has " ^ string_of_val_type (RefT rt))
     )
 
   | Suspend x ->
     let TagT x' = tag c x in
-    let FuncT (ts1, ts2) = func_type c (as_syn_var x' @@ x.at) in
-    ts1 --> ts2
+    let FuncT (ts1, ts2) = func_type c (as_stat_var x' @@ x.at) in
+    ts1 --> ts2, []
 
   | Resume xys ->
     (match peek_ref 0 s e.at with
-    | nul, DefHeapType (SynVar y) ->
+    | nul, DefHT (Stat y) ->
       let ContT z = cont_type c (y @@ e.at) in
-      let FuncT (ts1, ts2) = func_type c (as_syn_var z @@ e.at) in
+      let FuncT (ts1, ts2) = func_type c (as_stat_var z @@ e.at) in
       List.iter (fun (x1, x2) ->
         let TagT x1' = tag c x1 in
-        let FuncT (ts3, ts4) = func_type c (as_syn_var x1' @@ x1.at) in
+        let FuncT (ts3, ts4) = func_type c (as_stat_var x1' @@ x1.at) in
         let (_, ts') = label c x2 in
         match Lib.List.last_opt ts'  with
-        | Some (RefType (nul', DefHeapType (SynVar y'))) ->
+        | Some (RefT (nul', DefHT (Stat y'))) ->
           let ContT z' = cont_type c (y' @@ x2.at) in
-          let ft' = func_type c (as_syn_var z' @@ x2.at) in
-          require (match_func_type c.types [] (FuncType (ts4, ts2)) ft') x2.at
+          let ft' = func_type c (as_stat_var z' @@ x2.at) in
+          require (match_func_type c.types (FuncT (ts4, ts2)) ft') x2.at
             "type mismatch in continuation type";
-          check_stack c (ts3 @ [RefType (nul', DefHeapType (SynVar y'))]) ts' x2.at
+          check_stack c (ts3 @ [RefT (nul', DefHT (Stat y'))]) ts' x2.at
         | _ ->
          error e.at
            ("type mismatch: instruction requires continuation reference type" ^
             " but label has " ^ string_of_result_type ts')
       ) xys;
-      (ts1 @ [RefType (nul, DefHeapType (SynVar y))]) --> ts2
-    | _, BotHeapType ->
-      [] -->... []
+      (ts1 @ [RefT (nul, DefHT (Stat y))]) --> ts2, []
+    | _, BotHT ->
+      [] -->... [], []
     | rt ->
       error e.at
         ("type mismatch: instruction requires continuation reference type" ^
-         " but stack has " ^ string_of_value_type (RefType rt))
+         " but stack has " ^ string_of_val_type (RefT rt))
     )
 
   | ResumeThrow x ->
     let TagT x' = tag c x in
-    let FuncT (ts0, _) = func_type c (as_syn_var x' @@ x.at) in
+    let FuncT (ts0, _) = func_type c (as_stat_var x' @@ x.at) in
     (match peek_ref 0 s e.at with
-    | nul, DefHeapType (SynVar y) ->
+    | nul, DefHT (Stat y) ->
       let ContT z = cont_type c (y @@ e.at) in
-      let FuncT (ts1, ts2) = func_type c (as_syn_var z @@ e.at) in
-      (ts0 @ [RefType (nul, DefHeapType (SynVar y))]) --> ts2
-    | _, BotHeapType ->
-      [] -->... []
+      let FuncT (ts1, ts2) = func_type c (as_stat_var z @@ e.at) in
+      (ts0 @ [RefT (nul, DefHT (Stat y))]) --> ts2, []
+    | _, BotHT ->
+      [] -->... [], []
     | rt ->
       error e.at
         ("type mismatch: instruction requires continuation reference type" ^
-         " but stack has " ^ string_of_value_type (RefType rt))
+         " but stack has " ^ string_of_val_type (RefT rt))
     )
 
   | Barrier (bt, es) ->
-    let FuncT (ts1, ts2) as ft = check_block_type c bt e.at in
+    let InstrT (ts1, ts2, xs) as ft = check_block_type c bt e.at in
     check_block {c with labels = (BlockLabel, ts2) :: c.labels} es ft e.at;
-    ts1 --> ts2
+    ts1 --> ts2, List.map (fun x -> x @@ e.at) xs
 
   | LocalGet x ->
     let LocalT (init, t) = local c x in
@@ -799,12 +801,12 @@ and check_block (c : context) (es : instr list) (it : instr_type) at =
     ("type mismatch: block requires " ^ string_of_result_type ts2 ^
      " but stack has " ^ string_of_result_type (snd s))
 
-and check_catch (ct : idx * instr list) (c : context) (ft : func_type) at =
+and check_catch (ct : idx * instr list) (c : context) (ft : instr_type) at =
   let (x, es) = ct in
-  let TagType y = tag c x in
-  let FuncType (ts1, _) = func_type c (as_syn_var y @@ at) in
-  let FuncType (_, ts2) = ft in
-  check_block c es (FuncType (ts1, ts2)) at
+  let TagT y = tag c x in
+  let FuncT (ts1, _) = func_type c (as_stat_var y @@ at) in
+  let InstrT (_, ts2, xs) = ft in
+  check_block c es (InstrT (ts1, ts2, xs)) at
 
 (* Functions & Constants *)
 
@@ -933,7 +935,7 @@ let check_import (c : context) (im : import) : context =
     {c with globals = c.globals @ [gt]}
   | TagImport et ->
     check_tag_type c et idesc.at;
-    {c with tags = et :: c.tags}
+    {c with tags = c.tags @ [et]}
 
 module NameSet = Set.Make(struct type t = Ast.name let compare = compare end)
 

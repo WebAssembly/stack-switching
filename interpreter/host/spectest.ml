@@ -26,11 +26,11 @@ let memory = Memory.alloc (MemoryT {min = 1l; max = Some 2l})
 let func f ft = Func.alloc_host (Types.alloc (DefFuncT ft)) (f ft)
 
 let tag =
-  let p = Types.alloc (FuncDefType (FuncType ([NumType I32Type], [NumType I32Type]))) in
-  Tag.alloc (TagType (SemVar p))
+  let p = Types.alloc (DefFuncT (FuncT ([NumT I32T], [NumT I32T]))) in
+  Tag.alloc (TagT (Dyn p))
 let except =
-  let p = Types.alloc (FuncDefType (FuncType ([NumType I32Type], []))) in
-  Tag.alloc (TagType (SemVar p))
+  let p = Types.alloc (DefFuncT (FuncT ([NumT I32T], []))) in
+  Tag.alloc (TagT (Dyn p))
 
 let print_value v =
   Printf.printf "%s : %s\n"
