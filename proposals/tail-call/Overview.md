@@ -46,6 +46,8 @@ This can be applied to any form of call, that is:
 
 * Tail calls to host functions cannot guarantee tail behaviour (outside the scope of the spec)
 
+* Tail calls across WebAssembly module boundaries *do* guarantee tail behavior
+
 
 ### Typing
 
@@ -100,7 +102,7 @@ Add two instructions:
 * `return_call <funcidx>`, the tail-call version of `call`
 * `return_call_indirect <tableidx> <typeidx>`, the tail-call version of `call_indirect`
 
-Other language extensions like [typed function refereces](https://github.com/WebAssembly/function-references/blob/master/proposals/function-references/Overview.md) that introduce new call instructions will also introduce tail versions of these new instructions.
+Other language extensions like [typed function references](https://github.com/WebAssembly/function-references/blob/master/proposals/function-references/Overview.md) that introduce new call instructions will also introduce tail versions of these new instructions.
 
 
 ### Validation
@@ -141,8 +143,3 @@ Use the reserved opcodes after existing call instructions, i.e.:
 ### Text Format
 
 The text format is extended with two new instructions in the obvious manner.
-
-
-## Open Questions
-
-* Can tail calls across module boundaries guarantee tail behaviour?

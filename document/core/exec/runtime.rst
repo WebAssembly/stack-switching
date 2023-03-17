@@ -7,17 +7,19 @@ Runtime Structure
 :ref:`Store <store>`, :ref:`stack <stack>`, and other *runtime structure* forming the WebAssembly abstract machine, such as :ref:`values <syntax-val>` or :ref:`module instances <syntax-moduleinst>`, are made precise in terms of additional auxiliary syntax.
 
 
-.. index:: ! value, number, reference, constant, number type, reference type, ! host address, value type, integer, floating-point, ! default value
+.. index:: ! value, number, reference, constant, number type, vector type, reference type, ! host address, value type, integer, floating-point, vector number, ! default value
    pair: abstract syntax; value
 .. _syntax-num:
+.. _syntax-vecc:
 .. _syntax-ref:
 .. _syntax-ref.extern:
 .. _syntax-val:
+.. _syntax-null:
 
 Values
 ~~~~~~
 
-WebAssembly computations manipulate *values* of either the four basic :ref:`number types <syntax-numtype>`, i.e., :ref:`integers <syntax-int>` and :ref:`floating-point data <syntax-float>` of 32 or 64 bit width each, or of :ref:`reference type <syntax-reftype>`.
+WebAssembly computations manipulate *values* of either the four basic :ref:`number types <syntax-numtype>`, i.e., :ref:`integers <syntax-int>` and :ref:`floating-point data <syntax-float>` of 32 or 64 bit width each, or :ref:`vectors <syntax-vecnum>` of 128 bit width, or of :ref:`reference type <syntax-reftype>`.
 
 In most places of the semantics, values of different types can occur.
 In order to avoid ambiguities, values are therefore represented with an abstract syntax that makes their type explicit.
@@ -29,17 +31,19 @@ or *external references* pointing to an uninterpreted form of :ref:`extern addre
 
 .. math::
    \begin{array}{llcl}
-   \production{(number)} & \num &::=&
+   \production{number} & \num &::=&
      \I32.\CONST~\i32 \\&&|&
      \I64.\CONST~\i64 \\&&|&
      \F32.\CONST~\f32 \\&&|&
      \F64.\CONST~\f64 \\
-   \production{(reference)} & \reff &::=&
+   \production{vector} & \vecc &::=&
+     \V128.\CONST~\i128 \\
+   \production{reference} & \reff &::=&
      \REFNULL~t \\&&|&
      \REFFUNCADDR~\funcaddr \\&&|&
      \REFEXTERNADDR~\externaddr \\
-   \production{(value)} & \val &::=&
-     \num ~|~ \reff \\
+   \production{value} & \val &::=&
+     \num ~|~ \vecc ~|~ \reff \\
    \end{array}
 
 .. note::
@@ -47,13 +51,16 @@ or *external references* pointing to an uninterpreted form of :ref:`extern addre
 
 .. _default-val:
 
-Each :ref:`value type <syntax-valtype>` has an associated *default value*;
-it is the respective value :math:`0` for :ref:`number types <syntax-numtype>` and null for :ref:`reference types <syntax-reftype>`.
+:ref:`Value types <syntax-valtype>` can have an associated *default value*;
+it is the respective value :math:`0` for :ref:`number types <syntax-numtype>`, :math:`0` for :ref:`vector types <syntax-vectype>`, and null for nullable :ref:`reference types <syntax-reftype>`.
+For other references, no default value is defined, :math:`\default_t` hence is an optional value :math:`\val^?`.
 
 .. math::
    \begin{array}{lcl@{\qquad}l}
    \default_t &=& t{.}\CONST~0 & (\iff t = \numtype) \\
-   \default_t &=& \REFNULL~t & (\iff t = \reftype) \\
+   \default_t &=& t{.}\CONST~0 & (\iff t = \vectype) \\
+   \default_t &=& \REFNULL~t & (\iff t = (\REF~\NULL~\heaptype)) \\
+   \default_t &=& \epsilon & (\iff t = (\REF~\heaptype)) \\
    \end{array}
 
 
@@ -75,16 +82,13 @@ It is either a sequence of :ref:`values <syntax-val>` or a :ref:`trap <syntax-tr
 
 .. math::
    \begin{array}{llcl}
-   \production{(result)} & \result &::=&
+   \production{result} & \result &::=&
      \val^\ast \\&&|&
      \TRAP
    \end{array}
 
-.. note::
-   In the current version of WebAssembly, a result can consist of at most one value.
 
-
-.. index:: ! store, function instance, table instance, memory instance, global instance, module, allocation
+.. index:: ! store, type instance, function instance, table instance, memory instance, global instance, module, allocation
    pair: abstract syntax; store
 .. _syntax-store:
 .. _store:
@@ -93,7 +97,7 @@ Store
 ~~~~~
 
 The *store* represents all global state that can be manipulated by WebAssembly programs.
-It consists of the runtime representation of all *instances* of :ref:`functions <syntax-funcinst>`, :ref:`tables <syntax-tableinst>`, :ref:`memories <syntax-meminst>`, and :ref:`globals <syntax-globalinst>`, :ref:`element segments <syntax-eleminst>`, and :ref:`data segments <syntax-datainst>` that have been :ref:`allocated <alloc>` during the life time of the abstract machine. [#gc]_
+It consists of the runtime representation of all *instances* of :ref:`types <syntax-typeinst>`, :ref:`functions <syntax-funcinst>`, :ref:`tables <syntax-tableinst>`, :ref:`memories <syntax-meminst>`, and :ref:`globals <syntax-globalinst>`, :ref:`element segments <syntax-eleminst>`, and :ref:`data segments <syntax-datainst>` that have been :ref:`allocated <alloc>` during the life time of the abstract machine. [#gc]_
 
 It is an invariant of the semantics that no element or data instance is :ref:`addressed <syntax-addr>` from anywhere else but the owning module instances.
 
@@ -101,8 +105,9 @@ Syntactically, the store is defined as a :ref:`record <notation-record>` listing
 
 .. math::
    \begin{array}{llll}
-   \production{(store)} & \store &::=& \{~
+   \production{store} & \store &::=& \{~
      \begin{array}[t]{l@{~}ll}
+     \STYPES & \typeinst^\ast, \\
      \SFUNCS & \funcinst^\ast, \\
      \STABLES & \tableinst^\ast, \\
      \SMEMS & \meminst^\ast, \\
@@ -125,6 +130,7 @@ Convention
 
 
 .. index:: ! address, store, function instance, table instance, memory instance, global instance, element instance, data instance, embedder
+   pair: abstract syntax; type address
    pair: abstract syntax; function address
    pair: abstract syntax; table address
    pair: abstract syntax; memory address
@@ -132,6 +138,7 @@ Convention
    pair: abstract syntax; element address
    pair: abstract syntax; data address
    pair: abstract syntax; host address
+   pair: type; address
    pair: function; address
    pair: table; address
    pair: memory; address
@@ -139,6 +146,7 @@ Convention
    pair: element; address
    pair: data; address
    pair: host; address
+.. _syntax-typeaddr:
 .. _syntax-funcaddr:
 .. _syntax-tableaddr:
 .. _syntax-memaddr:
@@ -151,27 +159,29 @@ Convention
 Addresses
 ~~~~~~~~~
 
-:ref:`Function instances <syntax-funcinst>`, :ref:`table instances <syntax-tableinst>`, :ref:`memory instances <syntax-meminst>`, and :ref:`global instances <syntax-globalinst>`, :ref:`element instances <syntax-eleminst>`, and :ref:`data instances <syntax-datainst>` in the :ref:`store <syntax-store>` are referenced with abstract *addresses*.
+:ref:`Type instances <syntax-typeinst>`, :ref:`function instances <syntax-funcinst>`, :ref:`table instances <syntax-tableinst>`, :ref:`memory instances <syntax-meminst>`, and :ref:`global instances <syntax-globalinst>`, :ref:`element instances <syntax-eleminst>`, and :ref:`data instances <syntax-datainst>` in the :ref:`store <syntax-store>` are referenced with abstract *addresses*.
 These are simply indices into the respective store component.
 In addition, an :ref:`embedder <embedder>` may supply an uninterpreted set of *host addresses*.
 
 .. math::
    \begin{array}{llll}
-   \production{(address)} & \addr &::=&
+   \production{address} & \addr &::=&
      0 ~|~ 1 ~|~ 2 ~|~ \dots \\
-   \production{(function address)} & \funcaddr &::=&
+   \production{type address} & \typeaddr &::=&
      \addr \\
-   \production{(table address)} & \tableaddr &::=&
+   \production{function address} & \funcaddr &::=&
      \addr \\
-   \production{(memory address)} & \memaddr &::=&
+   \production{table address} & \tableaddr &::=&
      \addr \\
-   \production{(global address)} & \globaladdr &::=&
+   \production{memory address} & \memaddr &::=&
      \addr \\
-   \production{(element address)} & \elemaddr &::=&
+   \production{global address} & \globaladdr &::=&
      \addr \\
-   \production{(data address)} & \dataaddr &::=&
+   \production{element address} & \elemaddr &::=&
      \addr \\
-   \production{(extern address)} & \externaddr &::=&
+   \production{data address} & \dataaddr &::=&
+     \addr \\
+   \production{extern address} & \externaddr &::=&
      \addr \\
    \end{array}
 
@@ -190,7 +200,25 @@ even where this identity is not observable from within WebAssembly code itself
    hence logical addresses can be arbitrarily large natural numbers.
 
 
-.. index:: ! instance, function type, function instance, table instance, memory instance, global instance, element instance, data instance, export instance, table address, memory address, global address, element address, data address, index, name
+.. _free-typeaddr:
+.. _free-funcaddr:
+.. _free-tableaddr:
+.. _free-memaddr:
+.. _free-globaladdr:
+.. _free-elemaddr:
+.. _free-dataaddr:
+.. _free-localaddr:
+.. _free-labeladdr:
+.. _free-addr:
+
+Conventions
+...........
+
+* The notation :math:`\F{addr}(A)` denotes the set of addresses from address space :math:`\X{addr}` occurring free in :math:`A`. We sometimes reinterpret this set as the :ref:`vector <syntax-vec>` of its elements.
+
+
+
+.. index:: ! instance, function type, type instance, function instance, table instance, memory instance, global instance, element instance, data instance, export instance, table address, memory address, global address, element address, data address, index, name
    pair: abstract syntax; module instance
    pair: module; instance
 .. _syntax-moduleinst:
@@ -204,9 +232,9 @@ and collects runtime representations of all entities that are imported, defined,
 
 .. math::
    \begin{array}{llll}
-   \production{(module instance)} & \moduleinst &::=& \{
+   \production{module instance} & \moduleinst &::=& \{
      \begin{array}[t]{l@{~}ll}
-     \MITYPES & \functype^\ast, \\
+     \MITYPES & \typeaddr^\ast, \\
      \MIFUNCS & \funcaddr^\ast, \\
      \MITABLES & \tableaddr^\ast, \\
      \MIMEMS & \memaddr^\ast, \\
@@ -218,9 +246,27 @@ and collects runtime representations of all entities that are imported, defined,
    \end{array}
 
 Each component references runtime instances corresponding to respective declarations from the original module -- whether imported or defined -- in the order of their static :ref:`indices <syntax-index>`.
-:ref:`Function instances <syntax-funcinst>`, :ref:`table instances <syntax-tableinst>`, :ref:`memory instances <syntax-meminst>`, and :ref:`global instances <syntax-globalinst>` are referenced with an indirection through their respective :ref:`addresses <syntax-addr>` in the :ref:`store <syntax-store>`.
+:ref:`Type instances <syntax-typeinst>`, :ref:`function instances <syntax-funcinst>`, :ref:`table instances <syntax-tableinst>`, :ref:`memory instances <syntax-meminst>`, and :ref:`global instances <syntax-globalinst>` are referenced with an indirection through their respective :ref:`addresses <syntax-addr>` in the :ref:`store <syntax-store>`.
 
 It is an invariant of the semantics that all :ref:`export instances <syntax-exportinst>` in a given module instance have different :ref:`names <syntax-name>`.
+
+
+.. index:: ! type instance, function type, module
+   pair: abstract syntax; function instance
+   pair: function; instance
+.. _syntax-typeinst:
+
+Type Instances
+~~~~~~~~~~~~~~
+
+A *type instance* is the runtime representation of a :ref:`function type <syntax-functype>`.
+It is a :ref:`dynamic type <syntax-type-dyn>` equivalent to the respective :ref:`static type <syntax-type-stat>` that appeared in the module.
+
+.. math::
+   \begin{array}{llll}
+   \production{type instance} & \typeinst &::=&
+     \functype
+   \end{array}
 
 
 .. index:: ! function instance, module instance, function, closure, module, ! host function, invocation
@@ -238,10 +284,10 @@ The module instance is used to resolve references to other definitions during ex
 
 .. math::
    \begin{array}{llll}
-   \production{(function instance)} & \funcinst &::=&
-     \{ \FITYPE~\functype, \FIMODULE~\moduleinst, \FICODE~\func \} \\ &&|&
-     \{ \FITYPE~\functype, \FIHOSTCODE~\hostfunc \} \\
-   \production{(host function)} & \hostfunc &::=& \dots \\
+   \production{function instance} & \funcinst &::=&
+     \{ \FITYPE~\typeaddr, \FIMODULE~\moduleinst, \FICODE~\func \} \\ &&|&
+     \{ \FITYPE~\typeaddr, \FIHOSTCODE~\hostfunc \} \\
+   \production{host function} & \hostfunc &::=& \dots \\
    \end{array}
 
 A *host function* is a function expressed outside WebAssembly but passed to a :ref:`module <syntax-module>` as an :ref:`import <syntax-import>`.
@@ -268,7 +314,7 @@ It records its :ref:`type <syntax-tabletype>` and holds a vector of :ref:`refere
 
 .. math::
    \begin{array}{llll}
-   \production{(table instance)} & \tableinst &::=&
+   \production{table instance} & \tableinst &::=&
      \{ \TITYPE~\tabletype, \TIELEM~\vec(\reff) \} \\
    \end{array}
 
@@ -292,7 +338,7 @@ It records its :ref:`type <syntax-memtype>` and holds a vector of :ref:`bytes <s
 
 .. math::
    \begin{array}{llll}
-   \production{(memory instance)} & \meminst &::=&
+   \production{memory instance} & \meminst &::=&
      \{ \MITYPE~\memtype, \MIDATA~\vec(\byte) \} \\
    \end{array}
 
@@ -316,8 +362,8 @@ It records its :ref:`type <syntax-globaltype>` and holds an individual :ref:`val
 
 .. math::
    \begin{array}{llll}
-   \production{(global instance)} & \globalinst &::=&
-     \{ \GITYPE~\valtype, \GIVALUE~\val \} \\
+   \production{global instance} & \globalinst &::=&
+     \{ \GITYPE~\globaltype, \GIVALUE~\val \} \\
    \end{array}
 
 The value of mutable globals can be mutated through :ref:`variable instructions <syntax-instr-variable>` or by external means provided by the :ref:`embedder <embedder>`.
@@ -338,7 +384,7 @@ It holds a vector of references and their common :ref:`type <syntax-reftype>`.
 
 .. math::
   \begin{array}{llll}
-  \production{(element instance)} & \eleminst &::=&
+  \production{element instance} & \eleminst &::=&
     \{ \EITYPE~\reftype, \EIELEM~\vec(\reff) \} \\
   \end{array}
 
@@ -356,7 +402,7 @@ It holds a vector of :ref:`bytes <syntax-byte>`.
 
 .. math::
   \begin{array}{llll}
-  \production{(data instance)} & \datainst &::=&
+  \production{data instance} & \datainst &::=&
     \{ \DIDATA~\vec(\byte) \} \\
   \end{array}
 
@@ -374,12 +420,12 @@ It defines the export's :ref:`name <syntax-name>` and the associated :ref:`exter
 
 .. math::
    \begin{array}{llll}
-   \production{(export instance)} & \exportinst &::=&
+   \production{export instance} & \exportinst &::=&
      \{ \EINAME~\name, \EIVALUE~\externval \} \\
    \end{array}
 
 
-.. index:: ! external value, function address, table address, memory address, global address, store, function, table, memory, global
+.. index:: ! external value, function address, table address, memory address, global address, store, function, table, memory, global, instruction type
    pair: abstract syntax; external value
    pair: external; value
 .. _syntax-externval:
@@ -392,7 +438,7 @@ It is an :ref:`address <syntax-addr>` denoting either a :ref:`function instance 
 
 .. math::
    \begin{array}{llcl}
-   \production{(external value)} & \externval &::=&
+   \production{external value} & \externval &::=&
      \EVFUNC~\funcaddr \\&&|&
      \EVTABLE~\tableaddr \\&&|&
      \EVMEM~\memaddr \\&&|&
@@ -456,7 +502,7 @@ Labels carry an argument arity :math:`n` and their associated branch *target*, w
 
 .. math::
    \begin{array}{llll}
-   \production{(label)} & \label &::=&
+   \production{label} & \label &::=&
      \LABEL_n\{\instr^\ast\} \\
    \end{array}
 
@@ -476,8 +522,8 @@ Intuitively, :math:`\instr^\ast` is the *continuation* to execute when the branc
 
    When branching, the empty continuation ends the targeted block, such that execution can proceed with consecutive instructions.
 
-Activations and Frames
-......................
+Activation Frames
+.................
 
 Activation frames carry the return arity :math:`n` of the respective function,
 hold the values of its :ref:`locals <syntax-local>` (including arguments) in the order corresponding to their static :ref:`local indices <syntax-localidx>`,
@@ -485,13 +531,12 @@ and a reference to the function's own :ref:`module instance <syntax-moduleinst>`
 
 .. math::
    \begin{array}{llll}
-   \production{(activation)} & \X{activation} &::=&
-     \FRAME_n\{\frame\} \\
-   \production{(frame)} & \frame &::=&
-     \{ \ALOCALS~\val^\ast, \AMODULE~\moduleinst \} \\
+   \production{frame} & \frame &::=&
+     \{ \ALOCALS~(\val^?)^\ast, \AMODULE~\moduleinst \} \\
    \end{array}
 
-The values of the locals are mutated by respective :ref:`variable instructions <syntax-instr-variable>`.
+Locals may be uninitialized, in which case they are empty.
+Locals are mutated by respective :ref:`variable instructions <syntax-instr-variable>`.
 
 
 .. _exec-expand:
@@ -503,12 +548,12 @@ Conventions
 
 * The meta variable :math:`F` ranges over frames where clear from context.
 
-* The following auxiliary definition takes a :ref:`block type <syntax-blocktype>` and looks up the :ref:`function type <syntax-functype>` that it denotes in the current frame:
+* The following auxiliary definition takes a :ref:`block type <syntax-blocktype>` and looks up the :ref:`instruction type <syntax-instrtype>` that it denotes in the current frame:
 
 .. math::
    \begin{array}{lll}
-   \expand_F(\typeidx) &=& F.\AMODULE.\MITYPES[\typeidx] \\
-   \expand_F([\valtype^?]) &=& [] \to [\valtype^?] \\
+   \expand_{S;F}(\typeidx) &=& S.\STYPES[F.\AMODULE.\MITYPES[\typeidx]] \\
+   \expand_{S;F}([\valtype^?]) &=& [] \to [\valtype^?] \\
    \end{array}
 
 
@@ -529,7 +574,7 @@ In order to express the reduction of :ref:`traps <trap>`, :ref:`calls <syntax-ca
 
 .. math::
    \begin{array}{llcl}
-   \production{(administrative instruction)} & \instr &::=&
+   \production{administrative instruction} & \instr &::=&
      \dots \\ &&|&
      \TRAP \\ &&|&
      \REFFUNCADDR~\funcaddr \\ &&|&
@@ -592,9 +637,9 @@ In order to specify the reduction of :ref:`branches <syntax-instr-control>`, the
 
 .. math::
    \begin{array}{llll}
-   \production{(block contexts)} & \XB^0 &::=&
+   \production{block contexts} & \XB^0 &::=&
      \val^\ast~[\_]~\instr^\ast \\
-   \production{(block contexts)} & \XB^{k+1} &::=&
+   \production{block contexts} & \XB^{k+1} &::=&
      \val^\ast~\LABEL_n\{\instr^\ast\}~\XB^k~\END~\instr^\ast \\
    \end{array}
 
@@ -626,9 +671,9 @@ that operates relative to a current :ref:`frame <syntax-frame>` referring to the
 
 .. math::
    \begin{array}{llcl}
-   \production{(configuration)} & \config &::=&
+   \production{configuration} & \config &::=&
      \store; \thread \\
-   \production{(thread)} & \thread &::=&
+   \production{thread} & \thread &::=&
      \frame; \instr^\ast \\
    \end{array}
 
@@ -647,7 +692,7 @@ Finally, the following definition of *evaluation context* and associated structu
 
 .. math::
    \begin{array}{llll}
-   \production{(evaluation contexts)} & E &::=&
+   \production{evaluation contexts} & E &::=&
      [\_] ~|~
      \val^\ast~E~\instr^\ast ~|~
      \LABEL_n\{\instr^\ast\}~E~\END \\
