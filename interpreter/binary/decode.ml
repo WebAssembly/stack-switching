@@ -573,7 +573,10 @@ let rec instr s =
   | 0xe1 -> cont_bind (at var s)
   | 0xe2 -> suspend (at var s)
   | 0xe3 -> resume (vec var_pair s)
-  | 0xe4 -> resume_throw (at var s)
+  | 0xe4 ->
+     let tag = at var s in
+     let xls = vec var_pair s in
+     resume_throw tag xls
   | 0xe5 ->
     let bt = block_type s in
     let es' = instr_block s in

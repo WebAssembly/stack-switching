@@ -354,20 +354,20 @@ let rec step (c : config) : config =
         cont := None;
         vs', [Handle (Some hs, ctxt (args, [])) @@ e.at]
 
-      | ResumeThrow x, Ref (NullRef _) :: vs ->
+      | ResumeThrow (x, xls), Ref (NullRef _) :: vs ->
         vs, [Trapping "null continuation reference" @@ e.at]
 
-      | ResumeThrow x, Ref (ContRef {contents = None}) :: vs ->
+      | ResumeThrow (x, xls), Ref (ContRef {contents = None}) :: vs ->
         vs, [Trapping "continuation already consumed" @@ e.at]
 
-      | ResumeThrow x, Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
+      | ResumeThrow (x, xls), Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
         let tagt = tag c.frame.inst x in
         let TagT x' = Tag.type_of tagt in
         let FuncT (ts, _) = as_func_def_type (def_of (as_dyn_var x')) in
+        let hs = List.map (fun (x, l) -> tag c.frame.inst x, l) xls in
         let args, vs' = split (Lib.List32.length ts) vs e.at in
-        let vs1', es1' = ctxt (args, [Plain (Throw x) @@ e.at]) in
         cont := None;
-        vs1' @ vs', es1'
+        vs', [Handle (Some hs, ctxt (args, [Plain (Throw x) @@ e.at])) @@ e.at]
 
       | Barrier (bt, es'), vs ->
         let InstrT (ts1, _, _xs) = block_type c.frame.inst bt e.at in

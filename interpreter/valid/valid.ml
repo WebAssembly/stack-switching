@@ -156,7 +156,6 @@ let check_def_type (c : context) (dt : def_type) at =
   | DefContT ct -> check_cont_type c ct at
 
 
-
 (* Stack typing *)
 
 (*
@@ -324,6 +323,24 @@ let check_memop (c : context) (memop : ('t, 's) memop) ty_size get_sz at =
  * where `ts1'` and `ts2'` would be chosen non-deterministically in the
  * declarative typing rules.
  *)
+
+let check_resume_table (c : context) ts2 (xys : (idx * idx) list) at =
+  List.iter (fun (x1, x2) ->
+    let TagT x1' = tag c x1 in
+    let FuncT (ts3, ts4) = func_type c (as_stat_var x1' @@ x1.at) in
+    let (_, ts') = label c x2 in
+    match Lib.List.last_opt ts'  with
+    | Some (RefT (nul', DefHT (Stat y'))) ->
+      let ContT z' = cont_type c (y' @@ x2.at) in
+      let ft' = func_type c (as_stat_var z' @@ x2.at) in
+      require (match_func_type c.types (FuncT (ts4, ts2)) ft') x2.at
+        "type mismatch in continuation type";
+      check_stack c (ts3 @ [RefT (nul', DefHT (Stat y'))]) ts' x2.at
+    | _ ->
+      error at
+        ("type mismatch: instruction requires continuation reference type" ^
+          " but label has " ^ string_of_result_type ts')
+  ) xys
 
 let check_block_type (c : context) (bt : block_type) at : instr_type =
   match bt with
@@ -511,22 +528,7 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
     | nul, DefHT (Stat y) ->
       let ContT z = cont_type c (y @@ e.at) in
       let FuncT (ts1, ts2) = func_type c (as_stat_var z @@ e.at) in
-      List.iter (fun (x1, x2) ->
-        let TagT x1' = tag c x1 in
-        let FuncT (ts3, ts4) = func_type c (as_stat_var x1' @@ x1.at) in
-        let (_, ts') = label c x2 in
-        match Lib.List.last_opt ts'  with
-        | Some (RefT (nul', DefHT (Stat y'))) ->
-          let ContT z' = cont_type c (y' @@ x2.at) in
-          let ft' = func_type c (as_stat_var z' @@ x2.at) in
-          require (match_func_type c.types (FuncT (ts4, ts2)) ft') x2.at
-            "type mismatch in continuation type";
-          check_stack c (ts3 @ [RefT (nul', DefHT (Stat y'))]) ts' x2.at
-        | _ ->
-         error e.at
-           ("type mismatch: instruction requires continuation reference type" ^
-            " but label has " ^ string_of_result_type ts')
-      ) xys;
+      check_resume_table c ts2 xys e.at;
       (ts1 @ [RefT (nul, DefHT (Stat y))]) --> ts2, []
     | _, BotHT ->
       [] -->... [], []
@@ -536,13 +538,14 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
          " but stack has " ^ string_of_val_type (RefT rt))
     )
 
-  | ResumeThrow x ->
+  | ResumeThrow (x, xys) ->
     let TagT x' = tag c x in
     let FuncT (ts0, _) = func_type c (as_stat_var x' @@ x.at) in
     (match peek_ref 0 s e.at with
     | nul, DefHT (Stat y) ->
       let ContT z = cont_type c (y @@ e.at) in
       let FuncT (ts1, ts2) = func_type c (as_stat_var z @@ e.at) in
+      check_resume_table c ts2 xys e.at;
       (ts0 @ [RefT (nul, DefHT (Stat y))]) --> ts2, []
     | _, BotHT ->
       [] -->... [], []

@@ -486,7 +486,9 @@ let rec instr e =
     | Resume xys ->
       "resume",
       List.map (fun (x, y) -> Node ("tag " ^ var x ^ " " ^ var y, [])) xys
-    | ResumeThrow x -> "resume_throw " ^ var x, []
+    | ResumeThrow (x, xys) ->
+      "resume_throw " ^ var x,
+      List.map (fun (x, y) -> Node ("tag " ^ var x ^ " " ^ var y, [])) xys
     | Barrier (bt, es) -> "barrier", block_type bt @ list instr es
     | LocalGet x -> "local.get " ^ var x, []
     | LocalSet x -> "local.set " ^ var x, []

@@ -169,7 +169,7 @@ and instr' =
   | ContBind of idx                   (* bind continuation arguments *)
   | Suspend of idx                    (* suspend continuation *)
   | Resume of (idx * idx) list        (* resume continuation *)
-  | ResumeThrow of idx                (* abort continuation *)
+  | ResumeThrow of idx * (idx * idx) list (* abort continuation *)
   | Barrier of block_type * instr list  (* guard against suspension *)
   | LocalGet of idx                   (* read local idxiable *)
   | LocalSet of idx                   (* write local idxiable *)

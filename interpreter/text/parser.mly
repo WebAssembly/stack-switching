@@ -476,7 +476,6 @@ plain_instr :
   | CONT_NEW LPAR TYPE var RPAR { fun c -> cont_new ($4 c type_) }
   | CONT_BIND LPAR TYPE var RPAR { fun c -> cont_bind ($4 c type_) }
   | SUSPEND var { fun c -> suspend ($2 c tag) }
-  | RESUME_THROW var { fun c -> resume_throw ($2 c tag) }
   | LOCAL_GET var { fun c -> local_get ($2 c local) }
   | LOCAL_SET var { fun c -> local_set ($2 c local) }
   | LOCAL_TEE var { fun c -> local_tee ($2 c local) }
@@ -630,20 +629,15 @@ catch :
 catch_all :
   | CATCH_ALL instr_list { $2 }
 
-/* resume_instr : */
-/*   | RESUME resume_instr_handler */
-/*     { let at = at () in fun c -> resume ($2 c) @@ at } */
-
-/* resume_instr_handler : */
-/*   | LPAR TAG var var RPAR resume_instr_handler */
-/*     { fun c -> ($3 c tag, $4 c label) :: $6 c } */
-/*   | /\* empty *\/ */
-/*     { fun c -> [] } */
-
 resume_instr_instr :
   | RESUME resume_instr_handler_instr
     { let at1 = ati 1 in
       fun c -> let hs, es = $2 c in resume hs @@ at1, es }
+  | RESUME_THROW var resume_instr_handler_instr
+    { let at1 = ati 1 in
+      fun c ->
+      let tag = $2 c tag in
+      let hs, es = $3 c in resume_throw tag hs @@ at1, es }
 
 resume_instr_handler_instr :
   | LPAR TAG var var RPAR resume_instr_handler_instr
@@ -719,6 +713,11 @@ expr1 :  /* Sugar */
       fun c -> let x, es = $2 c in es, return_call_indirect (0l @@ at1) x }
   | RESUME resume_expr_handler
     { fun c -> let hs, es = $2 c in es, resume hs }
+  | RESUME_THROW var resume_expr_handler
+    { fun c ->
+      let tag = $2 c tag in
+      let hs, es = $3 c in
+      es, resume_throw tag hs }
   | BLOCK labeling_opt block
     { fun c -> let c' = $2 c [] in let bt, es = $3 c' in [], block bt es }
   | LOOP labeling_opt block

@@ -129,8 +129,9 @@ let rec instr (e : instr) =
       | Some es -> block es in
     block es ++ (list catch ct) ++ catch_all ca
   | TryDelegate (bt, es, x) -> block es ++ tags (idx x)
-  | Throw x | ResumeThrow x | Suspend x -> tags (idx x)
+  | Throw x | Suspend x -> tags (idx x)
   | Rethrow x -> labels (idx x)
+  | ResumeThrow (x, xys) -> tags (idx x) ++ list (fun (x, y) -> tags (idx x) ++ labels (idx y)) xys
   | Resume xys -> list (fun (x, y) -> tags (idx x) ++ labels (idx y)) xys
   | LocalGet x | LocalSet x | LocalTee x -> locals (idx x)
   | GlobalGet x | GlobalSet x -> globals (idx x)

@@ -47,7 +47,7 @@ let cont_new x = ContNew x
 let cont_bind x = ContBind x
 let suspend x = Suspend x
 let resume xys = Resume xys
-let resume_throw x = ResumeThrow x
+let resume_throw x xys = ResumeThrow (x, xys)
 let barrier bt es = Barrier (bt, es)
 
 let local_get x = LocalGet x
