@@ -73,7 +73,7 @@
   (table $queue 0 (ref null $cont))
   (memory 1)
 
-  (exception $too-many-mailboxes)
+  (tag $too-many-mailboxes)
 
   (global $qdelta i32 (i32.const 10))
 
@@ -190,8 +190,8 @@
 
   (func $log (import "spectest" "print_i32") (param i32))
 
-  (exception $too-many-mailboxes)
-  (exception $too-many-messages)
+  (tag $too-many-mailboxes)
+  (tag $too-many-messages)
 
   (memory 1)
 
@@ -397,8 +397,8 @@
 
   ;; -1 means empty
 
-  (exception $too-many-mailboxes)
-  (exception $too-many-messages)
+  (tag $too-many-mailboxes)
+  (tag $too-many-messages)
 
   (memory 1)
 
@@ -489,6 +489,10 @@
   (elem declare func $actk)
 
   (func $actk (param $mine i32) (param $nextk (ref $cont))
+    (local $ik (ref $i-cont))
+    (local $k (ref $cont))
+    (local $you (ref $cont))
+    (local $yours i32)
     (loop $l
       (block $on_self (result (ref $i-cont))
         (block $on_spawn (result (ref $cont) (ref $i-cont))
@@ -502,39 +506,35 @@
                )
                (return)
             ) ;;   $on_recv (result (ref $i-cont))
-            (let (local $ik (ref $i-cont))
-              ;; block this thread until the mailbox is non-empty
-              (loop $blocked
-                (if (call $empty-mb (local.get $mine))
-                    (then (suspend $yield)
-                          (br $blocked))
-                )
+            (local.set $ik)
+            ;; block this thread until the mailbox is non-empty
+            (loop $blocked
+              (if (call $empty-mb (local.get $mine))
+                  (then (suspend $yield)
+                        (br $blocked))
               )
-              (local.set $nextk (cont.bind (type $cont) (call $recv-from-mb (local.get $mine)) (local.get $ik)))
             )
+            (local.set $nextk (cont.bind (type $cont) (call $recv-from-mb (local.get $mine)) (local.get $ik)))
             (br $l)
           ) ;;   $on_send (result i32 i32 (ref $cont))
-          (let (param i32 i32) (local $k (ref $cont))
-            (call $send-to-mb)
-            (local.set $nextk (local.get $k))
-          )
+          (local.set $k)
+          (call $send-to-mb)
+          (local.set $nextk (local.get $k))
           (br $l)
         ) ;;   $on_spawn (result (ref $cont) (ref $i-cont))
-        (let (local $you (ref $cont)) (local $ik (ref $i-cont))
-          (call $new-mb)
-          (let (local $yours i32)
-            (suspend $fork (cont.bind (type $cont)
-                                      (local.get $yours)
-                                      (local.get $you)
-                                      (cont.new (type $ic-cont) (ref.func $actk))))
-            (local.set $nextk (cont.bind (type $cont) (local.get $yours) (local.get $ik)))
-          )
-        )
+        (local.set $ik)
+        (local.set $you)
+        (call $new-mb)
+        (local.set $yours)
+        (suspend $fork (cont.bind (type $cont)
+                                  (local.get $yours)
+                                  (local.get $you)
+                                  (cont.new (type $ic-cont) (ref.func $actk))))
+        (local.set $nextk (cont.bind (type $cont) (local.get $yours) (local.get $ik)))
         (br $l)
       ) ;;   $on_self (result (ref $i-cont))
-      (let (local $ik (ref $i-cont))
-        (local.set $nextk (cont.bind (type $cont) (local.get $mine) (local.get $ik)))
-      )
+      (local.set $ik)
+      (local.set $nextk (cont.bind (type $cont) (local.get $mine) (local.get $ik)))
       (br $l)
     )
   )

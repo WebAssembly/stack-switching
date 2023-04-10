@@ -163,8 +163,8 @@
   ;; a simplistic implementation of promises that assumes a maximum of
   ;; 1000 promises and a maximum of one observer per promise
 
-  (exception $too-many-promises)
-  (exception $too-many-observers)
+  (tag $too-many-promises)
+  (tag $too-many-observers)
 
   (global $num-promises (mut i32) (i32.const 0))
   (global $max-promises i32 (i32.const 1000))
@@ -254,6 +254,11 @@
   (func $fulfill-promise (import "promise" "fulfill") (param $p i32) (param $v i32) (result (ref null $cont)))
 
   (func $run (export "run") (param $nextk (ref null $cont))
+    (local $p i32)
+    (local $v i32)
+    (local $ik (ref $i-cont))
+    (local $ak (ref $i-cont))
+    (local $k (ref null $cont))
     (loop $l
       (if (ref.is_null (local.get $nextk)) (then (return)))
       (block $on_yield (result (ref $cont))
@@ -269,38 +274,36 @@
               (local.set $nextk (call $dequeue))
               (br $l)  ;; thread terminated
             ) ;;   $on_await (result i32 (ref $i-cont))
-            (let (local $p i32) (local $ik (ref $i-cont))
-              (if (call $promise-fulfilled (local.get $p))
-                 ;; if promise fulfilled then run continuation partially applied to value
-                 (then (local.set $nextk (cont.bind (type $cont) (call $promise-value (local.get $p)) (local.get $ik))))
-                 ;; else add continuation to promise and run next continuation from the queue
-                 (else (call $await-promise (local.get $p) (local.get $ik))
-                       (local.set $nextk (call $dequeue)))
-              )
+            (local.set $ik)
+            (local.set $p)
+            (if (call $promise-fulfilled (local.get $p))
+                ;; if promise fulfilled then run continuation partially applied to value
+                (then (local.set $nextk (cont.bind (type $cont) (call $promise-value (local.get $p)) (local.get $ik))))
+                ;; else add continuation to promise and run next continuation from the queue
+                (else (call $await-promise (local.get $p) (local.get $ik))
+                      (local.set $nextk (call $dequeue)))
             )
             (br $l)
           ) ;;   $on_async (result (ref $i-func) (ref $i-cont))
-          (let (local $ak (ref $i-cont)) (local $ik (ref $i-cont))
-             ;; create new promise
-             (call $new-promise)
-             (let (local $p i32)
-                ;; enqueue continuation partially applied to promise
-                (call $enqueue (cont.bind (type $cont) (local.get $p) (local.get $ik)))
-                ;; run computation partially applied to promise
-                (local.set $nextk (cont.bind (type $cont) (local.get $p) (local.get $ak)))
-             )
-          )
+          (local.set $ik)
+          (local.set $ak)
+            ;; create new promise
+            (call $new-promise)
+            (local.set $p)
+            ;; enqueue continuation partially applied to promise
+            (call $enqueue (cont.bind (type $cont) (local.get $p) (local.get $ik)))
+            ;; run computation partially applied to promise
+            (local.set $nextk (cont.bind (type $cont) (local.get $p) (local.get $ak)))
           (br $l)
         ) ;;   $on_fulfill (result i32 i32 (ref $cont))
         (local.set $nextk)
-        (let (local $p i32) (local $v i32)
-           (call $fulfill-promise (local.get $p) (local.get $v))
-           (let (local $k (ref null $cont))
-              (if (ref.is_null (local.get $k))
-                (then)
-                (else (call $enqueue (local.get $k)))
-              )
-           )
+        (local.set $v)
+        (local.set $p)
+        (call $fulfill-promise (local.get $p) (local.get $v))
+        (local.set $k)
+        (if (ref.is_null (local.get $k))
+          (then)
+          (else (call $enqueue (local.get $k)))
         )
         (br $l)
       ) ;;   $on_yield (result (ref $cont))
