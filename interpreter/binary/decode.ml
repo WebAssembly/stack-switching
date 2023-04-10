@@ -206,7 +206,7 @@ let cont_type s =
 let def_type s =
   match s7 s with
   | -0x20 -> DefFuncT (func_type s)
-  | -0x21 -> DefContT (cont_type s)
+  | -0x23 -> DefContT (cont_type s) (* TODO(dhil): See comment in encode.ml *)
   | _ -> error s (pos s - 1) "malformed definition type"
 
 

@@ -134,7 +134,10 @@ struct
 
   let def_type = function
     | DefFuncT ft -> s7 (-0x20); func_type ft
-    | DefContT ct -> s7 (-0x21); cont_type ct (* TODO(dhil): I think the GC proposal claims opcode -0x21 for one of the struct/array types. *)
+    | DefContT ct -> s7 (-0x23); cont_type ct
+    (* TODO(dhil): This might need to change again in the future as a
+       different proposal might claim this opcode! GC proposal claimed
+       the previous opcode we were using. *)
 
   let limits vu {min; max} =
     bool (max <> None); vu min; opt vu max
