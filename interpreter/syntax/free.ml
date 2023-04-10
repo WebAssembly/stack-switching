@@ -121,7 +121,8 @@ let rec instr (e : instr) =
   | CallRef x | ReturnCallRef x -> types (idx x)
   | CallIndirect (x, y) | ReturnCallIndirect (x, y) ->
      tables (idx x) ++ types (idx y)
-  | ContNew x | ContBind x -> types (idx x)
+  | ContNew x -> types (idx x)
+  | ContBind (x, y) -> types (idx x) ++ types (idx y)
   | TryCatch (bt, es, ct, ca) ->
     let catch (tag, es) = tags (idx tag) ++ block es in
     let catch_all = function
@@ -131,8 +132,8 @@ let rec instr (e : instr) =
   | TryDelegate (bt, es, x) -> block es ++ tags (idx x)
   | Throw x | Suspend x -> tags (idx x)
   | Rethrow x -> labels (idx x)
-  | ResumeThrow (x, xys) -> tags (idx x) ++ list (fun (x, y) -> tags (idx x) ++ labels (idx y)) xys
-  | Resume xys -> list (fun (x, y) -> tags (idx x) ++ labels (idx y)) xys
+  | ResumeThrow (x, y, xys) -> types (idx x) ++ tags (idx y) ++ list (fun (x, y) -> tags (idx x) ++ labels (idx y)) xys
+  | Resume (x, xys) -> types (idx x) ++ list (fun (x, y) -> tags (idx x) ++ labels (idx y)) xys
   | LocalGet x | LocalSet x | LocalTee x -> locals (idx x)
   | GlobalGet x | GlobalSet x -> globals (idx x)
   | TableGet x | TableSet x | TableSize x | TableGrow x | TableFill x ->

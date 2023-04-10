@@ -44,10 +44,10 @@ let return_call_ref x = ReturnCallRef x
 let return_call_indirect x y = ReturnCallIndirect (x, y)
 
 let cont_new x = ContNew x
-let cont_bind x = ContBind x
+let cont_bind x y = ContBind (x, y)
 let suspend x = Suspend x
-let resume xys = Resume xys
-let resume_throw x xys = ResumeThrow (x, xys)
+let resume x xys = Resume (x, xys)
+let resume_throw x y xys = ResumeThrow (x, y, xys)
 let barrier bt es = Barrier (bt, es)
 
 let local_get x = LocalGet x

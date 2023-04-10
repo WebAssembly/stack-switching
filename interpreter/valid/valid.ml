@@ -174,7 +174,6 @@ type infer_instr_type = infer_func_type * idx list
 
 let stack ts = (NoEllipses, ts)
 let (-->) ts1 ts2 = {ins = NoEllipses, ts1; outs = NoEllipses, ts2}
-let (-->..) ts1 ts2 = {ins = Ellipses, ts1; outs = NoEllipses, ts2}
 let (-->...) ts1 ts2 = {ins = Ellipses, ts1; outs = Ellipses, ts2}
 
 let check_stack (c : context) ts1 ts2 at =
@@ -496,64 +495,37 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
     [RefT (NoNull, DefHT y)] -->
     [RefT (NoNull, DefHT (Stat x.it))], []
 
-  | ContBind x ->
-    (match peek_ref 0 s e.at with
-    | nul, DefHT (Stat y) ->
-      let ContT z = cont_type c (y @@ e.at) in
-      let FuncT (ts1, ts2) = func_type c (as_stat_var z @@ e.at) in
-      let ContT z' = cont_type c x in
-      let FuncT (ts1', _) as ft' = func_type c (as_stat_var z' @@ x.at) in
-      require (List.length ts1 >= List.length ts1') x.at
-        "type mismatch in continuation arguments";
-      let ts11, ts12 = Lib.List.split (List.length ts1 - List.length ts1') ts1 in
-      require (match_func_type c.types (FuncT (ts12, ts2)) ft') e.at
-        "type mismatch in continuation type";
-      (ts11 @ [RefT (nul, DefHT (Stat y))]) -->
-        [RefT (NoNull, DefHT (Stat x.it))], []
-    | (_, BotHT) as rt ->
-      [RefT rt] -->.. [RefT (NoNull, DefHT (Stat x.it))], []
-    | rt ->
-      error e.at
-        ("type mismatch: instruction requires continuation reference type" ^
-         " but stack has " ^ string_of_val_type (RefT rt))
-    )
+  | ContBind (x, y) ->
+    let ContT z = cont_type c x in
+    let FuncT (ts1, ts2) = func_type c (as_stat_var z @@ e.at) in
+    let ContT z' = cont_type c y in
+    let FuncT (ts1', _) as ft' = func_type c (as_stat_var z' @@ e.at) in
+    require (List.length ts1 >= List.length ts1') x.at
+      "type mismatch in continuation arguments";
+    let ts11, ts12 = Lib.List.split (List.length ts1 - List.length ts1') ts1 in
+    require (match_func_type c.types (FuncT (ts12, ts2)) ft') e.at
+      "type mismatch in continuation types";
+    (ts11 @ [RefT (Null, DefHT (Stat x.it))]) -->
+      [RefT (NoNull, DefHT (Stat y.it))], []
 
   | Suspend x ->
     let TagT x' = tag c x in
     let FuncT (ts1, ts2) = func_type c (as_stat_var x' @@ x.at) in
     ts1 --> ts2, []
 
-  | Resume xys ->
-    (match peek_ref 0 s e.at with
-    | nul, DefHT (Stat y) ->
-      let ContT z = cont_type c (y @@ e.at) in
-      let FuncT (ts1, ts2) = func_type c (as_stat_var z @@ e.at) in
-      check_resume_table c ts2 xys e.at;
-      (ts1 @ [RefT (nul, DefHT (Stat y))]) --> ts2, []
-    | _, BotHT ->
-      [] -->... [], []
-    | rt ->
-      error e.at
-        ("type mismatch: instruction requires continuation reference type" ^
-         " but stack has " ^ string_of_val_type (RefT rt))
-    )
+  | Resume (x, xys) ->
+    let ContT z = cont_type c x in
+    let FuncT (ts1, ts2) = func_type c (as_stat_var z @@ e.at) in
+    check_resume_table c ts2 xys e.at;
+    (ts1 @ [RefT (Null, DefHT (Stat x.it))]) --> ts2, []
 
-  | ResumeThrow (x, xys) ->
-    let TagT x' = tag c x in
-    let FuncT (ts0, _) = func_type c (as_stat_var x' @@ x.at) in
-    (match peek_ref 0 s e.at with
-    | nul, DefHT (Stat y) ->
-      let ContT z = cont_type c (y @@ e.at) in
-      let FuncT (ts1, ts2) = func_type c (as_stat_var z @@ e.at) in
-      check_resume_table c ts2 xys e.at;
-      (ts0 @ [RefT (nul, DefHT (Stat y))]) --> ts2, []
-    | _, BotHT ->
-      [] -->... [], []
-    | rt ->
-      error e.at
-        ("type mismatch: instruction requires continuation reference type" ^
-         " but stack has " ^ string_of_val_type (RefT rt))
-    )
+  | ResumeThrow (x, y, xys) ->
+    let ContT z = cont_type c x in
+    let FuncT (ts1, ts2) = func_type c (as_stat_var z @@ e.at) in
+    let TagT y' = tag c y in
+    let FuncT (ts0, _) = func_type c (as_stat_var y' @@ x.at) in
+    check_resume_table c ts2 xys e.at;
+    (ts0 @ [RefT (Null, DefHT (Stat x.it))]) --> ts2, []
 
   | Barrier (bt, es) ->
     let InstrT (ts1, ts2, xs) as ft = check_block_type c bt e.at in

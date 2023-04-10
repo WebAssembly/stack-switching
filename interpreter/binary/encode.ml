@@ -233,10 +233,10 @@ struct
 
 
     | ContNew x -> op 0xe0; var x
-    | ContBind x -> op 0xe1; var x
+    | ContBind (x, y) -> op 0xe1; var x; var y
     | Suspend x -> op 0xe2; var x
-    | Resume xls -> op 0xe3; vec var_pair xls
-    | ResumeThrow (x, xls) -> op 0xe4; var x; vec var_pair xls
+    | Resume (x, xls) -> op 0xe3; var x; vec var_pair xls
+    | ResumeThrow (x, y, xls) -> op 0xe4; var x; var y; vec var_pair xls
     | Barrier (bt, es) -> op 0xe5; block_type bt; list instr es; end_ ()
 
     | Drop -> op 0x1a

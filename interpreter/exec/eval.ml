@@ -318,14 +318,14 @@ let rec step (c : config) : config =
         let ctxt code = compose code ([], [Invoke f @@ e.at]) in
         Ref (ContRef (ref (Some (Lib.List32.length ts, ctxt)))) :: vs, []
 
-      | ContBind x, Ref (NullRef _) :: vs ->
+      | ContBind (x, y), Ref (NullRef _) :: vs ->
         vs, [Trapping "null continuation reference" @@ e.at]
 
-      | ContBind x, Ref (ContRef {contents = None}) :: vs ->
+      | ContBind (x, y), Ref (ContRef {contents = None}) :: vs ->
         vs, [Trapping "continuation already consumed" @@ e.at]
 
-      | ContBind x, Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
-        let ContT z = cont_type c.frame.inst x in
+      | ContBind (x, y), Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
+        let ContT z = cont_type c.frame.inst y in
         let FuncT (ts', _) = as_func_def_type (def_of (as_dyn_var z)) in
         let args, vs' =
           try split (Int32.sub n (Lib.List32.length ts')) vs e.at
@@ -342,26 +342,26 @@ let rec step (c : config) : config =
         let args, vs' = split (Lib.List32.length ts) vs e.at in
         vs', [Suspending (tagt, args, fun code -> code) @@ e.at]
 
-      | Resume xls, Ref (NullRef _) :: vs ->
+      | Resume (x, xls), Ref (NullRef _) :: vs ->
         vs, [Trapping "null continuation reference" @@ e.at]
 
-      | Resume xls, Ref (ContRef {contents = None}) :: vs ->
+      | Resume (x, xls), Ref (ContRef {contents = None}) :: vs ->
         vs, [Trapping "continuation already consumed" @@ e.at]
 
-      | Resume xls, Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
+      | Resume (x, xls), Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
         let hs = List.map (fun (x, l) -> tag c.frame.inst x, l) xls in
         let args, vs' = split n vs e.at in
         cont := None;
         vs', [Handle (Some hs, ctxt (args, [])) @@ e.at]
 
-      | ResumeThrow (x, xls), Ref (NullRef _) :: vs ->
+      | ResumeThrow (x, y, xls), Ref (NullRef _) :: vs ->
         vs, [Trapping "null continuation reference" @@ e.at]
 
-      | ResumeThrow (x, xls), Ref (ContRef {contents = None}) :: vs ->
+      | ResumeThrow (x, y, xls), Ref (ContRef {contents = None}) :: vs ->
         vs, [Trapping "continuation already consumed" @@ e.at]
 
-      | ResumeThrow (x, xls), Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
-        let tagt = tag c.frame.inst x in
+      | ResumeThrow (x, y, xls), Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
+        let tagt = tag c.frame.inst y in
         let TagT x' = Tag.type_of tagt in
         let FuncT (ts, _) = as_func_def_type (def_of (as_dyn_var x')) in
         let hs = List.map (fun (x, l) -> tag c.frame.inst x, l) xls in

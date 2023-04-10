@@ -473,8 +473,8 @@ plain_instr :
   | CALL_REF var { fun c -> call_ref ($2 c type_) }
   | RETURN_CALL var { fun c -> return_call ($2 c func) }
   | RETURN_CALL_REF var { fun c -> return_call_ref ($2 c type_) }
-  | CONT_NEW LPAR TYPE var RPAR { fun c -> cont_new ($4 c type_) }
-  | CONT_BIND LPAR TYPE var RPAR { fun c -> cont_bind ($4 c type_) }
+  | CONT_NEW var { fun c -> cont_new ($2 c type_) }
+  | CONT_BIND var var { fun c -> cont_bind ($2 c type_) ($3 c type_) }
   | SUSPEND var { fun c -> suspend ($2 c tag) }
   | LOCAL_GET var { fun c -> local_get ($2 c local) }
   | LOCAL_SET var { fun c -> local_set ($2 c local) }
@@ -630,14 +630,17 @@ catch_all :
   | CATCH_ALL instr_list { $2 }
 
 resume_instr_instr :
-  | RESUME resume_instr_handler_instr
-    { let at1 = ati 1 in
-      fun c -> let hs, es = $2 c in resume hs @@ at1, es }
-  | RESUME_THROW var resume_instr_handler_instr
+  | RESUME var resume_instr_handler_instr
     { let at1 = ati 1 in
       fun c ->
-      let tag = $2 c tag in
-      let hs, es = $3 c in resume_throw tag hs @@ at1, es }
+      let x = $2 c type_ in
+      let hs, es = $3 c in resume x hs @@ at1, es }
+  | RESUME_THROW var var resume_instr_handler_instr
+    { let at1 = ati 1 in
+      fun c ->
+      let x  = $2 c type_ in
+      let tag = $3 c tag in
+      let hs, es = $4 c in resume_throw x tag hs @@ at1, es }
 
 resume_instr_handler_instr :
   | LPAR TAG var var RPAR resume_instr_handler_instr
@@ -711,13 +714,16 @@ expr1 :  /* Sugar */
   | RETURN_CALL_INDIRECT call_expr_type  /* Sugar */
     { let at1 = ati 1 in
       fun c -> let x, es = $2 c in es, return_call_indirect (0l @@ at1) x }
-  | RESUME resume_expr_handler
-    { fun c -> let hs, es = $2 c in es, resume hs }
-  | RESUME_THROW var resume_expr_handler
+  | RESUME var resume_expr_handler
     { fun c ->
-      let tag = $2 c tag in
-      let hs, es = $3 c in
-      es, resume_throw tag hs }
+      let x = $2 c type_ in
+      let hs, es = $3 c in es, resume x hs }
+  | RESUME_THROW var var resume_expr_handler
+    { fun c ->
+      let x = $2 c type_ in
+      let tag = $3 c tag in
+      let hs, es = $4 c in
+      es, resume_throw x tag hs }
   | BLOCK labeling_opt block
     { fun c -> let c' = $2 c [] in let bt, es = $3 c' in [], block bt es }
   | LOOP labeling_opt block

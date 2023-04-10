@@ -480,14 +480,14 @@ let rec instr e =
     | ReturnCallRef x -> "return_call_ref " ^ var x, []
     | ReturnCallIndirect (x, y) ->
       "return_call_indirect " ^ var x, [Node ("type " ^ var y, [])]
-    | ContNew x -> "cont.new", [Node ("type " ^ var x, [])]
-    | ContBind x -> "cont.bind", [Node ("type " ^ var x, [])]
+    | ContNew x -> "cont.new " ^ var x, []
+    | ContBind (x, y) -> "cont.bind " ^ var x ^ " " ^ var y, []
     | Suspend x -> "suspend " ^ var x, []
-    | Resume xys ->
-      "resume",
+    | Resume (x, xys) ->
+      "resume " ^ var x,
       List.map (fun (x, y) -> Node ("tag " ^ var x ^ " " ^ var y, [])) xys
-    | ResumeThrow (x, xys) ->
-      "resume_throw " ^ var x,
+    | ResumeThrow (x, y, xys) ->
+      "resume_throw " ^ var x ^ " " ^ var y,
       List.map (fun (x, y) -> Node ("tag " ^ var x ^ " " ^ var y, [])) xys
     | Barrier (bt, es) -> "barrier", block_type bt @ list instr es
     | LocalGet x -> "local.get " ^ var x, []

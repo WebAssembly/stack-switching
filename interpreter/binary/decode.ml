@@ -570,13 +570,20 @@ let rec instr s =
   | 0xd6 -> br_on_non_null (at var s)
 
   | 0xe0 -> cont_new (at var s)
-  | 0xe1 -> cont_bind (at var s)
+  | 0xe1 ->
+    let x = at var s in
+    let y = at var s in
+    cont_bind x y
   | 0xe2 -> suspend (at var s)
-  | 0xe3 -> resume (vec var_pair s)
+  | 0xe3 ->
+    let x = at var s in
+    let xls = vec var_pair s in
+    resume x xls
   | 0xe4 ->
-     let tag = at var s in
-     let xls = vec var_pair s in
-     resume_throw tag xls
+    let x   = at var s in
+    let tag = at var s in
+    let xls = vec var_pair s in
+    resume_throw x tag xls
   | 0xe5 ->
     let bt = block_type s in
     let es' = instr_block s in
