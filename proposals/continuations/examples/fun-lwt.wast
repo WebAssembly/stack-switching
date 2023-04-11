@@ -23,11 +23,11 @@
 
   (func $main (export "main")
     (call $log (i32.const 0))
-    (suspend $fork (cont.new (type $cont) (ref.func $thread1)))
+    (suspend $fork (cont.new $cont (ref.func $thread1)))
     (call $log (i32.const 1))
-    (suspend $fork (cont.new (type $cont) (ref.func $thread2)))
+    (suspend $fork (cont.new $cont (ref.func $thread2)))
     (call $log (i32.const 2))
-    (suspend $fork (cont.new (type $cont) (ref.func $thread3)))
+    (suspend $fork (cont.new $cont (ref.func $thread3)))
     (call $log (i32.const 3))
   )
 
@@ -132,7 +132,7 @@
     (if (ref.is_null (local.get $nextk)) (then (return)))
     (block $on_yield (result (ref $cont))
       (block $on_fork (result (ref $cont) (ref $cont))
-        (resume
+        (resume $cont
           (tag $yield $on_yield)
           (tag $fork $on_fork)
           (local.get $nextk)
@@ -159,7 +159,7 @@
     (if (ref.is_null (local.get $nextk)) (then (return)))
     (block $on_yield (result (ref $cont))
       (block $on_fork (result (ref $cont) (ref $cont))
-        (resume
+        (resume $cont
           (tag $yield $on_yield)
           (tag $fork $on_fork)
           (local.get $nextk)
@@ -179,7 +179,7 @@
     (if (ref.is_null (local.get $nextk)) (then (return)))
     (block $on_yield (result (ref $cont))
       (block $on_fork (result (ref $cont) (ref $cont))
-        (resume
+        (resume $cont
           (tag $yield $on_yield)
           (tag $fork $on_fork)
           (local.get $nextk))
@@ -196,7 +196,7 @@
     (if (ref.is_null (local.get $nextk)) (then (return)))
     (block $on_yield (result (ref $cont))
       (block $on_fork (result (ref $cont) (ref $cont))
-        (resume
+        (resume $cont
           (tag $yield $on_yield)
           (tag $fork $on_fork)
           (local.get $nextk)
@@ -217,7 +217,7 @@
     (if (ref.is_null (local.get $nextk)) (then (return)))
     (block $on_yield (result (ref $cont))
       (block $on_fork (result (ref $cont) (ref $cont))
-        (resume (tag $yield $on_yield) (tag $fork $on_fork) (local.get $nextk))
+        (resume $cont (tag $yield $on_yield) (tag $fork $on_fork) (local.get $nextk))
         (return_call $ytk (call $dequeue))
       ) ;;   $on_fork (result (ref $cont) (ref $cont))
       (local.set $k)
@@ -250,15 +250,15 @@
 
   (func (export "run")
     (call $log (i32.const -1))
-    (call $scheduler-sync (cont.new (type $cont) (ref.func $main)))
+    (call $scheduler-sync (cont.new $cont (ref.func $main)))
     (call $log (i32.const -2))
-    (call $scheduler-kt (cont.new (type $cont) (ref.func $main)))
+    (call $scheduler-kt (cont.new $cont (ref.func $main)))
     (call $log (i32.const -3))
-    (call $schedule-tk (cont.new (type $cont) (ref.func $main)))
+    (call $schedule-tk (cont.new $cont (ref.func $main)))
     (call $log (i32.const -4))
-    (call $scheduler-ykt (cont.new (type $cont) (ref.func $main)))
+    (call $scheduler-ykt (cont.new $cont (ref.func $main)))
     (call $log (i32.const -5))
-    (call $scheduler-ytk (cont.new (type $cont) (ref.func $main)))
+    (call $scheduler-ytk (cont.new $cont (ref.func $main)))
     (call $log (i32.const -6))
   )
 )

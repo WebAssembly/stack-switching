@@ -45,7 +45,7 @@
     (loop $l
       (if (i32.eqz (local.get $n))
         (then (suspend $send (i32.const 42) (local.get $p)))
-        (else (local.set $p (suspend $spawn (cont.bind (type $cont) (local.get $p) (cont.new (type $i-cont) (ref.func $next)))))
+        (else (local.set $p (suspend $spawn (cont.bind $i-cont $cont (local.get $p) (cont.new $i-cont (ref.func $next)))))
               (local.set $n (i32.sub (local.get $n) (i32.const 1)))
               (br $l))
       )
@@ -143,7 +143,7 @@
       (if (call $queue-empty) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_fork (result (ref $cont) (ref $cont))
-          (resume (tag $yield $on_yield) (tag $fork $on_fork)
+          (resume $cont (tag $yield $on_yield) (tag $fork $on_fork)
             (call $dequeue)
           )
           (br $l)  ;; thread terminated
@@ -262,11 +262,11 @@
           (block $on_recv (result (ref $i-cont))
              ;; this should really be a tail call to the continuation
              ;; do we need a 'return_resume' operator?
-             (resume (tag $self $on_self)
-                     (tag $spawn $on_spawn)
-                     (tag $send $on_send)
-                     (tag $recv $on_recv)
-                     (local.get $res) (local.get $ik)
+             (resume $i-cont (tag $self $on_self)
+                             (tag $spawn $on_spawn)
+                             (tag $send $on_send)
+                             (tag $recv $on_recv)
+                             (local.get $res) (local.get $ik)
              )
              (return)
           ) ;;   $on_recv (result (ref $i-cont))
@@ -290,10 +290,10 @@
       (local.set $you)
       (call $new-mb)
       (local.set $yours)
-      (suspend $fork (cont.bind (type $cont)
+      (suspend $fork (cont.bind $icont-cont $cont
                                 (local.get $yours)
                                 (local.get $you)
-                                (cont.new (type $icont-cont) (ref.func $act-nullary))))
+                                (cont.new $icont-cont (ref.func $act-nullary))))
       (return_call $act-res (local.get $mine) (local.get $yours) (local.get $ik))
     ) ;;   $on_self (result (ref $i-cont))
     (local.set $ik)
@@ -312,11 +312,11 @@
           (block $on_recv (result (ref $i-cont))
              ;; this should really be a tail call to the continuation
              ;; do we need a 'return_resume' operator?
-             (resume (tag $self $on_self)
-                     (tag $spawn $on_spawn)
-                     (tag $send $on_send)
-                     (tag $recv $on_recv)
-                     (local.get $k)
+             (resume $cont (tag $self $on_self)
+                           (tag $spawn $on_spawn)
+                           (tag $send $on_send)
+                           (tag $recv $on_recv)
+                           (local.get $k)
              )
              (return)
           ) ;;   $on_recv (result (ref $i-cont))
@@ -340,10 +340,10 @@
       (local.set $you)
       (call $new-mb)
       (local.set $yours)
-      (suspend $fork (cont.bind (type $cont)
+      (suspend $fork (cont.bind $icont-cont $cont
                                 (local.get $yours)
                                 (local.get $you)
-                                (cont.new (type $icont-cont) (ref.func $act-nullary))))
+                                (cont.new $icont-cont (ref.func $act-nullary))))
       (return_call $act-res (local.get $mine) (local.get $yours) (local.get $ik))
     ) ;;   $on_self (result (ref $i-cont))
     (local.set $ik)
@@ -373,7 +373,7 @@
   (func $scheduler (import "scheduler" "run") (param $k (ref $cont)))
 
   (func $run-actor (export "run-actor") (param $k (ref $cont))
-    (call $scheduler (cont.bind (type $cont) (local.get $k) (cont.new (type $cont-cont) (ref.func $act))))
+    (call $scheduler (cont.bind $cont-cont $cont (local.get $k) (cont.new $cont-cont (ref.func $act))))
   )
 )
 (register "actor-scheduler")
@@ -391,7 +391,7 @@
   (func $chain (import "chain" "chain") (param $n i32))
 
   (func $run-chain (export "run-chain") (param $n i32)
-    (call $run-actor (cont.bind (type $cont) (local.get $n) (cont.new (type $i-cont) (ref.func $chain))))
+    (call $run-actor (cont.bind $i-cont $cont (local.get $n) (cont.new $i-cont (ref.func $chain))))
   )
 )
 
