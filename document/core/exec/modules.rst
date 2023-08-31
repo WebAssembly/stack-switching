@@ -216,11 +216,11 @@ New instances of :ref:`types <syntax-typeinst>`, :ref:`functions <syntax-funcins
 :ref:`Data segments <syntax-datainst>`
 ......................................
 
-1. Let :math:`\bytes` be the vector of :ref:`bytes <syntax-byte>` to allocate.
+1. Let :math:`b^\ast` be the vector of :ref:`bytes <syntax-byte>` to allocate.
 
 2. Let :math:`a` be the first free :ref:`data address <syntax-dataaddr>` in :math:`S`.
 
-3. Let :math:`\datainst` be the :ref:`data instance <syntax-datainst>` :math:`\{ \DIDATA~\bytes \}`.
+3. Let :math:`\datainst` be the :ref:`data instance <syntax-datainst>` :math:`\{ \DIDATA~b^\ast \}`.
 
 4. Append :math:`\datainst` to the |SDATAS| of :math:`S`.
 
@@ -228,10 +228,10 @@ New instances of :ref:`types <syntax-typeinst>`, :ref:`functions <syntax-funcins
 
 .. math::
   \begin{array}{rlll}
-  \allocdata(S, \bytes) &=& S', \dataaddr \\[1ex]
+  \allocdata(S, b^\ast) &=& S', \dataaddr \\[1ex]
   \mbox{where:} \hfill \\
   \dataaddr &=& |S.\SDATAS| \\
-  \datainst &=& \{ \DIDATA~\bytes \} \\
+  \datainst &=& \{ \DIDATA~b^\ast \} \\
   S' &=& S \compose \{\SDATAS~\datainst\} \\
   \end{array}
 
@@ -649,7 +649,7 @@ where:
    \F{runelem}_i(\{\ETYPE~\X{et}, \EINIT~\reff^n, \EMODE~\EPASSIVE\}) \quad=\\ \qquad \epsilon \\
    \F{runelem}_i(\{\ETYPE~\X{et}, \EINIT~\reff^n, \EMODE~\EACTIVE \{\ETABLE~x, \EOFFSET~\instr^\ast~\END\}\}) \quad=\\ \qquad
      \instr^\ast~(\I32.\CONST~0)~(\I32.\CONST~n)~(\TABLEINIT~x~i)~(\ELEMDROP~i) \\
-   \F{runelem}_i(\{\ETYPE~\X{et}, \EINIT~\reff^n, \EMODE~\EDECLARATIVE\}) \quad=\\ \qquad
+   \F{runelem}_i(\{\ETYPE~\X{et}, \EINIT~\expr^n, \EMODE~\EDECLARATIVE\}) \quad=\\ \qquad
      (\ELEMDROP~i) \\[1ex]
    \F{rundata}_i(\{\DINIT~b^n, \DMODE~\DPASSIVE\}) \quad=\\ \qquad \epsilon \\
    \F{rundata}_i(\{\DINIT~b^n, \DMODE~\DACTIVE \{\DMEM~0, \DOFFSET~\instr^\ast~\END\}\}) \quad=\\ \qquad
