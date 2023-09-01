@@ -347,7 +347,7 @@ Tables
 
 .. _embed-table-alloc:
 
-:math:`\F{table\_alloc}(\store, \tabletype) : (\store, \tableaddr, \reff)`
+:math:`\F{table\_alloc}(\store, \tabletype, \reff) : (\store, \tableaddr)`
 ..........................................................................
 
 1. Pre-condition: the :ref:`dynamic <syntax-type-dyn>` :math:`\tabletype` is :ref:`valid <valid-tabletype>`.

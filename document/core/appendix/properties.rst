@@ -321,8 +321,8 @@ Module instances are classified by *module contexts*, which are regular :ref:`co
 .. index:: element instance, reference
 .. _valid-eleminst:
 
-:ref:`Element Instances <syntax-eleminst>` :math:`\{ \EIELEM~\X{fa}^\ast \}`
-............................................................................
+:ref:`Element Instances <syntax-eleminst>` :math:`\{ \EITYPE~t, \EIELEM~\reff^\ast \}`
+......................................................................................
 
 * The :ref:`dynamic <syntax-type-dyn>` :ref:`reference type <syntax-reftype>` :math:`t` must be :ref:`valid <valid-reftype>`.
 
