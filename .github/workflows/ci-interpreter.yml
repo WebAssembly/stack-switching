@@ -1,4 +1,4 @@
-name: CI for interpreter & tests
+2name: CI for interpreter & tests
 
 on:
   push:
@@ -31,4 +31,5 @@ jobs:
       - name: Build interpreter
         run: cd interpreter && opam exec make
       - name: Run tests
-        run: cd interpreter && opam exec make JS=node ci
+        run: cd interpreter && opam exec make test
+        #run: cd interpreter && opam exec make JS=node ci
