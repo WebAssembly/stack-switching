@@ -96,8 +96,7 @@ struct
   open Types
 
   let var_type = function
-    | Stat x -> s33 x
-    | Dyn _ -> assert false
+    | StatX x -> s33 x
 
   let num_type = function
     | I32T -> s7 (-0x01)
@@ -111,14 +110,14 @@ struct
   let heap_type = function
     | FuncHT -> s7 (-0x10)
     | ExternHT -> s7 (-0x11)
-    | DefHT x -> var_type x
-    | BotHT -> assert false
+    | VarHT x -> var_type x
+    | DefHT _ | BotHT -> assert false
 
   let ref_type = function
     | (Null, FuncHT) -> s7 (-0x10)
     | (Null, ExternHT) -> s7 (-0x11)
-    | (Null, t) -> s7 (-0x14); heap_type t
-    | (NoNull, t) -> s7 (-0x15); heap_type t
+    | (NoNull, t) -> s7 (-0x1c); heap_type t
+    | (Null, t) -> s7 (-0x1d); heap_type t
 
   let val_type = function
     | NumT t -> num_type t
@@ -130,7 +129,7 @@ struct
     | FuncT (ts1, ts2) -> vec val_type ts1; vec val_type ts2
 
   let cont_type = function
-    | ContT x -> var_type x
+    | ContT ht -> heap_type ht
 
   let def_type = function
     | DefFuncT ft -> s7 (-0x20); func_type ft
@@ -155,8 +154,8 @@ struct
   let global_type = function
     | GlobalT (mut, t) -> val_type t; mutability mut
 
-  let tag_type (TagT x) =
-    u32 0x00l; var_type x
+  let tag_type = function
+    | TagT ht -> byte 0x00; heap_type ht
 
   (* Instructions *)
 
@@ -221,7 +220,7 @@ struct
     | Br x -> op 0x0c; var x
     | BrIf x -> op 0x0d; var x
     | BrTable (xs, x) -> op 0x0e; vec var xs; var x
-    | BrOnNull x -> op 0xd4; var x
+    | BrOnNull x -> op 0xd5; var x
     | BrOnNonNull x -> op 0xd6; var x
     | Return -> op 0x0f
     | Call x -> op 0x10; var x
@@ -354,7 +353,7 @@ struct
     | RefNull t -> op 0xd0; heap_type t
     | RefFunc x -> op 0xd2; var x
     | RefIsNull -> op 0xd1
-    | RefAsNonNull -> op 0xd3
+    | RefAsNonNull -> op 0xd4
 
     | Const {it = I32 c; _} -> op 0x41; s32 c
     | Const {it = I64 c; _} -> op 0x42; s64 c
@@ -816,7 +815,7 @@ struct
     | TableImport t -> byte 0x01; table_type t
     | MemoryImport t -> byte 0x02; memory_type t
     | GlobalImport t -> byte 0x03; global_type t
-    | TagImport t -> byte 0x04; tag_type t
+    | TagImport t -> byte 0x04; var t
 
   let import im =
     let {module_name; item_name; idesc} = im.it in

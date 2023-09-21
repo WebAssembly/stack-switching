@@ -56,7 +56,7 @@ let break_string s =
 
 (* Types *)
 
-let var_type t = string_of_var t
+(* let var_type t = string_of_var t *)
 let num_type t = string_of_num_type t
 let vec_type t = string_of_vec_type t
 let ref_type t = string_of_ref_type t
@@ -68,8 +68,8 @@ let decls kind ts = tab kind (atom val_type) ts
 let func_type (FuncT (ts1, ts2)) =
   Node ("func", decls "param" ts1 @ decls "result" ts2)
 
-let cont_type (ContT x) =
-  Node ("cont", [Atom (var_type x)])
+let cont_type (ContT ct) =
+  Node ("cont", [atom heap_type ct])
 
 let def_type dt =
   match dt with
@@ -578,9 +578,9 @@ let memory off i mem =
   Node ("memory $" ^ nat (off + i) ^ " " ^ limits nat32 lim, [])
 
 let tag off i tag =
-  let {tagtype = TagT x} = tag.it in
+  let {tagtype = TagT et} = tag.it in
   Node ("tag $" ^ nat (off + i),
-    [Node ("type", [atom var_type x])]
+    [Node ("type", [atom heap_type et])]
   )
 
 let is_elem_kind = function
@@ -637,8 +637,8 @@ let import_desc fx tx mx ex gx d =
     incr tx; table 0 (!tx - 1) ({ttype = t; tinit = [] @@ d.at} @@ d.at)
   | MemoryImport t ->
     incr mx; memory 0 (!mx - 1) ({mtype = t} @@ d.at)
-  | TagImport t ->
-    incr ex; tag 0 (!ex - 1) ({tagtype = t} @@ d.at)
+  | TagImport x ->
+    incr ex; Node ("tag $" ^ nat (!ex - 1), [Node ("type", [atom var x])])
   | GlobalImport t ->
     incr gx; Node ("global $" ^ nat (!gx - 1), [global_type t])
 

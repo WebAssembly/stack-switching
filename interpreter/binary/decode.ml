@@ -168,7 +168,7 @@ let var_type s =
 let heap_type s =
   let pos = pos s in
   either [
-    (fun s -> DefHT (Stat (var_type s)));
+    (fun s -> VarHT (StatX (var_type s)));
     (fun s ->
       match s7 s with
       | -0x10 -> FuncHT
@@ -182,8 +182,8 @@ let ref_type s =
   match s7 s with
   | -0x10 -> (Null, FuncHT)
   | -0x11 -> (Null, ExternHT)
-  | -0x14 -> (Null, heap_type s)
-  | -0x15 -> (NoNull, heap_type s)
+  | -0x1c -> (NoNull, heap_type s)
+  | -0x1d -> (Null, heap_type s)
   | _ -> error s pos "malformed reference type"
 
 let val_type s =
@@ -201,7 +201,7 @@ let func_type s =
   FuncT (ts1, ts2)
 
 let cont_type s =
-  ContT (Stat (var_type s))
+  ContT (heap_type s)
 
 let def_type s =
   match s7 s with
@@ -227,8 +227,8 @@ let memory_type s =
 
 let tag_type s =
   zero s;
-  let x = Stat (var_type s) in
-  TagT x
+  let et = heap_type s in
+  TagT et
 
 let mutability s =
   match byte s with
@@ -564,9 +564,9 @@ let rec instr s =
   | 0xd0 -> ref_null (heap_type s)
   | 0xd1 -> ref_is_null
   | 0xd2 -> ref_func (at var s)
-  | 0xd3 -> ref_as_non_null
-  | 0xd4 -> br_on_null (at var s)
-  | 0xd5 as b -> illegal s pos b
+  | 0xd3 as b -> illegal s pos b
+  | 0xd4 -> ref_as_non_null
+  | 0xd5 -> br_on_null (at var s)
   | 0xd6 -> br_on_non_null (at var s)
 
   | 0xe0 -> cont_new (at var s)
@@ -962,7 +962,7 @@ let import_desc s =
   | 0x01 -> TableImport (table_type s)
   | 0x02 -> MemoryImport (memory_type s)
   | 0x03 -> GlobalImport (global_type s)
-  | 0x04 -> TagImport (tag_type s)
+  | 0x04 -> TagImport (at var s)
   | _ -> error s (pos s - 1) "malformed import kind"
 
 let import s =
