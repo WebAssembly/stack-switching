@@ -36,9 +36,6 @@ and eq_val_type t1 t2 =
   | BotT, BotT -> true
   | _, _ -> false
 
-(* and eq_var_type t1 t2 =
- *   t1 = t2 *)
-
 and eq_result_type ts1 ts2 =
   List.length ts1 = List.length ts2 &&
   List.for_all2 eq_val_type ts1 ts2
@@ -147,9 +144,6 @@ and match_global_type (GlobalT (mut1, t1)) (GlobalT (mut2, t2)) =
 
 and match_tag_type (TagT ht1) (TagT ht2) =
   match_heap_type ht1 ht2
-
-(* and match_var_type t1 t2 =
- *   eq_var_type t1 t2 *)
 
 let match_extern_type et1 et2 =
   match et1, et2 with

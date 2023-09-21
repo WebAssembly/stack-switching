@@ -894,6 +894,7 @@ let check_tag (c : context) (tag : tag) : context =
   {c with tags = c.tags @ [tag']}
 
 
+
 (* Modules *)
 
 let check_type (c : context) (ty : type_) : context =
@@ -918,7 +919,6 @@ let check_import (c : context) (im : import) : context =
   | TagImport x ->
      let et = check_tag_type c (TagT (VarHT (StatX x.it))) idesc.at in
      {c with tags = c.tags @ [et]}
-
 
 module NameSet = Set.Make(struct type t = Ast.name let compare = compare end)
 
