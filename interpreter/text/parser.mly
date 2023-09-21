@@ -209,14 +209,16 @@ let anon_elem (c : context) at = bind "elem segment" c.elems 1l at
 let anon_data (c : context) at = bind "data segment" c.datas 1l at
 let anon_label (c : context) at = bind "label" c.labels 1l at
 
-
-let inline_func_type (c : context) ft at =
-  let dt = DefFuncT ft in
+let find_type_index (c : context) dt at =
   match Lib.List.index_where (fun ty -> ty.it = dt) c.types.list with
   | Some i -> Int32.of_int i @@ at
   | None ->
     let i = anon_type c at in define_type c (dt @@ at);
     i @@ at
+
+let inline_func_type (c : context) ft at =
+  let dt = DefFuncT ft in
+  find_type_index c dt at
 
 let inline_func_type_explicit (c : context) x ft at =
   if ft = FuncT ([], []) then
@@ -230,6 +232,11 @@ let inline_func_type_explicit (c : context) x ft at =
     error at "inline function type does not match explicit type";
   x
 
+let inline_tag_type (c : context) (TagT ht) at =
+  match ht with
+  | VarHT (StatX x) -> x @@ at
+  | DefHT dt -> find_type_index c dt at
+  | _ -> assert false
 
 %}
 
@@ -299,7 +306,7 @@ null_opt :
 heap_type :
   | FUNC { fun c -> FuncHT }
   | EXTERN { fun c -> ExternHT }
-  | var { fun c -> DefHT (Stat ($1 c type_).it) }
+  | var { fun c -> VarHT (StatX ($1 c type_).it) }
 
 ref_type :
   | LPAR REF null_opt heap_type RPAR { fun c -> ($3, $4 c) }
@@ -321,20 +328,22 @@ global_type :
 
 def_type :
   | LPAR FUNC func_type RPAR { fun c -> DefFuncT ($3 c) }
-  | LPAR CONT cont_type RPAR { fun c -> DefContT (ContT (Stat ($3 c).it)) }
+  | LPAR CONT cont_type RPAR { fun c -> DefContT ($3 c) }
 
 cont_type :
   | type_use cont_type_params
     { let at1 = ati 1 in
       fun c ->
       match $2 c with
-      | FuncT ([], []) -> $1 c
-      | ft -> inline_func_type_explicit c ($1 c) ft at1 }
+      | FuncT ([], []) -> ContT (VarHT (StatX ($1 c).it))
+      | ft ->
+         let x = inline_func_type_explicit c ($1 c) ft at1 in
+         ContT (VarHT (StatX x.it)) }
   | cont_type_params
     /* TODO: the inline type is broken for now */
-    { let at = at () in fun c -> inline_func_type c ($1 c) at }
+    { let at = at () in fun c -> ContT (VarHT (StatX (inline_func_type c ($1 c) at).it)) }
   | var  /* Sugar */
-    { fun c -> $1 c type_ }
+    { fun c -> ContT (VarHT (StatX ($1 c type_).it)) }
 
 cont_type_params :
   | LPAR PARAM val_type_list RPAR cont_type_params
@@ -367,9 +376,9 @@ func_type_result :
 
 tag_type :
   | type_use
-    { fun c -> TagT (Stat ($1 c).it) }
+    { fun c -> TagT (VarHT (StatX ($1 c).it)) }
   | func_type
-    { let at = at () in fun c -> TagT (Stat (inline_func_type c ($1 c) at).it) }
+    { let at1 = at () in fun c -> TagT (VarHT (StatX (inline_func_type c ($1 c) at1).it)) }
 
 table_type :
   | limits ref_type { fun c -> TableT ($1, $2 c) }
@@ -1028,6 +1037,17 @@ table_fields :
   | inline_export table_fields  /* Sugar */
     { fun c x at -> let tabs, elems, ims, exs = $2 c x at in
       tabs, elems, ims, $1 (TableExport x) c :: exs }
+  | ref_type LPAR ELEM elem_expr elem_expr_list RPAR  /* Sugar */
+    { fun c x at ->
+      let offset = [i32_const (0l @@ at) @@ at] @@ at in
+      let einit = $4 c :: $5 c in
+      let size = Lib.List32.length einit in
+      let emode = Active {index = x; offset} @@ at in
+      let (_, ht) as etype = $1 c in
+      let tinit = [RefNull ht @@ at] @@ at in
+      [{ttype = TableT ({min = size; max = Some size}, etype); tinit} @@ at],
+      [{etype; einit; emode} @@ at],
+      [], [] }
   | ref_type LPAR ELEM elem_var_list RPAR  /* Sugar */
     { fun c x at ->
       let offset = [i32_const (0l @@ at) @@ at] @@ at in
@@ -1037,17 +1057,6 @@ table_fields :
       let (_, ht) as etype = $1 c in
       let tinit = [RefNull ht @@ at] @@ at in
       [{ttype = TableT ({min = size; max = Some size}, etype); tinit} @@ at],
-      [{etype; einit; emode} @@ at],
-      [], [] }
-  | ref_type LPAR ELEM elem_expr elem_expr_list RPAR  /* Sugar */
-    { fun c x at ->
-      let offset = [i32_const (0l @@ at) @@ at] @@ at in
-      let einit = $4 c :: $5 c in
-      let size = Lib.List32.length einit in
-      let emode = Active {index = x; offset} @@ at in
-      let (_, ht) as etype = $1 c in
-      let tinit = [RefNull ht @@ at] @@ at in
-      [{ttype = TableT ({min = size; max = Some size}, $1 c); tinit} @@ at],
       [{etype; einit; emode} @@ at],
       [], [] }
 
@@ -1123,7 +1132,7 @@ tag_fields :
     { fun c x at ->
       [],
       [{ module_name = fst $1; item_name = snd $1;
-         idesc = TagImport ($2 c) @@ at } @@ at], [] }
+         idesc = TagImport (inline_tag_type c ($2 c) at) @@ at } @@ at], [] }
   | inline_export tag_fields  /* Sugar */
     { fun c x at -> let evts, ims, exs = $2 c x at in
       evts, ims, $1 (TagExport x) c :: exs }
@@ -1148,8 +1157,9 @@ import_desc :
     { fun c -> ignore ($3 c anon_global bind_global);
       fun () -> GlobalImport ($4 c) }
   | LPAR TAG bind_var_opt tag_type RPAR
-    { fun c -> ignore ($3 c anon_tag bind_tag);
-      fun () -> TagImport ($4 c) }
+    { let at4 = ati 4 in
+      fun c -> ignore ($3 c anon_tag bind_tag);
+      fun () -> TagImport (inline_tag_type c ($4 c) at4) }
 
 import :
   | LPAR IMPORT name name import_desc RPAR
@@ -1344,8 +1354,7 @@ literal_vec :
   | LPAR VEC_CONST VEC_SHAPE num_list RPAR { snd (vec $2 $3 $4 (at ())) }
 
 literal_ref :
-  | LPAR REF_NULL heap_type RPAR
-    { Value.NullRef (Types.dyn_heap_type [] ($3 (empty_context ()))) }
+  | LPAR REF_NULL heap_type RPAR { Value.NullRef ($3 (empty_context ())) }
   | LPAR REF_EXTERN NAT RPAR { Script.ExternRef (nat32 $3 (ati 3)) }
 
 literal :

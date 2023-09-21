@@ -1,5 +1,5 @@
-[![CI for specs](https://github.com/WebAssembly/spec/actions/workflows/ci-spec.yml/badge.svg)](https://github.com/WebAssembly/spec/actions/workflows/ci-spec.yml)
-[![CI for interpreter & tests](https://github.com/WebAssembly/spec/actions/workflows/ci-interpreter.yml/badge.svg)](https://github.com/WebAssembly/spec/actions/workflows/ci-interpreter.yml)
+[![CI for specs](https://github.com/wasmfx/specfx/actions/workflows/ci-spec.yml/badge.svg)](https://github.com/wasmfx/specfx/actions/workflows/ci-spec.yml)
+[![CI for interpreter & tests](https://github.com/wasmfx/specfx/actions/workflows/ci-interpreter.yml/badge.svg)](https://github.com/wasmfx/specfx/actions/workflows/ci-interpreter.yml)
 
 # Typed Continuations Proposal for WebAssembly
 

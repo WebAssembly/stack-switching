@@ -67,8 +67,7 @@ let opt free xo = Lib.Option.get (Option.map free xo) empty
 let list free xs = List.fold_left union empty (List.map free xs)
 
 let var_type = function
-  | Stat x -> types (idx' x)
-  | Dyn x -> empty
+  | StatX x -> types (idx' x)
 
 let num_type = function
   | I32T | I64T | F32T | F64T -> empty
@@ -78,7 +77,8 @@ let vec_type = function
 
 let heap_type = function
   | FuncHT | ExternHT | BotHT -> empty
-  | DefHT x -> var_type x
+  | VarHT x -> var_type x
+  | DefHT dt -> empty  (* assume closed *)
 
 let ref_type = function
   | (_, t) -> heap_type t
@@ -90,15 +90,15 @@ let val_type = function
   | BotT -> empty
 
 let func_type (FuncT (ins, out)) = list val_type ins ++ list val_type out
-let cont_type (ContT x) = var_type x
+let cont_type (ContT ht) = heap_type ht
 let global_type (GlobalT (_mut, t)) = val_type t
 let table_type (TableT (_lim, t)) = ref_type t
 let memory_type (MemoryT (_lim)) = empty
-let tag_type (TagT x) = var_type x
+let tag_type (TagT ht) = heap_type ht
 
 let def_type = function
   | DefFuncT ft -> func_type ft
-  | DefContT ct -> cont_type ct
+  | DefContT x -> cont_type x
 
 let block_type = function
   | VarBlockType x -> types (idx x)
@@ -192,7 +192,7 @@ let import_desc (d : import_desc) =
   | TableImport tt -> table_type tt
   | MemoryImport mt -> memory_type mt
   | GlobalImport gt -> global_type gt
-  | TagImport et -> tag_type et
+  | TagImport et -> types (idx et)
 
 let export (e : export) = export_desc e.it.edesc
 let import (i : import) = import_desc i.it.idesc
