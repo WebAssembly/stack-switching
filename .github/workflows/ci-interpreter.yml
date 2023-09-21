@@ -1,4 +1,4 @@
-2name: CI for interpreter & tests
+name: CI for interpreter & tests
 
 on:
   push:
@@ -33,4 +33,4 @@ jobs:
       - name: Run tests
         # TODO: disable node.js run until it fully implements proposal
         # run: cd interpreter && opam exec make JS=node ci
-        run: cd interpreter && opam exec make ci
+        run: cd interpreter && opam exec make test
