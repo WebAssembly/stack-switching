@@ -33,6 +33,8 @@ zip:		$(ZIP)
 
 # Building
 
+.PHONY:                $(NAME) $(JSLIB)
+
 $(NAME):
 	rm -f $@
 	dune build $@.exe
@@ -47,7 +49,7 @@ $(JSLIB):
 # Unit tests
 
 UNITTESTDIR =	unittest
-UNITTESTFILES =	$(shell cd $(UNITTESTDIR); ls *.ml)
+UNITTESTFILES =	$(shell cd $(UNITTESTDIR) > /dev/null; ls *.ml)
 UNITTESTS =	$(UNITTESTFILES:%.ml=%)
 
 .PHONY: unittest
@@ -62,7 +64,7 @@ unittest/%:
 # Test suite
 
 TESTDIR =	../test/core
-TESTFILES =	$(shell cd $(TESTDIR); ls *.wast; ls [a-z]*/*.wast)
+TESTFILES =	$(shell cd $(TESTDIR) > /dev/null; ls *.wast; ls [a-z]*/*.wast)
 TESTS =		$(TESTFILES:%.wast=%)
 
 .PHONY: test partest quiettest
