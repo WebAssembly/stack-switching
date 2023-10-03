@@ -21,11 +21,11 @@ New instances of :ref:`functions <syntax-funcinst>`, :ref:`tables <syntax-tablei
 
 1. Let :math:`\func` be the :ref:`function <syntax-func>` to allocate and :math:`\moduleinst` its :ref:`module instance <syntax-moduleinst>`.
 
-2. Let :math:`\functype` be the :ref:`function type <syntax-functype>` :math:`\moduleinst.\MITYPES[\func.\FTYPE]`.
+2. Let :math:`\deftype` be the :ref:`defined type <syntax-deftype>` :math:`\moduleinst.\MITYPES[\func.\FTYPE]`.
 
 3. Let :math:`a` be the first free :ref:`function address <syntax-funcaddr>` in :math:`S`.
 
-4. Let :math:`\funcinst` be the :ref:`function instance <syntax-funcinst>` :math:`\{ \FITYPE~\functype, \FIMODULE~\moduleinst, \FICODE~\func \}`.
+4. Let :math:`\funcinst` be the :ref:`function instance <syntax-funcinst>` :math:`\{ \FITYPE~\deftype, \FIMODULE~\moduleinst, \FICODE~\func \}`.
 
 6. Append :math:`\funcinst` to the |SFUNCS| of :math:`S`.
 
@@ -36,9 +36,9 @@ New instances of :ref:`functions <syntax-funcinst>`, :ref:`tables <syntax-tablei
    \begin{array}{rlll}
    \allocfunc(S, \func, \moduleinst) &=& S', \funcaddr \\[1ex]
    \mbox{where:} \hfill \\
-   \functype &=& \moduleinst.\MITYPES[\func.\FTYPE] \\
+   \deftype &=& \moduleinst.\MITYPES[\func.\FTYPE] \\
    \funcaddr &=& |S.\SFUNCS| \\
-   \funcinst &=& \{ \FITYPE~\functype, \FIMODULE~\moduleinst, \FICODE~\func \} \\
+   \funcinst &=& \{ \FITYPE~\deftype, \FIMODULE~\moduleinst, \FICODE~\func \} \\
    S' &=& S \compose \{\SFUNCS~\funcinst\} \\
    \end{array}
 
@@ -49,11 +49,11 @@ New instances of :ref:`functions <syntax-funcinst>`, :ref:`tables <syntax-tablei
 :ref:`Host Functions <syntax-hostfunc>`
 .......................................
 
-1. Let :math:`\hostfunc` be the :ref:`host function <syntax-hostfunc>` to allocate and :math:`\functype` its :ref:`function type <syntax-functype>`.
+1. Let :math:`\hostfunc` be the :ref:`host function <syntax-hostfunc>` to allocate and :math:`\deftype` its :ref:`defined type <syntax-functype>`.
 
 2. Let :math:`a` be the first free :ref:`function address <syntax-funcaddr>` in :math:`S`.
 
-3. Let :math:`\funcinst` be the :ref:`function instance <syntax-funcinst>` :math:`\{ \FITYPE~\functype, \FIHOSTCODE~\hostfunc \}`.
+3. Let :math:`\funcinst` be the :ref:`function instance <syntax-funcinst>` :math:`\{ \FITYPE~\deftype, \FIHOSTCODE~\hostfunc \}`.
 
 4. Append :math:`\funcinst` to the |SFUNCS| of :math:`S`.
 
@@ -62,10 +62,10 @@ New instances of :ref:`functions <syntax-funcinst>`, :ref:`tables <syntax-tablei
 .. math::
    ~\\[-1ex]
    \begin{array}{rlll}
-   \allochostfunc(S, \functype, \hostfunc) &=& S', \funcaddr \\[1ex]
+   \allochostfunc(S, \deftype, \hostfunc) &=& S', \funcaddr \\[1ex]
    \mbox{where:} \hfill \\
    \funcaddr &=& |S.\SFUNCS| \\
-   \funcinst &=& \{ \FITYPE~\functype, \FIHOSTCODE~\hostfunc \} \\
+   \funcinst &=& \{ \FITYPE~\deftype, \FIHOSTCODE~\hostfunc \} \\
    S' &=& S \compose \{\SFUNCS~\funcinst\} \\
    \end{array}
 
@@ -290,6 +290,8 @@ Growing :ref:`memories <syntax-meminst>`
 :ref:`Modules <syntax-moduleinst>`
 ..................................
 
+.. todo:: update prose for types
+
 The allocation function for :ref:`modules <syntax-module>` requires a suitable list of :ref:`external values <syntax-externval>` that are assumed to :ref:`match <match-externtype>` the :ref:`import <syntax-import>` vector of the module,
 a list of initialization :ref:`values <syntax-val>` for the module's :ref:`globals <syntax-global>`,
 and list of :ref:`reference <syntax-ref>` vectors for the module's :ref:`element segments <syntax-elem>`.
@@ -401,7 +403,7 @@ where:
      \MIEXPORTS~\exportinst^\ast ~\}
      \end{array} \\[1ex]
    \deftype^\ast &=&
-     \insttype_{\moduleinst}(\module.\MTYPES) \\
+     \alloctype^\ast(\module.\MTYPES) \\
    S_1, \funcaddr^\ast &=&
      \allocfunc^\ast(S, \module.\MFUNCS, \moduleinst) \\
    S_2, \tableaddr^\ast &=&
@@ -448,8 +450,32 @@ Here, the notation :math:`\F{allocx}^\ast` is shorthand for multiple :ref:`alloc
 
 Moreover, if the dots :math:`\dots` are a sequence :math:`A^n` (as for globals or tables), then the elements of this sequence are passed to the allocation function pointwise.
 
+For types, however, allocation is defined in terms of :ref:`rolling <aux-roll-rectype>` and :ref:`substitution <notation-subst>` of all preceding types to produce a list of :ref:`closed <type-closed>` :ref:`defined types <syntax-deftype>`:
+
+.. _alloc-type:
+
+.. math::
+   \begin{array}{rlll}
+   \alloctype^\ast(\rectype^n) = \deftype^\ast \\[1ex]
+   \mbox{where for all $i < n$:} \hfill \\
+   \rectype^n[i] &=& \REC~\subtype_i^{m_i} \\
+   \deftype^\ast[x_i \slice m_i] &=& \rolldt_{x_i}(\REC~\subtype_i^{m_i})[\subst \deftype^\ast[0 \slice x_i]) \\
+   x_{i+1} &=& x_i + m_i \\
+   x_n &=& |\deftype^\ast| \\
+   \end{array}
+
+
+.. scratch
+   \begin{array}{rlll}
+   \alloctype^\ast(\epsilon) = \epsilon \\
+   \alloctype^\ast(\rectype^\ast~\rectype') = \deftype^\ast~{\deftype'}^\ast \\[1ex]
+   \mbox{where:} \hfill \\
+   \deftype^\ast &=& \alloctype^\ast(\reftype^\ast) \\
+   {\deftype'}^\ast &=& \rolldt_{|\deftype^\ast|}(\rectype)[\subst \deftype^\ast) \\
+   \end{array}
+
 .. note::
-   The definition of module allocation is mutually recursive with the allocation of its associated types and functions, because the resulting module instance :math:`\moduleinst` is passed to the allocators as an argument, in order to form the necessary closures.
+   The definition of module allocation is mutually recursive with the allocation of its associated functions, because the resulting module instance :math:`\moduleinst` is passed to the allocators as an argument, in order to form the necessary closures.
    In an implementation, this recursion is easily unraveled by mutating one or the other in a secondary step.
 
 
@@ -632,7 +658,7 @@ where:
 
    Similarly, module :ref:`allocation <alloc-module>` and the :ref:`evaluation <exec-expr>` of :ref:`global <syntax-global>` and :ref:`table <syntax-table>` initializers as well as :ref:`element segments <syntax-elem>` are mutually recursive because the global initialization :ref:`values <syntax-val>` :math:`\val_{\F{g}}^\ast`, :math:`\reff_{\F{t}}`, and element segment contents :math:`(\reff^\ast)^\ast` are passed to the module allocator while depending on the module instance :math:`\moduleinst` and store :math:`S'` returned by allocation.
    Again, this recursion is just a specification device.
-   In practice, the initialization values can :ref:`be determined <exec-initvals>` beforehand by staging module allocation further such that first, the module's own :math:`function instances <syntax-funcinst>` are pre-allocated in the store, then the initializer expressions are evaluated, then the rest of the module instance is allocated, and finally the new function instances' :math:`\AMODULE` fields are set to that module instance.
+   In practice, the initialization values can :ref:`be determined <exec-initvals>` beforehand by staging module allocation further such that first, the module's own :ref:`function instances <syntax-funcinst>` are pre-allocated in the store, then the initializer expressions are evaluated in order, allocating globals on the way, then the rest of the module instance is allocated, and finally the new function instances' :math:`\AMODULE` fields are set to that module instance.
    This is possible because :ref:`validation <valid-module>` ensures that initialization expressions cannot actually call a function, only take their reference.
 
    All failure conditions are checked before any observable mutation of the store takes place.
@@ -663,7 +689,7 @@ The following steps are performed:
 
 2. Let :math:`\funcinst` be the :ref:`function instance <syntax-funcinst>` :math:`S.\SFUNCS[\funcaddr]`.
 
-3. Let :math:`[t_1^n] \toF [t_2^m]` be the :ref:`function type <syntax-functype>` :math:`\funcinst.\FITYPE`.
+3. Let :math:`\TFUNC~[t_1^n] \toF [t_2^m]` be the :ref:`composite type <syntax-comptype>` :math:`\expanddt(\funcinst.\FITYPE)`.
 
 4. If the length :math:`|\val^\ast|` of the provided argument values is different from the number :math:`n` of expected arguments, then:
 
@@ -695,7 +721,7 @@ The values :math:`\val_{\F{res}}^m` are returned as the results of the invocatio
    ~\\[-1ex]
    \begin{array}{@{}lcl}
    \invoke(S, \funcaddr, \val^n) &=& S; F; \val^n~(\INVOKE~\funcaddr) \\
-     &(\iff & S.\SFUNCS[\funcaddr].\FITYPE = [t_1^n] \toF [t_2^m] \\
+     &(\iff & \expanddt(S.\SFUNCS[\funcaddr].\FITYPE) = \TFUNC~[t_1^n] \toF [t_2^m] \\
      &\wedge& (S \vdashval \val : t_1)^n \\
      &\wedge& F = \{ \AMODULE~\{\}, \ALOCALS~\epsilon \}) \\
    \end{array}

@@ -101,21 +101,26 @@ let empty () = {map = VarMap.empty; count = 0l}
 
 let shift category at n i =
   let i' = Int32.add i n in
-   if I32.lt_u i' n then
-     error at ("too many " ^ category ^ " bindings");
-   i'
+  if I32.lt_u i' n then
+    error at ("too many " ^ category ^ " bindings");
+  i'
 
 let bind category space n at =
-   let i = space.count in
-   space.count <- shift category at n i;
-   i
+  let i = space.count in
+  space.count <- shift category at n i;
+  i
 
 let scoped category n space at =
   {map = VarMap.map (shift category at n) space.map; count = space.count}
 
 
-type types = {space : space; mutable list : type_ list}
-let empty_types () = {space = empty (); list = []}
+type types =
+  { space : space;
+    mutable fields : space list;
+    mutable list : type_ list;
+    mutable ctx : def_type list;
+  }
+let empty_types () = {space = empty (); fields = []; list = []; ctx = []}
 
 type context =
   { types : types;
@@ -159,9 +164,11 @@ let tag (c : context) x = lookup "tag" c.tags x
 let elem (c : context) x = lookup "elem segment" c.elems x
 let data (c : context) x = lookup "data segment" c.datas x
 let label (c : context) x = lookup "label " c.labels x
+let field x (c : context) y =
+  lookup "field " (Lib.List32.nth c.types.fields x) y
 
 let func_type (c : context) x =
-  match (Lib.List32.nth c.types.list x.it).it with
+  match expand_def_type (Lib.List32.nth c.types.ctx x.it) with
   | DefFuncT ft -> ft
   | _ -> error x.at ("non-function type " ^ Int32.to_string x.it)
   | exception Failure _ -> error x.at ("unknown type " ^ Int32.to_string x.it)
@@ -181,7 +188,10 @@ let bind_rel category space x =
   space.map <- VarMap.add x.it 0l space.map;
   0l
 
-let bind_type (c : context) x = bind_abs "type" c.types.space x
+let new_fields (c : context) =
+  c.types.fields <- c.types.fields @ [empty ()]
+
+let bind_type (c : context) x = new_fields c; bind_abs "type" c.types.space x
 let bind_func (c : context) x = bind_abs "function" c.funcs x
 let bind_local (c : context) x = force_locals c; bind_abs "local" c.locals x
 let bind_global (c : context) x = bind_abs "global" c.globals x
@@ -191,13 +201,17 @@ let bind_tag (c : context) x = bind_abs "tag" c.tags x
 let bind_elem (c : context) x = bind_abs "elem segment" c.elems x
 let bind_data (c : context) x = bind_abs "data segment" c.datas x
 let bind_label (c : context) x = bind_rel "label" c.labels x
+let bind_field (c : context) x y =
+  bind_abs "field" (Lib.List32.nth c.types.fields x) y
 
 let define_type (c : context) (ty : type_) =
-  assert (c.types.space.count > Lib.List32.length c.types.list);
   c.types.list <- c.types.list @ [ty]
 
+let define_def_type (c : context) (dt : def_type) =
+  assert (c.types.space.count > Lib.List32.length c.types.ctx);
+  c.types.ctx <- c.types.ctx @ [dt]
 
-let anon_type (c : context) at = bind "type" c.types.space 1l at
+let anon_type (c : context) at = new_fields c; bind "type" c.types.space 1l at
 let anon_func (c : context) at = bind "function" c.funcs 1l at
 let anon_locals (c : context) n at =
   defer_locals c (fun () -> bind "local" c.locals n at)
@@ -208,12 +222,22 @@ let anon_tag (c : context) at = bind "tag" c.tags 1l at
 let anon_elem (c : context) at = bind "elem segment" c.elems 1l at
 let anon_data (c : context) at = bind "data segment" c.datas 1l at
 let anon_label (c : context) at = bind "label" c.labels 1l at
+let anon_fields (c : context) x n at =
+  bind "field" (Lib.List32.nth c.types.fields x) n at
 
 let find_type_index (c : context) dt at =
-  match Lib.List.index_where (fun ty -> ty.it = dt) c.types.list with
+  let st = SubT (Final, [], dt) in
+  match
+    Lib.List.index_where (function
+      | DefT (RecT [st'], 0l) -> st = st'
+      | _ -> false
+      ) c.types.ctx
+  with
   | Some i -> Int32.of_int i @@ at
   | None ->
-    let i = anon_type c at in define_type c (dt @@ at);
+    let i = anon_type c at in
+    define_type c (RecT [st] @@ at);
+    define_def_type c (DefT (RecT [st], 0l));
     i @@ at
 
 let inline_func_type (c : context) ft at =
@@ -235,7 +259,7 @@ let inline_func_type_explicit (c : context) x ft at =
 let inline_tag_type (c : context) (TagT ht) at =
   match ht with
   | VarHT (StatX x) -> x @@ at
-  | DefHT dt -> find_type_index c dt at
+  | DefHT dt -> find_type_index c (expand_def_type dt) at
   | _ -> assert false
 
 %}
@@ -244,13 +268,19 @@ let inline_tag_type (c : context) (TagT ht) at =
 %token<string> NAT INT FLOAT STRING VAR
 %token<Types.num_type> NUM_TYPE
 %token<Types.vec_type> VEC_TYPE
+%token<Pack.pack_size> PACK_TYPE
 %token<V128.shape> VEC_SHAPE
-%token FUNCREF EXTERNREF REF EXTERN NULL MUT
+%token ANYREF NULLREF EQREF I31REF STRUCTREF ARRAYREF
+%token FUNCREF NULLFUNCREF EXTERNREF NULLEXTERNREF
+%token ANY NONE EQ I31 REF NOFUNC EXTERN NOEXTERN NULL
+%token MUT FIELD STRUCT ARRAY SUB FINAL REC
 %token UNREACHABLE NOP DROP SELECT
 %token BLOCK END IF THEN ELSE LOOP TRY DO CATCH CATCH_ALL
 %token DELEGATE
 %token CONT_NEW CONT_BIND SUSPEND RESUME RESUME_THROW BARRIER
-%token BR BR_IF BR_TABLE BR_ON_NULL BR_ON_NON_NULL
+%token BR BR_IF BR_TABLE BR_ON_NON_NULL
+%token<Ast.idx -> Ast.instr'> BR_ON_NULL
+%token<Ast.idx -> Types.ref_type -> Types.ref_type -> Ast.instr'> BR_ON_CAST
 %token CALL CALL_REF CALL_INDIRECT
 %token RETURN RETURN_CALL RETURN_CALL_REF RETURN_CALL_INDIRECT
 %token LOCAL_GET LOCAL_SET LOCAL_TEE GLOBAL_GET GLOBAL_SET
@@ -261,8 +291,18 @@ let inline_tag_type (c : context) (TagT ht) at =
 %token<string> OFFSET_EQ_NAT ALIGN_EQ_NAT
 %token<string Source.phrase -> Ast.instr' * Value.num> CONST
 %token<Ast.instr'> UNARY BINARY TEST COMPARE CONVERT
-%token REF_NULL REF_FUNC REF_EXTERN REF_IS_NULL REF_AS_NON_NULL
 %token THROW RETHROW
+%token REF_NULL REF_FUNC REF_I31 REF_STRUCT REF_ARRAY REF_EXTERN REF_HOST
+%token REF_EQ REF_IS_NULL REF_AS_NON_NULL REF_TEST REF_CAST
+%token REF_I31
+%token<Ast.instr'> I31_GET
+%token<Ast.idx -> Ast.instr'> STRUCT_NEW ARRAY_NEW ARRAY_GET
+%token STRUCT_SET
+%token<Ast.idx -> Ast.idx -> Ast.instr'> STRUCT_GET
+%token ARRAY_NEW ARRAY_NEW_FIXED ARRAY_NEW_ELEM ARRAY_NEW_DATA
+%token ARRAY_SET ARRAY_LEN
+%token ARRAY_COPY ARRAY_FILL ARRAY_INIT_DATA ARRAY_INIT_ELEM
+%token<Ast.instr'> EXTERN_CONVERT
 %token<int option -> Memory.offset -> Ast.instr'> VEC_LOAD VEC_STORE
 %token<int option -> Memory.offset -> int -> Ast.instr'> VEC_LOAD_LANE VEC_STORE_LANE
 %token<V128.shape -> string Source.phrase list -> Source.region -> Ast.instr' * Value.vec> VEC_CONST
@@ -304,14 +344,30 @@ null_opt :
   | NULL { Null }
 
 heap_type :
+  | ANY { fun c -> AnyHT }
+  | NONE { fun c -> NoneHT }
+  | EQ { fun c -> EqHT }
+  | I31 { fun c -> I31HT }
+  | STRUCT { fun c -> StructHT }
+  | ARRAY { fun c -> ArrayHT }
   | FUNC { fun c -> FuncHT }
+  | NOFUNC { fun c -> NoFuncHT }
   | EXTERN { fun c -> ExternHT }
+  | NOEXTERN { fun c -> NoExternHT }
   | var { fun c -> VarHT (StatX ($1 c type_).it) }
 
 ref_type :
   | LPAR REF null_opt heap_type RPAR { fun c -> ($3, $4 c) }
+  | ANYREF { fun c -> (Null, AnyHT) }  /* Sugar */
+  | NULLREF { fun c -> (Null, NoneHT) }  /* Sugar */
+  | EQREF { fun c -> (Null, EqHT) }  /* Sugar */
+  | I31REF { fun c -> (Null, I31HT) }  /* Sugar */
+  | STRUCTREF { fun c -> (Null, StructHT) }  /* Sugar */
+  | ARRAYREF { fun c -> (Null, ArrayHT) }  /* Sugar */
   | FUNCREF { fun c -> (Null, FuncHT) }  /* Sugar */
+  | NULLFUNCREF { fun c -> (Null, NoFuncHT) }  /* Sugar */
   | EXTERNREF { fun c -> (Null, ExternHT) }  /* Sugar */
+  | NULLEXTERNREF { fun c -> (Null, NoExternHT) }  /* Sugar */
 
 val_type :
   | NUM_TYPE { fun c -> NumT $1 }
@@ -325,10 +381,6 @@ val_type_list :
 global_type :
   | val_type { fun c -> GlobalT (Cons, $1 c) }
   | LPAR MUT val_type RPAR { fun c -> GlobalT (Var, $3 c) }
-
-def_type :
-  | LPAR FUNC func_type RPAR { fun c -> DefFuncT ($3 c) }
-  | LPAR CONT cont_type RPAR { fun c -> DefContT ($3 c) }
 
 cont_type :
   | type_use cont_type_params
@@ -358,6 +410,33 @@ cont_type_results :
   | /* empty */
     { fun c -> [] }
 
+storage_type :
+  | val_type { fun c -> ValStorageT ($1 c) }
+  | PACK_TYPE { fun c -> PackStorageT $1 }
+
+field_type :
+  | storage_type { fun c -> FieldT (Cons, $1 c) }
+  | LPAR MUT storage_type RPAR { fun c -> FieldT (Var, $3 c) }
+
+field_type_list :
+  | /* empty */ { fun c -> [] }
+  | field_type field_type_list { fun c -> $1 c :: $2 c }
+
+struct_field_list :
+  | /* empty */ { fun c x -> [] }
+  | LPAR FIELD field_type_list RPAR struct_field_list
+    { let at3 = ati 3 in
+      fun c x -> let fts = $3 c in
+      ignore (anon_fields c x (Lib.List32.length fts) at3); fts @ $5 c x }
+  | LPAR FIELD bind_var field_type RPAR struct_field_list
+    { fun c x -> ignore (bind_field c x $3); $4 c :: $6 c x }
+
+struct_type :
+  | struct_field_list { fun c x -> StructT ($1 c x) }
+
+array_type :
+  | field_type { fun c -> ArrayT ($1 c) }
+
 func_type :
   | func_type_result
     { fun c -> FuncT ([], $1 c) }
@@ -380,6 +459,21 @@ tag_type :
   | func_type
     { let at1 = at () in fun c -> TagT (VarHT (StatX (inline_func_type c ($1 c) at1).it)) }
 
+str_type :
+  | LPAR STRUCT struct_type RPAR { fun c x -> DefStructT ($3 c x) }
+  | LPAR ARRAY array_type RPAR { fun c x -> DefArrayT ($3 c) }
+  | LPAR FUNC func_type RPAR { fun c x -> DefFuncT ($3 c) }
+  | LPAR CONT cont_type RPAR { fun c x -> DefContT ($3 c) }
+
+sub_type :
+  | str_type { fun c x -> SubT (Final, [], $1 c x) }
+  | LPAR SUB var_list str_type RPAR
+    { fun c x -> SubT (NoFinal,
+        List.map (fun y -> VarHT (StatX y.it)) ($3 c type_), $4 c x) }
+  | LPAR SUB FINAL var_list str_type RPAR
+    { fun c x -> SubT (Final,
+        List.map (fun y -> VarHT (StatX y.it)) ($4 c type_), $5 c x) }
+
 table_type :
   | limits ref_type { fun c -> TableT ($1, $2 c) }
 
@@ -395,6 +489,9 @@ type_use :
 
 
 /* Immediates */
+
+nat32 :
+  | NAT { nat32 $1 (at ()) }
 
 num :
   | NAT { $1 @@ at () }
@@ -475,8 +572,8 @@ plain_instr :
   | BR_TABLE var var_list
     { fun c -> let xs, x = Lib.List.split_last ($2 c label :: $3 c label) in
       br_table xs x }
-  | BR_ON_NULL var { fun c -> br_on_null ($2 c label) }
-  | BR_ON_NON_NULL var { fun c -> br_on_non_null ($2 c label) }
+  | BR_ON_NULL var { fun c -> $1 ($2 c label) }
+  | BR_ON_CAST var ref_type ref_type { fun c -> $1 ($2 c label) ($3 c) ($4 c) }
   | RETURN { fun c -> return }
   | CALL var { fun c -> call ($2 c func) }
   | CALL_REF var { fun c -> call_ref ($2 c type_) }
@@ -522,9 +619,29 @@ plain_instr :
   | MEMORY_INIT var { fun c -> memory_init ($2 c data) }
   | DATA_DROP var { fun c -> data_drop ($2 c data) }
   | REF_NULL heap_type { fun c -> ref_null ($2 c) }
+  | REF_FUNC var { fun c -> ref_func ($2 c func) }
   | REF_IS_NULL { fun c -> ref_is_null }
   | REF_AS_NON_NULL { fun c -> ref_as_non_null }
-  | REF_FUNC var { fun c -> ref_func ($2 c func) }
+  | REF_TEST ref_type { fun c -> ref_test ($2 c) }
+  | REF_CAST ref_type { fun c -> ref_cast ($2 c) }
+  | REF_EQ { fun c -> ref_eq }
+  | REF_I31 { fun c -> ref_i31 }
+  | I31_GET { fun c -> $1 }
+  | STRUCT_NEW var { fun c -> $1 ($2 c type_) }
+  | STRUCT_GET var var { fun c -> let x = $2 c type_ in $1 x ($3 c (field x.it)) }
+  | STRUCT_SET var var { fun c -> let x = $2 c type_ in struct_set x ($3 c (field x.it)) }
+  | ARRAY_NEW var { fun c -> $1 ($2 c type_) }
+  | ARRAY_NEW_FIXED var nat32 { fun c -> array_new_fixed ($2 c type_) $3 }
+  | ARRAY_NEW_ELEM var var { fun c -> array_new_elem ($2 c type_) ($3 c elem) }
+  | ARRAY_NEW_DATA var var { fun c -> array_new_data ($2 c type_) ($3 c data) }
+  | ARRAY_GET var { fun c -> $1 ($2 c type_) }
+  | ARRAY_SET var { fun c -> array_set ($2 c type_) }
+  | ARRAY_LEN { fun c -> array_len }
+  | ARRAY_COPY var var { fun c -> array_copy ($2 c type_) ($3 c type_) }
+  | ARRAY_FILL var { fun c -> array_fill ($2 c type_) }
+  | ARRAY_INIT_DATA var var { fun c -> array_init_data ($2 c type_) ($3 c data) }
+  | ARRAY_INIT_ELEM var var { fun c -> array_init_elem ($2 c type_) ($3 c elem) }
+  | EXTERN_CONVERT { fun c -> $1 }
   | CONST num { fun c -> fst (num $1 $2) }
   | TEST { fun c -> $1 }
   | COMPARE { fun c -> $1 }
@@ -1189,15 +1306,35 @@ inline_export :
 
 /* Modules */
 
-type_ :
-  | def_type { let at = at () in fun c -> define_type c ($1 c @@ at) }
-
 type_def :
-  | LPAR TYPE type_ RPAR
+  | LPAR TYPE sub_type RPAR
     { let at = at () in
-      fun c -> ignore (anon_type c at); fun () -> $3 c }
-  | LPAR TYPE bind_var type_ RPAR  /* Sugar */
-    { fun c -> ignore (bind_type c $3); fun () -> $4 c }
+      fun c -> let x = anon_type c at in fun () -> $3 c x }
+  | LPAR TYPE bind_var sub_type RPAR  /* Sugar */
+    { fun c -> let x = bind_type c $3 in fun () -> $4 c x }
+
+type_def_list :
+  | /* empty */ { fun c () -> [] }
+  | type_def type_def_list
+    { fun c -> let tf = $1 c in let tsf = $2 c in fun () ->
+      let st = tf () and sts = tsf () in st::sts }
+
+rec_type :
+  | type_def
+    { fun c -> let tf = $1 c in fun () ->
+      let st = tf () in
+      define_def_type c (DefT (RecT [st], 0l));
+      RecT [st] }
+  | LPAR REC type_def_list RPAR
+    { fun c -> let tf = $3 c in fun () ->
+      let sts = tf () in
+      Lib.List32.iteri (fun i _ -> define_def_type c (DefT (RecT sts, i))) sts;
+      RecT sts }
+
+type_ :
+  | rec_type
+    { let at = at () in
+      fun c -> let tf = $1 c in fun () -> define_type c (tf () @@ at) }
 
 start :
   | LPAR START var RPAR
@@ -1209,7 +1346,7 @@ module_fields :
   | module_fields1 { $1 }
 
 module_fields1 :
-  | type_def module_fields
+  | type_ module_fields
     { fun c -> let tf = $1 c in let mff = $2 c in
       fun () -> tf (); mff () }
   | global module_fields
@@ -1355,7 +1492,8 @@ literal_vec :
 
 literal_ref :
   | LPAR REF_NULL heap_type RPAR { Value.NullRef ($3 (empty_context ())) }
-  | LPAR REF_EXTERN NAT RPAR { Script.ExternRef (nat32 $3 (ati 3)) }
+  | LPAR REF_HOST NAT RPAR { Script.HostRef (nat32 $3 (ati 3)) }
+  | LPAR REF_EXTERN NAT RPAR { Extern.ExternRef (Script.HostRef (nat32 $3 (ati 3))) }
 
 literal :
   | literal_num { Value.Num $1 @@ at () }
@@ -1378,14 +1516,18 @@ result :
   | literal_num { NumResult (NumPat ($1 @@ at())) @@ at () }
   | LPAR CONST NAN RPAR { NumResult (NanPat (nanop $2 ($3 @@ ati 3))) @@ at () }
   | literal_ref { RefResult (RefPat ($1 @@ at ())) @@ at () }
+  | LPAR REF RPAR { RefResult (RefTypePat AnyHT) @@ at () }
+  | LPAR REF_EQ RPAR { RefResult (RefTypePat EqHT) @@ at () }
+  | LPAR REF_I31 RPAR { RefResult (RefTypePat I31HT) @@ at () }
+  | LPAR REF_STRUCT RPAR { RefResult (RefTypePat StructHT) @@ at () }
+  | LPAR REF_ARRAY RPAR { RefResult (RefTypePat ArrayHT) @@ at () }
+  | LPAR REF_NULL RPAR { RefResult NullPat @@ at () }
   | LPAR REF_FUNC RPAR { RefResult (RefTypePat FuncHT) @@ at () }
   | LPAR REF_EXTERN RPAR { RefResult (RefTypePat ExternHT) @@ at () }
-  | LPAR REF_NULL RPAR { RefResult NullPat @@ at () }
-  | LPAR VEC_CONST VEC_SHAPE numpat_list RPAR {
-    if V128.num_lanes $3 <> List.length $4 then
-      error (at ()) "wrong number of lane literals";
-    VecResult (VecPat (Value.V128 ($3, List.map (fun lit -> lit $3) $4))) @@ at ()
-  }
+  | LPAR VEC_CONST VEC_SHAPE numpat_list RPAR
+    { if V128.num_lanes $3 <> List.length $4 then
+        error (at ()) "wrong number of lane literals";
+      VecResult (VecPat (Value.V128 ($3, List.map (fun lit -> lit $3) $4))) @@ at () }
 
 result_list :
   | /* empty */ { [] }
