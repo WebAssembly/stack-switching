@@ -86,6 +86,13 @@ let array_type (c : context) x =
   | DefArrayT at -> at
   | _ -> error x.at ("non-array type " ^ I32.to_string_u x.it)
 
+let tag_type (c : context) x =
+  let TagT ht = tag c x in
+  match ht with
+  | DefHT dt -> TagT (DefHT dt)
+  | VarHT (StatX y)  -> TagT (as_heap_str_type (DefFuncT (func_type c (y @@ x.at))))
+  | _ -> assert false
+
 let refer category (s : Free.Set.t) x =
   if not (Free.Set.mem x.it s) then
     error x.at
@@ -416,7 +423,7 @@ let check_resume_table (c : context) ts2 (xys : (idx * idx) list) at =
     | _ -> assert false
   in
   List.iter (fun (x1, x2) ->
-    let FuncT (ts3, ts4) = as_func_tag_type (tag c x1) in
+    let FuncT (ts3, ts4) = as_func_tag_type (tag_type c x1) in
     let (_, ts') = label c x2 in
     match Lib.List.last_opt ts'  with
     | Some (RefT (nul', ht)) when is_heap_cont_type ht ->
@@ -479,7 +486,7 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
     (ts1 @ [NumT I32T]) --> ts2, List.map (fun x -> x @@ e.at) xs
 
   | Throw x ->
-    let tag = tag c x in
+    let tag = tag_type c x in
     check_tag_type c tag e.at;
     let FuncT (ts1, _) = as_func_tag_type tag in
     ts1 -->... [], []
@@ -634,7 +641,7 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
       [RefT (NoNull, as_heap_str_type (DefContT ct'))], []
 
   | Suspend x ->
-    let tag = tag c x in
+    let tag = tag_type c x in
     let FuncT (ts1, ts2) = as_func_tag_type tag in
     ts1 --> ts2, []
 
@@ -647,7 +654,7 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
   | ResumeThrow (x, y, xys) ->
     let ct = cont_type c x in
     let FuncT (ts1, ts2) = as_func_cont_type ct in
-    let tag = tag c y in
+    let tag = tag_type c y in
     let FuncT (ts0, _) = as_func_tag_type tag in
     check_resume_table c ts2 xys e.at;
     (ts0 @ [RefT (Null, as_heap_str_type (DefContT ct))]) --> ts2, []
@@ -1030,7 +1037,7 @@ and check_block (c : context) (es : instr list) (it : instr_type) at =
 
 and check_catch (ct : idx * instr list) (c : context) (ft : instr_type) at =
   let (x, es) = ct in
-  let FuncT (ts1, _) = as_func_tag_type (tag c x) in
+  let FuncT (ts1, _) = as_func_tag_type (tag_type c x) in
   let InstrT (_, ts2, xs) = ft in
   check_block c es (InstrT (ts1, ts2, xs)) at
 
