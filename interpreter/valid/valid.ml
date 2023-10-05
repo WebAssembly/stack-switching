@@ -124,7 +124,8 @@ let check_heap_type (c : context) (t : heap_type) at =
   | FuncHT | NoFuncHT
   | ExternHT | NoExternHT -> ()
   | VarHT (StatX x) -> let _dt = type_ c (x @@ at) in ()
-  | VarHT (RecX _) | DefHT _ -> assert false
+  | VarHT (RecX _) -> assert false
+  | DefHT _ -> ()
   | BotHT -> ()
 
 let check_ref_type (c : context) (t : ref_type) at =
