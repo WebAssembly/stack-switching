@@ -13,7 +13,7 @@ let lookup c x = Lib.List32.nth c x
 let abs_of_str_type _c = function
   | DefStructT _ | DefArrayT _ -> StructHT
   | DefFuncT _ -> FuncHT
-  | DefContT _ -> assert false (* TODO(dhil): should we add an abstract ContHT? *)
+  | DefContT _ -> ContHT
 
 let rec top_of_str_type c st =
   top_of_heap_type c (abs_of_str_type c st)
@@ -22,6 +22,7 @@ and top_of_heap_type c = function
   | AnyHT | NoneHT | EqHT | StructHT | ArrayHT | I31HT -> AnyHT
   | FuncHT | NoFuncHT -> FuncHT
   | ExternHT | NoExternHT -> ExternHT
+  | ContHT -> ContHT
   | DefHT dt -> top_of_str_type c (expand_def_type dt)
   | VarHT (StatX x) -> top_of_str_type c (expand_def_type (lookup c x))
   | VarHT (RecX _) | BotHT -> assert false
@@ -33,6 +34,7 @@ and bot_of_heap_type c = function
   | AnyHT | NoneHT | EqHT | StructHT | ArrayHT | I31HT -> NoneHT
   | FuncHT | NoFuncHT -> NoFuncHT
   | ExternHT | NoExternHT -> NoExternHT
+  | ContHT -> ContHT
   | DefHT dt -> bot_of_str_type c (expand_def_type dt)
   | VarHT (StatX x) -> bot_of_str_type c (expand_def_type (lookup c x))
   | VarHT (RecX _) | BotHT -> assert false
@@ -73,6 +75,7 @@ let rec match_heap_type c t1 t2 =
   | NoneHT, t -> match_heap_type c t AnyHT
   | NoFuncHT, t -> match_heap_type c t FuncHT
   | NoExternHT, t -> match_heap_type c t ExternHT
+  | ContHT, t -> match_heap_type c t ContHT
   | VarHT (StatX x1), _ -> match_heap_type c (DefHT (lookup c x1)) t2
   | _, VarHT (StatX x2) -> match_heap_type c t1 (DefHT (lookup c x2))
   | DefHT dt1, DefHT dt2 -> match_def_type c dt1 dt2
@@ -85,6 +88,7 @@ let rec match_heap_type c t1 t2 =
     | DefArrayT _, EqHT -> true
     | DefArrayT _, ArrayHT -> true
     | DefFuncT _, FuncHT -> true
+    | DefContT _, ContHT -> true
     | _ -> false
     )
   | BotHT, _ -> true

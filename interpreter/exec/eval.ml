@@ -177,6 +177,18 @@ let drop n (vs : 'a stack) at =
 
 let split n (vs : 'a stack) at = take n vs at, drop n vs at
 
+let str_type_of_heap_type (inst : module_inst) ht : str_type =
+  match ht with
+  | VarHT (StatX x | RecX x) -> str_type inst (x @@ Source.no_region)
+  | DefHT dt -> expand_def_type dt
+  | _ -> Printf.printf "HERE\n%!"; assert false
+
+let func_type_of_cont_type (inst : module_inst) (ContT ht) : func_type =
+  as_func_str_type (str_type_of_heap_type inst ht)
+
+let func_type_of_tag_type (inst : module_inst) (TagT ht) : func_type =
+  as_func_str_type (str_type_of_heap_type inst ht)
+
 
 (* Evaluation *)
 
@@ -243,7 +255,7 @@ let rec step (c : config) : config =
 
       | Throw x, vs ->
         let tagt = tag c.frame.inst x in
-        let FuncT (ts, _) = as_func_tag_type (Tag.type_of tagt) in
+        let FuncT (ts, _) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
         let vs0, vs' = split (Lib.List32.length ts) vs e.at in
         vs', [Throwing (tagt, vs0) @@ e.at]
 
@@ -354,7 +366,7 @@ let rec step (c : config) : config =
       | ContBind (x, y), Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
         let ct = cont_type c.frame.inst y in
         let ct = subst_cont_type (subst_of c.frame.inst) ct in
-        let FuncT (ts', _) = as_func_cont_type ct in
+        let FuncT (ts', _) = func_type_of_cont_type c.frame.inst ct in
         let args, vs' =
           try split (Int32.sub n (Lib.List32.length ts')) vs e.at
           with Failure _ -> Crash.error e.at "type mismatch at continuation bind"
@@ -365,7 +377,7 @@ let rec step (c : config) : config =
 
       | Suspend x, vs ->
         let tagt = tag c.frame.inst x in
-        let FuncT (ts, _) = as_func_tag_type (Tag.type_of tagt) in
+        let FuncT (ts, _) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
         let args, vs' = split (Lib.List32.length ts) vs e.at in
         vs', [Suspending (tagt, args, fun code -> code) @@ e.at]
 
@@ -389,7 +401,7 @@ let rec step (c : config) : config =
 
       | ResumeThrow (x, y, xls), Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
         let tagt = tag c.frame.inst y in
-        let FuncT (ts, _) = as_func_tag_type (Tag.type_of tagt) in
+        let FuncT (ts, _) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
         let hs = List.map (fun (x, l) -> tag c.frame.inst x, l) xls in
         let args, vs' = split (Lib.List32.length ts) vs e.at in
         cont := None;
@@ -1231,7 +1243,7 @@ let rec step (c : config) : config =
 
     | Handle (Some hs, (vs', {it = Suspending (tagt, vs1, ctxt); at} :: es')), vs
       when List.mem_assq tagt hs ->
-      let FuncT (_, ts) = as_func_tag_type (Tag.type_of tagt) in
+      let FuncT (_, ts) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
       let ctxt' code = compose (ctxt code) (vs', es') in
       [Ref (ContRef (ref (Some (Lib.List32.length ts, ctxt'))))] @ vs1 @ vs,
       [Plain (Br (List.assq tagt hs)) @@ e.at]

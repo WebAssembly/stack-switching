@@ -18,6 +18,7 @@ type heap_type =
   | AnyHT | NoneHT | EqHT | I31HT | StructHT | ArrayHT
   | FuncHT | NoFuncHT
   | ExternHT | NoExternHT
+  | ContHT
   | VarHT of var
   | DefHT of def_type
   | BotHT
@@ -149,6 +150,7 @@ let subst_heap_type s = function
   | NoFuncHT -> NoFuncHT
   | ExternHT -> ExternHT
   | NoExternHT -> NoExternHT
+  | ContHT -> ContHT
   | VarHT x -> s x
   | DefHT dt -> DefHT dt  (* assume closed *)
   | BotHT -> BotHT
@@ -277,7 +279,6 @@ let unpacked_storage_type = function
 
 let unpacked_field_type (FieldT (_mut, t)) = unpacked_storage_type t
 
-
 let as_func_str_type (st : str_type) : func_type =
   match st with
   | DefFuncT ft -> ft
@@ -288,17 +289,6 @@ let as_cont_str_type (dt : str_type) : cont_type =
   | DefContT ct -> ct
   | _ -> assert false
 
-let as_func_heap_type (ht : heap_type) : func_type =
-  match ht with
-  | DefHT dt -> as_func_str_type (expand_def_type dt)
-  | _ -> assert false
-
-let as_func_cont_type (ContT ct) : func_type =
-  as_func_heap_type ct
-
-let as_func_tag_type (TagT et) : func_type =
-  as_func_heap_type et
-
 let as_struct_str_type (st : str_type) : struct_type =
   match st with
   | DefStructT st -> st
@@ -308,9 +298,6 @@ let as_array_str_type (st : str_type) : array_type =
   match st with
   | DefArrayT at -> at
   | _ -> assert false
-
-let as_heap_str_type (st : str_type) : heap_type =
-  DefHT (DefT (RecT [SubT (Final, [], st)], Int32.of_int 0))
 
 let extern_type_of_import_type (ImportT (et, _, _)) = et
 let extern_type_of_export_type (ExportT (et, _)) = et
@@ -372,6 +359,7 @@ let rec string_of_heap_type = function
   | NoFuncHT -> "nofunc"
   | ExternHT -> "extern"
   | NoExternHT -> "noextern"
+  | ContHT -> "cont"
   | VarHT x -> string_of_var x
   | DefHT dt -> "(" ^ string_of_def_type dt ^ ")"
   | BotHT -> "something"

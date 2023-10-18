@@ -74,7 +74,7 @@ let func_type (c : context) x =
 let cont_type (c : context) x =
   match expand_def_type (type_ c x) with
   | DefContT ct -> ct
-  | _ -> error x.at ("non-continuation type " ^ Int32.to_string x.it)
+  | _ as t -> Printf.printf "%s\n%!" (string_of_str_type t); error x.at ("non-continuation type " ^ Int32.to_string x.it)
 
 let struct_type (c : context) x =
   match expand_def_type (type_ c x) with
@@ -86,13 +86,6 @@ let array_type (c : context) x =
   | DefArrayT at -> at
   | _ -> error x.at ("non-array type " ^ I32.to_string_u x.it)
 
-let tag_type (c : context) x =
-  let TagT ht = tag c x in
-  match ht with
-  | DefHT dt -> TagT (DefHT dt)
-  | VarHT (StatX y)  -> TagT (as_heap_str_type (DefFuncT (func_type c (y @@ x.at))))
-  | _ -> assert false
-
 let refer category (s : Free.Set.t) x =
   if not (Free.Set.mem x.it s) then
     error x.at
@@ -100,6 +93,28 @@ let refer category (s : Free.Set.t) x =
 
 let refer_func (c : context) x = refer "function" c.refs.Free.funcs x
 
+(* Conversions *)
+
+let cont_type_of_heap_type (c : context) (ht : heap_type) at : cont_type =
+  match ht with
+  | DefHT dt -> as_cont_str_type (expand_def_type dt)
+  | VarHT (RecX x | StatX x) -> cont_type c (x @@ at)
+  | _ -> assert false
+
+let func_type_of_heap_type (c : context) (ht : heap_type) at : func_type =
+  match ht with
+  | DefHT dt -> as_func_str_type (expand_def_type dt)
+  | VarHT (RecX x | StatX x) -> func_type c (x @@ at)
+  | _ -> assert false
+
+let func_type_of_cont_type (c : context) (ContT ht) at : func_type =
+  func_type_of_heap_type c ht at
+
+let func_type_of_tag_type (c : context) (TagT ht) at : func_type =
+  func_type_of_heap_type c ht at
+
+let heap_type_of_str_type (_c : context) (st : str_type) : heap_type =
+  DefHT (DefT (RecT [SubT (Final, [], st)], Int32.of_int 0))
 
 (* Types *)
 
@@ -122,10 +137,11 @@ let check_heap_type (c : context) (t : heap_type) at =
   match t with
   | AnyHT | NoneHT | EqHT | I31HT | StructHT | ArrayHT
   | FuncHT | NoFuncHT
-  | ExternHT | NoExternHT -> ()
+  | ExternHT | NoExternHT
+  | ContHT -> ()
   | VarHT (StatX x) -> let _dt = type_ c (x @@ at) in ()
   | VarHT (RecX _) -> assert false
-  | DefHT _ -> ()
+  | DefHT _ -> assert false
   | BotHT -> ()
 
 let check_ref_type (c : context) (t : ref_type) at =
@@ -404,32 +420,13 @@ let check_memop (c : context) (memop : ('t, 's) memop) ty_size get_sz at =
  *)
 
 let check_resume_table (c : context) ts2 (xys : (idx * idx) list) at =
-  let is_heap_cont_type = function
-    | VarHT (StatX x) ->
-       (try ignore(cont_type c (x @@ at)); true with _ -> false)
-    | DefHT dt ->
-       (match expand_def_type dt with
-        | DefContT _ -> true
-        | _ -> false)
-    | _ -> false
-  in
-  let extract_cont_heap_type = function
-    | VarHT (StatX x) ->
-       let ContT ht = cont_type c (x @@ at) in
-       ht
-    | DefHT dt ->
-       (match expand_def_type dt with
-        | DefContT (ContT ht) -> ht
-        | _ -> assert false)
-    | _ -> assert false
-  in
   List.iter (fun (x1, x2) ->
-    let FuncT (ts3, ts4) = as_func_tag_type (tag_type c x1) in
+    let FuncT (ts3, ts4) = func_type_of_tag_type c (tag c x1) x1.at in
     let (_, ts') = label c x2 in
     match Lib.List.last_opt ts'  with
-    | Some (RefT (nul', ht)) when is_heap_cont_type ht ->
-      let ht' = extract_cont_heap_type ht in
-      let ft' = as_func_heap_type ht' in
+    | Some (RefT (nul', ht)) ->
+      let ct = cont_type_of_heap_type c ht x2.at in
+      let ft' = func_type_of_cont_type c ct x2.at in
       require (match_func_type c.types (FuncT (ts4, ts2)) ft') x2.at
         "type mismatch in continuation type";
       check_stack c (ts3 @ [RefT (nul', ht)]) ts' x2.at
@@ -487,9 +484,8 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
     (ts1 @ [NumT I32T]) --> ts2, List.map (fun x -> x @@ e.at) xs
 
   | Throw x ->
-    let tag = tag_type c x in
-    check_tag_type c tag e.at;
-    let FuncT (ts1, _) = as_func_tag_type tag in
+    let tag = tag c x in
+    let FuncT (ts1, _) = func_type_of_tag_type c tag x.at in
     ts1 -->... [], []
 
   | Rethrow x ->
@@ -624,41 +620,41 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
 
   | ContNew x ->
     let ct = cont_type c x in
-    let ft = as_func_cont_type ct in
-    [RefT (Null, as_heap_str_type (DefFuncT ft))] -->
+    let ft = func_type_of_cont_type c ct x.at in
+    [RefT (Null, heap_type_of_str_type c (DefFuncT ft))] -->
     [RefT (NoNull, DefHT (type_ c x))], []
 
   | ContBind (x, y) ->
     let ct = cont_type c x in
-    let FuncT (ts1, ts2) = as_func_cont_type ct in
+    let FuncT (ts1, ts2) = func_type_of_cont_type c ct x.at in
     let ct' = cont_type c y in
-    let FuncT (ts1', _) as ft' = as_func_cont_type ct' in
+    let FuncT (ts1', _) as ft' = func_type_of_cont_type c ct' y.at in
     require (List.length ts1 >= List.length ts1') x.at
       "type mismatch in continuation arguments";
     let ts11, ts12 = Lib.List.split (List.length ts1 - List.length ts1') ts1 in
     require (match_func_type c.types (FuncT (ts12, ts2)) ft') e.at
       "type mismatch in continuation types";
-    (ts11 @ [RefT (Null, as_heap_str_type (DefContT ct))]) -->
-      [RefT (NoNull, as_heap_str_type (DefContT ct'))], []
+    (ts11 @ [RefT (Null, heap_type_of_str_type c (DefContT ct))]) -->
+      [RefT (NoNull, heap_type_of_str_type c (DefContT ct'))], []
 
   | Suspend x ->
-    let tag = tag_type c x in
-    let FuncT (ts1, ts2) = as_func_tag_type tag in
+    let tag = tag c x in
+    let FuncT (ts1, ts2) = func_type_of_tag_type c tag x.at in
     ts1 --> ts2, []
 
   | Resume (x, xys) ->
     let ct = cont_type c x in
-    let FuncT (ts1, ts2) = as_func_cont_type ct in
+    let FuncT (ts1, ts2) = func_type_of_cont_type c ct x.at in
     check_resume_table c ts2 xys e.at;
-    (ts1 @ [RefT (Null, as_heap_str_type (DefContT ct))]) --> ts2, []
+    (ts1 @ [RefT (Null, heap_type_of_str_type c (DefContT ct))]) --> ts2, []
 
   | ResumeThrow (x, y, xys) ->
     let ct = cont_type c x in
-    let FuncT (ts1, ts2) = as_func_cont_type ct in
-    let tag = tag_type c y in
-    let FuncT (ts0, _) = as_func_tag_type tag in
+    let FuncT (ts1, ts2) = func_type_of_cont_type c ct x.at in
+    let tag = tag c y in
+    let FuncT (ts0, _) = func_type_of_tag_type c tag y.at in
     check_resume_table c ts2 xys e.at;
-    (ts0 @ [RefT (Null, as_heap_str_type (DefContT ct))]) --> ts2, []
+    (ts0 @ [RefT (Null, heap_type_of_str_type c (DefContT ct))]) --> ts2, []
 
   | Barrier (bt, es) ->
     let InstrT (ts1, ts2, xs) as ft = check_block_type c bt e.at in
@@ -1038,7 +1034,7 @@ and check_block (c : context) (es : instr list) (it : instr_type) at =
 
 and check_catch (ct : idx * instr list) (c : context) (ft : instr_type) at =
   let (x, es) = ct in
-  let FuncT (ts1, _) = as_func_tag_type (tag_type c x) in
+  let FuncT (ts1, _) = func_type_of_tag_type c (tag c x) x.at in
   let InstrT (_, ts2, xs) = ft in
   check_block c es (InstrT (ts1, ts2, xs)) at
 

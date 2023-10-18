@@ -189,6 +189,7 @@ let heap_type s =
       | -0x14 -> I31HT
       | -0x15 -> StructHT
       | -0x16 -> ArrayHT
+      | -0x17 -> ContHT
       | _ -> error s pos "malformed heap type"
     )
   ] s
@@ -206,6 +207,7 @@ let ref_type s =
   | -0x14 -> (Null, I31HT)
   | -0x15 -> (Null, StructHT)
   | -0x16 -> (Null, ArrayHT)
+  | -0x17 -> (Null, ContHT)
   | -0x1c -> (NoNull, heap_type s)
   | -0x1d -> (Null, heap_type s)
   | _ -> error s pos "malformed reference type"

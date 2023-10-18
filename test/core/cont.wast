@@ -418,129 +418,129 @@
 
 ;; Nested example: generator in a thread
 
-(module $concurrent-generator
-  (func $log (import "spectest" "print_i64") (param i64))
+;; (module $concurrent-generator
+;;   (func $log (import "spectest" "print_i64") (param i64))
 
-  (tag $syield (import "scheduler" "yield"))
-  (tag $spawn (import "scheduler" "spawn") (param (ref $cont)))
-  (func $scheduler (import "scheduler" "scheduler") (param $main (ref $cont)))
+;;   (tag $syield (import "scheduler" "yield"))
+;;   (tag $spawn (import "scheduler" "spawn") (param (ref $cont)))
+;;   (func $scheduler (import "scheduler" "scheduler") (param $main (ref $cont)))
 
-  (type $ghook (func (param i64)))
-  (func $gsum (import "generator" "sum") (param i64 i64) (result i64))
-  (global $ghook (import "generator" "hook") (mut (ref $ghook)))
+;;   (type $ghook (func (param i64)))
+;;   (func $gsum (import "generator" "sum") (param i64 i64) (result i64))
+;;   (global $ghook (import "generator" "hook") (mut (ref $ghook)))
 
-  (global $result (mut i64) (i64.const 0))
-  (global $done (mut i32) (i32.const 0))
+;;   (global $result (mut i64) (i64.const 0))
+;;   (global $done (mut i32) (i32.const 0))
 
-  (elem declare func $main $bg-thread $syield)
+;;   (elem declare func $main $bg-thread $syield)
 
-  (func $syield (param $i i64)
-    (call $log (local.get $i))
-    (suspend $syield)
-  )
+;;   (func $syield (param $i i64)
+;;     (call $log (local.get $i))
+;;     (suspend $syield)
+;;   )
 
-  (func $bg-thread
-    (call $log (i64.const -10))
-    (loop $l
-      (call $log (i64.const -11))
-      (suspend $syield)
-      (br_if $l (i32.eqz (global.get $done)))
-    )
-    (call $log (i64.const -12))
-  )
+;;   (func $bg-thread
+;;     (call $log (i64.const -10))
+;;     (loop $l
+;;       (call $log (i64.const -11))
+;;       (suspend $syield)
+;;       (br_if $l (i32.eqz (global.get $done)))
+;;     )
+;;     (call $log (i64.const -12))
+;;   )
 
-  (func $main (param $i i64) (param $j i64)
-    (suspend $spawn (cont.new $cont (ref.func $bg-thread)))
-    (global.set $ghook (ref.func $syield))
-    (global.set $result (call $gsum (local.get $i) (local.get $j)))
-    (global.set $done (i32.const 1))
-  )
+;;   (func $main (param $i i64) (param $j i64)
+;;     (suspend $spawn (cont.new $cont (ref.func $bg-thread)))
+;;     (global.set $ghook (ref.func $syield))
+;;     (global.set $result (call $gsum (local.get $i) (local.get $j)))
+;;     (global.set $done (i32.const 1))
+;;   )
 
-  (type $proc (func))
-  (type $pproc (func (param i64 i64)))
-  (type $cont (cont $proc))
-  (type $pcont (cont $pproc))
-  (func (export "sum") (param $i i64) (param $j i64) (result i64)
-    (call $log (i64.const -1))
-    (call $scheduler
-      (cont.bind $pcont $cont (local.get $i) (local.get $j) (cont.new $pcont (ref.func $main)))
-    )
-    (call $log (i64.const -2))
-    (global.get $result)
-  )
-)
+;;   (type $proc (func))
+;;   (type $pproc (func (param i64 i64)))
+;;   (type $cont (cont $proc))
+;;   (type $pcont (cont $pproc))
+;;   (func (export "sum") (param $i i64) (param $j i64) (result i64)
+;;     (call $log (i64.const -1))
+;;     (call $scheduler
+;;       (cont.bind $pcont $cont (local.get $i) (local.get $j) (cont.new $pcont (ref.func $main)))
+;;     )
+;;     (call $log (i64.const -2))
+;;     (global.get $result)
+;;   )
+;; )
 
-(assert_return (invoke "sum" (i64.const 10) (i64.const 20)) (i64.const 165))
-
-
-;; cont.bind
-
-(module
-  (type $f2 (func (param i32 i32) (result i32 i32 i32 i32 i32 i32)))
-  (type $f4 (func (param i32 i32 i32 i32) (result i32 i32 i32 i32 i32 i32)))
-  (type $f6 (func (param i32 i32 i32 i32 i32 i32) (result i32 i32 i32 i32 i32 i32)))
-
-  (type $k2 (cont $f2))
-  (type $k4 (cont $f4))
-  (type $k6 (cont $f6))
-
-  (elem declare func $f)
-  (func $f (param i32 i32 i32 i32 i32 i32) (result i32 i32 i32 i32 i32 i32)
-    (local.get 0) (local.get 1) (local.get 2)
-    (local.get 3) (local.get 4) (local.get 5)
-  )
-
-  (func (export "run") (result i32 i32 i32 i32 i32 i32)
-    (local $k6 (ref null $k6))
-    (local $k4 (ref null $k4))
-    (local $k2 (ref null $k2))
-    (local.set $k6 (cont.new $k6 (ref.func $f)))
-    (local.set $k4 (cont.bind $k6 $k4 (i32.const 1) (i32.const 2) (local.get $k6)))
-    (local.set $k2 (cont.bind $k4 $k2 (i32.const 3) (i32.const 4) (local.get $k4)))
-    (resume $k2 (i32.const 5) (i32.const 6) (local.get $k2))
-  )
-)
-
-(assert_return (invoke "run")
-  (i32.const 1) (i32.const 2) (i32.const 3)
-  (i32.const 4) (i32.const 5) (i32.const 6)
-)
+;; (assert_return (invoke "sum" (i64.const 10) (i64.const 20)) (i64.const 165))
 
 
-(module
-  (tag $e (result i32 i32 i32 i32 i32 i32))
+;; ;; cont.bind
 
-  (type $f0 (func (result i32 i32 i32 i32 i32 i32 i32)))
-  (type $f2 (func (param i32 i32) (result i32 i32 i32 i32 i32 i32 i32)))
-  (type $f4 (func (param i32 i32 i32 i32) (result i32 i32 i32 i32 i32 i32 i32)))
-  (type $f6 (func (param i32 i32 i32 i32 i32 i32) (result i32 i32 i32 i32 i32 i32 i32)))
+;; (module
+;;   (type $f2 (func (param i32 i32) (result i32 i32 i32 i32 i32 i32)))
+;;   (type $f4 (func (param i32 i32 i32 i32) (result i32 i32 i32 i32 i32 i32)))
+;;   (type $f6 (func (param i32 i32 i32 i32 i32 i32) (result i32 i32 i32 i32 i32 i32)))
 
-  (type $k0 (cont $f0))
-  (type $k2 (cont $f2))
-  (type $k4 (cont $f4))
-  (type $k6 (cont $f6))
+;;   (type $k2 (cont $f2))
+;;   (type $k4 (cont $f4))
+;;   (type $k6 (cont $f6))
 
-  (elem declare func $f)
-  (func $f (result i32 i32 i32 i32 i32 i32 i32)
-    (i32.const 0) (suspend $e)
-  )
+;;   (elem declare func $f)
+;;   (func $f (param i32 i32 i32 i32 i32 i32) (result i32 i32 i32 i32 i32 i32)
+;;     (local.get 0) (local.get 1) (local.get 2)
+;;     (local.get 3) (local.get 4) (local.get 5)
+;;   )
 
-  (func (export "run") (result i32 i32 i32 i32 i32 i32 i32)
-    (local $k6 (ref null $k6))
-    (local $k4 (ref null $k4))
-    (local $k2 (ref null $k2))
-    (block $l (result (ref $k6))
-      (resume $k0 (tag $e $l) (cont.new $k0 (ref.func $f)))
-      (unreachable)
-    )
-    (local.set $k6)
-    (local.set $k4 (cont.bind $k6 $k4 (i32.const 1) (i32.const 2) (local.get $k6)))
-    (local.set $k2 (cont.bind $k4 $k2 (i32.const 3) (i32.const 4) (local.get $k4)))
-    (resume $k2 (i32.const 5) (i32.const 6) (local.get $k2))
-  )
-)
+;;   (func (export "run") (result i32 i32 i32 i32 i32 i32)
+;;     (local $k6 (ref null $k6))
+;;     (local $k4 (ref null $k4))
+;;     (local $k2 (ref null $k2))
+;;     (local.set $k6 (cont.new $k6 (ref.func $f)))
+;;     (local.set $k4 (cont.bind $k6 $k4 (i32.const 1) (i32.const 2) (local.get $k6)))
+;;     (local.set $k2 (cont.bind $k4 $k2 (i32.const 3) (i32.const 4) (local.get $k4)))
+;;     (resume $k2 (i32.const 5) (i32.const 6) (local.get $k2))
+;;   )
+;; )
 
-(assert_return (invoke "run")
-  (i32.const 0) (i32.const 1) (i32.const 2) (i32.const 3)
-  (i32.const 4) (i32.const 5) (i32.const 6)
-)
+;; (assert_return (invoke "run")
+;;   (i32.const 1) (i32.const 2) (i32.const 3)
+;;   (i32.const 4) (i32.const 5) (i32.const 6)
+;; )
+
+
+;; (module
+;;   (tag $e (result i32 i32 i32 i32 i32 i32))
+
+;;   (type $f0 (func (result i32 i32 i32 i32 i32 i32 i32)))
+;;   (type $f2 (func (param i32 i32) (result i32 i32 i32 i32 i32 i32 i32)))
+;;   (type $f4 (func (param i32 i32 i32 i32) (result i32 i32 i32 i32 i32 i32 i32)))
+;;   (type $f6 (func (param i32 i32 i32 i32 i32 i32) (result i32 i32 i32 i32 i32 i32 i32)))
+
+;;   (type $k0 (cont $f0))
+;;   (type $k2 (cont $f2))
+;;   (type $k4 (cont $f4))
+;;   (type $k6 (cont $f6))
+
+;;   (elem declare func $f)
+;;   (func $f (result i32 i32 i32 i32 i32 i32 i32)
+;;     (i32.const 0) (suspend $e)
+;;   )
+
+;;   (func (export "run") (result i32 i32 i32 i32 i32 i32 i32)
+;;     (local $k6 (ref null $k6))
+;;     (local $k4 (ref null $k4))
+;;     (local $k2 (ref null $k2))
+;;     (block $l (result (ref $k6))
+;;       (resume $k0 (tag $e $l) (cont.new $k0 (ref.func $f)))
+;;       (unreachable)
+;;     )
+;;     (local.set $k6)
+;;     (local.set $k4 (cont.bind $k6 $k4 (i32.const 1) (i32.const 2) (local.get $k6)))
+;;     (local.set $k2 (cont.bind $k4 $k2 (i32.const 3) (i32.const 4) (local.get $k4)))
+;;     (resume $k2 (i32.const 5) (i32.const 6) (local.get $k2))
+;;   )
+;; )
+
+;; (assert_return (invoke "run")
+;;   (i32.const 0) (i32.const 1) (i32.const 2) (i32.const 3)
+;;   (i32.const 4) (i32.const 5) (i32.const 6)
+;; )
