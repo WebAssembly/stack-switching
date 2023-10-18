@@ -179,9 +179,9 @@ let split n (vs : 'a stack) at = take n vs at, drop n vs at
 
 let str_type_of_heap_type (inst : module_inst) ht : str_type =
   match ht with
-  | VarHT (StatX x | RecX x) -> str_type inst (x @@ Source.no_region)
+  | VarHT (StatX x) -> str_type inst (x @@ Source.no_region)
   | DefHT dt -> expand_def_type dt
-  | _ -> Printf.printf "HERE\n%!"; assert false
+  | _ -> assert false
 
 let func_type_of_cont_type (inst : module_inst) (ContT ht) : func_type =
   as_func_str_type (str_type_of_heap_type inst ht)

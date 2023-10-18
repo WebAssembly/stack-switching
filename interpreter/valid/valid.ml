@@ -74,7 +74,7 @@ let func_type (c : context) x =
 let cont_type (c : context) x =
   match expand_def_type (type_ c x) with
   | DefContT ct -> ct
-  | _ as t -> Printf.printf "%s\n%!" (string_of_str_type t); error x.at ("non-continuation type " ^ Int32.to_string x.it)
+  | _ -> error x.at ("non-continuation type " ^ Int32.to_string x.it)
 
 let struct_type (c : context) x =
   match expand_def_type (type_ c x) with
@@ -93,18 +93,19 @@ let refer category (s : Free.Set.t) x =
 
 let refer_func (c : context) x = refer "function" c.refs.Free.funcs x
 
+
 (* Conversions *)
 
 let cont_type_of_heap_type (c : context) (ht : heap_type) at : cont_type =
   match ht with
   | DefHT dt -> as_cont_str_type (expand_def_type dt)
-  | VarHT (RecX x | StatX x) -> cont_type c (x @@ at)
+  | VarHT (StatX x) -> cont_type c (x @@ at)
   | _ -> assert false
 
 let func_type_of_heap_type (c : context) (ht : heap_type) at : func_type =
   match ht with
   | DefHT dt -> as_func_str_type (expand_def_type dt)
-  | VarHT (RecX x | StatX x) -> func_type c (x @@ at)
+  | VarHT (StatX x) -> func_type c (x @@ at)
   | _ -> assert false
 
 let func_type_of_cont_type (c : context) (ContT ht) at : func_type =
@@ -115,6 +116,7 @@ let func_type_of_tag_type (c : context) (TagT ht) at : func_type =
 
 let heap_type_of_str_type (_c : context) (st : str_type) : heap_type =
   DefHT (DefT (RecT [SubT (Final, [], st)], Int32.of_int 0))
+
 
 (* Types *)
 
@@ -140,8 +142,7 @@ let check_heap_type (c : context) (t : heap_type) at =
   | ExternHT | NoExternHT
   | ContHT -> ()
   | VarHT (StatX x) -> let _dt = type_ c (x @@ at) in ()
-  | VarHT (RecX _) -> assert false
-  | DefHT _ -> assert false
+  | VarHT (RecX _) | DefHT _ -> assert false
   | BotHT -> ()
 
 let check_ref_type (c : context) (t : ref_type) at =
