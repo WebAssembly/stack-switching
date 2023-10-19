@@ -126,6 +126,7 @@ struct
     | ExternHT -> s7 (-0x11)
     | NoExternHT -> s7 (-0x0e)
     | ContHT -> s7 (-0x17)
+    | NoContHT -> s7 (-0x18)
     | VarHT x -> var_type s33 x
     | DefHT _ | BotHT -> assert false
 
@@ -145,6 +146,7 @@ struct
     | (Null, ExternHT) -> s7 (-0x11)
     | (Null, NoExternHT) -> s7 (-0x0e)
     | (Null, ContHT) -> s7 (-0x17)
+    | (Null, NoContHT) -> s7 (-0x18)
     | (Null, t) -> s7 (-0x1d); heap_type t
     | (NoNull, t) -> s7 (-0x1c); heap_type t
 

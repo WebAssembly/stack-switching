@@ -22,7 +22,7 @@ and top_of_heap_type c = function
   | AnyHT | NoneHT | EqHT | StructHT | ArrayHT | I31HT -> AnyHT
   | FuncHT | NoFuncHT -> FuncHT
   | ExternHT | NoExternHT -> ExternHT
-  | ContHT -> ContHT
+  | ContHT | NoContHT -> ContHT
   | DefHT dt -> top_of_str_type c (expand_def_type dt)
   | VarHT (StatX x) -> top_of_str_type c (expand_def_type (lookup c x))
   | VarHT (RecX _) | BotHT -> assert false
@@ -34,7 +34,7 @@ and bot_of_heap_type c = function
   | AnyHT | NoneHT | EqHT | StructHT | ArrayHT | I31HT -> NoneHT
   | FuncHT | NoFuncHT -> NoFuncHT
   | ExternHT | NoExternHT -> NoExternHT
-  | ContHT -> ContHT
+  | ContHT | NoContHT -> NoContHT
   | DefHT dt -> bot_of_str_type c (expand_def_type dt)
   | VarHT (StatX x) -> bot_of_str_type c (expand_def_type (lookup c x))
   | VarHT (RecX _) | BotHT -> assert false
@@ -75,7 +75,7 @@ let rec match_heap_type c t1 t2 =
   | NoneHT, t -> match_heap_type c t AnyHT
   | NoFuncHT, t -> match_heap_type c t FuncHT
   | NoExternHT, t -> match_heap_type c t ExternHT
-  | ContHT, t -> match_heap_type c t ContHT
+  | NoContHT, t -> match_heap_type c t ContHT
   | VarHT (StatX x1), _ -> match_heap_type c (DefHT (lookup c x1)) t2
   | _, VarHT (StatX x2) -> match_heap_type c t1 (DefHT (lookup c x2))
   | DefHT dt1, DefHT dt2 -> match_def_type c dt1 dt2

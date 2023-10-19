@@ -81,7 +81,7 @@ let heap_type = function
   | I31HT | StructHT | ArrayHT -> empty
   | FuncHT | NoFuncHT -> empty
   | ExternHT | NoExternHT -> empty
-  | ContHT -> empty
+  | ContHT | NoContHT -> empty
   | VarHT x -> var_type x
   | DefHT _ct -> empty  (* assume closed *)
   | BotHT -> empty

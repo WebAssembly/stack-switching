@@ -98,13 +98,13 @@ let refer_func (c : context) x = refer "function" c.refs.Free.funcs x
 
 let cont_type_of_heap_type (c : context) (ht : heap_type) at : cont_type =
   match ht with
-  | DefHT dt -> as_cont_str_type (expand_def_type dt)
+  | DefHT dt -> assert false
   | VarHT (StatX x) -> cont_type c (x @@ at)
   | _ -> assert false
 
 let func_type_of_heap_type (c : context) (ht : heap_type) at : func_type =
   match ht with
-  | DefHT dt -> as_func_str_type (expand_def_type dt)
+  | DefHT dt -> assert false
   | VarHT (StatX x) -> func_type c (x @@ at)
   | _ -> assert false
 
@@ -140,7 +140,7 @@ let check_heap_type (c : context) (t : heap_type) at =
   | AnyHT | NoneHT | EqHT | I31HT | StructHT | ArrayHT
   | FuncHT | NoFuncHT
   | ExternHT | NoExternHT
-  | ContHT -> ()
+  | ContHT | NoContHT -> ()
   | VarHT (StatX x) -> let _dt = type_ c (x @@ at) in ()
   | VarHT (RecX _) | DefHT _ -> assert false
   | BotHT -> ()
@@ -424,7 +424,7 @@ let check_resume_table (c : context) ts2 (xys : (idx * idx) list) at =
   List.iter (fun (x1, x2) ->
     let FuncT (ts3, ts4) = func_type_of_tag_type c (tag c x1) x1.at in
     let (_, ts') = label c x2 in
-    match Lib.List.last_opt ts'  with
+    match Lib.List.last_opt ts' with
     | Some (RefT (nul', ht)) ->
       let ct = cont_type_of_heap_type c ht x2.at in
       let ft' = func_type_of_cont_type c ct x2.at in

@@ -18,7 +18,7 @@ type heap_type =
   | AnyHT | NoneHT | EqHT | I31HT | StructHT | ArrayHT
   | FuncHT | NoFuncHT
   | ExternHT | NoExternHT
-  | ContHT
+  | ContHT | NoContHT
   | VarHT of var
   | DefHT of def_type
   | BotHT
@@ -151,6 +151,7 @@ let subst_heap_type s = function
   | ExternHT -> ExternHT
   | NoExternHT -> NoExternHT
   | ContHT -> ContHT
+  | NoContHT -> NoContHT
   | VarHT x -> s x
   | DefHT dt -> DefHT dt  (* assume closed *)
   | BotHT -> BotHT
@@ -360,6 +361,7 @@ let rec string_of_heap_type = function
   | ExternHT -> "extern"
   | NoExternHT -> "noextern"
   | ContHT -> "cont"
+  | NoContHT -> "nocont"
   | VarHT x -> string_of_var x
   | DefHT dt -> "(" ^ string_of_def_type dt ^ ")"
   | BotHT -> "something"
