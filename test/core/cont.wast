@@ -154,6 +154,16 @@
   (module
     (type $ft (func))
     (type $ct (cont $ft))
+    (tag $exn)
+    (func
+      (resume_throw $ft $exn (ref.null $ct))
+      (unreachable)))
+  "non-continuation type 0")
+
+(assert_invalid
+  (module
+    (type $ft (func))
+    (type $ct (cont $ft))
     (func
       (cont.bind $ft $ct (ref.null $ct))
       (unreachable)))
