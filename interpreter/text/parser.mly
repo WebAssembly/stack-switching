@@ -272,6 +272,7 @@ let inline_tag_type (c : context) (TagT ht) at =
 %token<V128.shape> VEC_SHAPE
 %token ANYREF NULLREF EQREF I31REF STRUCTREF ARRAYREF
 %token FUNCREF NULLFUNCREF EXTERNREF NULLEXTERNREF
+%token NOCONT CONTREF NULLCONTREF
 %token ANY NONE EQ I31 REF NOFUNC EXTERN NOEXTERN NULL
 %token MUT FIELD STRUCT ARRAY SUB FINAL REC
 %token UNREACHABLE NOP DROP SELECT
@@ -354,6 +355,8 @@ heap_type :
   | NOFUNC { fun c -> NoFuncHT }
   | EXTERN { fun c -> ExternHT }
   | NOEXTERN { fun c -> NoExternHT }
+  | CONT { fun c -> ContHT }
+  | NOCONT { fun c -> NoContHT }
   | var { fun c -> VarHT (StatX ($1 c type_).it) }
 
 ref_type :
@@ -368,6 +371,8 @@ ref_type :
   | NULLFUNCREF { fun c -> (Null, NoFuncHT) }  /* Sugar */
   | EXTERNREF { fun c -> (Null, ExternHT) }  /* Sugar */
   | NULLEXTERNREF { fun c -> (Null, NoExternHT) }  /* Sugar */
+  | CONTREF { fun c -> (Null, ContHT) } /* Sugar */
+  | NULLCONTREF { fun c -> (Null, NoContHT) } /* Sugar */
 
 val_type :
   | NUM_TYPE { fun c -> NumT $1 }

@@ -167,6 +167,9 @@ rule token = parse
       | "noextern" -> NOEXTERN
       | "externref" -> EXTERNREF
       | "nullexternref" -> NULLEXTERNREF
+      | "nocont" -> NOCONT
+      | "contref" -> CONTREF
+      | "nullcontref" -> NULLCONTREF
       | "ref" -> REF
       | "null" -> NULL
 
