@@ -133,6 +133,77 @@
 (assert_trap (invoke "non-linear-3") "continuation already consumed")
 (assert_trap (invoke "non-linear-4") "continuation already consumed")
 
+(assert_invalid
+  (module
+    (type $ft (func))
+    (func
+      (cont.new $ft (ref.null $ft))
+      (drop)))
+  "non-continuation type 0")
+
+(assert_invalid
+  (module
+    (type $ft (func))
+    (type $ct (cont $ft))
+    (func
+      (resume $ft (ref.null $ct))
+      (unreachable)))
+  "non-continuation type 0")
+
+(assert_invalid
+  (module
+    (type $ft (func))
+    (type $ct (cont $ft))
+    (tag $exn)
+    (func
+      (resume_throw $ft $exn (ref.null $ct))
+      (unreachable)))
+  "non-continuation type 0")
+
+(assert_invalid
+  (module
+    (type $ft (func))
+    (type $ct (cont $ft))
+    (func
+      (cont.bind $ft $ct (ref.null $ct))
+      (unreachable)))
+  "non-continuation type 0")
+
+(assert_invalid
+  (module
+    (type $ft (func))
+    (type $ct (cont $ft))
+    (func
+      (cont.bind $ct $ft (ref.null $ct))
+      (unreachable)))
+  "non-continuation type 0")
+
+(assert_invalid
+  (module
+    (type $ft (func))
+    (type $ct (cont $ft))
+    (tag $foo)
+    (func
+      (block $on_foo (result (ref $ft))
+        (resume $ct (tag $foo $on_foo) (ref.null $ct))
+        (unreachable)
+      )
+      (drop)))
+  "non-continuation type 0")
+
+(assert_invalid
+  (module
+    (type $ft (func))
+    (type $ct (cont $ft))
+    (tag $foo)
+    (func
+      (block $on_foo (result (ref $ct) (ref $ft))
+        (resume $ct (tag $foo $on_foo) (ref.null $ct))
+        (unreachable)
+      )
+      (drop)
+      (drop)))
+  "non-continuation type 0")
 
 ;; Simple state example
 
