@@ -765,10 +765,10 @@ Scalar Reference Instructions
 External Reference Instructions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. _valid-extern.internalize:
+.. _valid-any.convert_extern:
 
-:math:`\EXTERNINTERNALIZE`
-..........................
+:math:`\ANYCONVERTEXTERN`
+.........................
 
 * The instruction is valid with type :math:`[(\REF~\NULL_1^?~\EXTERN)] \to [(\REF~\NULL_2^?~\ANY)]` for any :math:`\NULL_1^?` that equals :math:`\NULL_2^?`.
 
@@ -776,13 +776,13 @@ External Reference Instructions
    \frac{
      \NULL_1^? = \NULL_2^?
    }{
-     C \vdashinstr \EXTERNINTERNALIZE : [(\REF~\NULL_1^?~\EXTERN)] \to [(\REF~\NULL_2^?~\ANY)]
+     C \vdashinstr \ANYCONVERTEXTERN : [(\REF~\NULL_1^?~\EXTERN)] \to [(\REF~\NULL_2^?~\ANY)]
    }
 
-.. _valid-extern.externalize:
+.. _valid-extern.convert_any:
 
-:math:`\EXTERNEXTERNALIZE`
-..........................
+:math:`\EXTERNCONVERTANY`
+.........................
 
 * The instruction is valid with type :math:`[(\REF~\NULL_1^?~\ANY)] \to [(\REF~\NULL_2^?~\EXTERN)]` for any :math:`\NULL_1^?` that equals :math:`\NULL_2^?`.
 
@@ -790,7 +790,7 @@ External Reference Instructions
    \frac{
      \NULL_1^? = \NULL_2^?
    }{
-     C \vdashinstr \EXTERNEXTERNALIZE : [(\REF~\NULL_1^?~\ANY)] \to [(\REF~\NULL_2^?~\EXTERN)]
+     C \vdashinstr \EXTERNCONVERTANY : [(\REF~\NULL_1^?~\ANY)] \to [(\REF~\NULL_2^?~\EXTERN)]
    }
 
 
@@ -2453,7 +2453,23 @@ Constant Expressions
 
   * or of the form :math:`\REFNULL`,
 
+  * or of the form :math:`\REFI31`,
+
   * or of the form :math:`\REFFUNC~x`,
+
+  * or of the form :math:`\STRUCTNEW~x`,
+
+  * or of the form :math:`\STRUCTNEWDEFAULT~x`,
+
+  * or of the form :math:`\ARRAYNEW~x`,
+
+  * or of the form :math:`\ARRAYNEWDEFAULT~x`,
+
+  * or of the form :math:`\ARRAYNEWFIXED~x`,
+
+  * or of the form :math:`\ANYCONVERTEXTERN`,
+
+  * or of the form :math:`\EXTERNCONVERTANY`,
 
   * or of the form :math:`\GLOBALGET~x`, in which case :math:`C.\CGLOBALS[x]` must be a :ref:`global type <syntax-globaltype>` of the form :math:`\CONST~t`.
 
@@ -2471,8 +2487,20 @@ Constant Expressions
    }
    \qquad
    \frac{
+     C.\CGLOBALS[x] = \CONST~t
+   }{
+     C \vdashinstrconst \GLOBALGET~x \const
+   }
+
+.. math::
+   \frac{
    }{
      C \vdashinstrconst \REFNULL~t \const
+   }
+   \qquad
+   \frac{
+   }{
+     C \vdashinstrconst \REFI31 \const
    }
    \qquad
    \frac{
@@ -2482,10 +2510,42 @@ Constant Expressions
 
 .. math::
    \frac{
-     C.\CGLOBALS[x] = \CONST~t
    }{
-     C \vdashinstrconst \GLOBALGET~x \const
+     C \vdashinstrconst \STRUCTNEW~x \const
    }
+   \qquad
+   \frac{
+   }{
+     C \vdashinstrconst \STRUCTNEWDEFAULT~x \const
+   }
+
+.. math::
+   \frac{
+   }{
+     C \vdashinstrconst \ARRAYNEW~x \const
+   }
+   \qquad
+   \frac{
+   }{
+     C \vdashinstrconst \ARRAYNEWDEFAULT~x \const
+   }
+   \qquad
+   \frac{
+   }{
+     C \vdashinstrconst \ARRAYNEWFIXED~x \const
+   }
+
+.. math::
+   \frac{
+   }{
+     C \vdashinstrconst \ANYCONVERTEXTERN \const
+   }
+   \qquad
+   \frac{
+   }{
+     C \vdashinstrconst \EXTERNCONVERTANY \const
+   }
+
 
 .. note::
    Currently, constant expressions occurring in :ref:`globals <syntax-global>`, :ref:`element <syntax-elem>`, or :ref:`data <syntax-data>` segments are further constrained in that contained |GLOBALGET| instructions are only allowed to refer to *imported* globals.
