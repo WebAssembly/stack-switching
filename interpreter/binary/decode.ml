@@ -179,6 +179,7 @@ let heap_type s =
     (fun s -> VarHT (var_type s33 s));
     (fun s ->
       match s7 s with
+      | -0x0b -> NoContHT
       | -0x0d -> NoFuncHT
       | -0x0e -> NoExternHT
       | -0x0f -> NoneHT
@@ -189,8 +190,7 @@ let heap_type s =
       | -0x14 -> I31HT
       | -0x15 -> StructHT
       | -0x16 -> ArrayHT
-      | -0x17 -> ContHT
-      | -0x18 -> NoContHT
+      | -0x18 -> ContHT
       | _ -> error s pos "malformed heap type"
     )
   ] s
@@ -198,6 +198,7 @@ let heap_type s =
 let ref_type s =
   let pos = pos s in
   match s7 s with
+  | -0x0b -> (Null, NoContHT)
   | -0x0d -> (Null, NoFuncHT)
   | -0x0e -> (Null, NoExternHT)
   | -0x0f -> (Null, NoneHT)
@@ -208,8 +209,7 @@ let ref_type s =
   | -0x14 -> (Null, I31HT)
   | -0x15 -> (Null, StructHT)
   | -0x16 -> (Null, ArrayHT)
-  | -0x17 -> (Null, ContHT)
-  | -0x18 -> (Null, NoContHT)
+  | -0x18 -> (Null, ContHT)
   | -0x1c -> (NoNull, heap_type s)
   | -0x1d -> (Null, heap_type s)
   | _ -> error s pos "malformed reference type"
