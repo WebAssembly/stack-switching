@@ -145,7 +145,7 @@ struct
     | (Null, NoFuncHT) -> s7 (-0x0d)
     | (Null, ExternHT) -> s7 (-0x11)
     | (Null, NoExternHT) -> s7 (-0x0e)
-    | (Null, ContHT) -> s7 (-0x17)
+    | (Null, ContHT) -> s7 (-0x18)
     | (Null, NoContHT) -> s7 (-0x0b)
     | (Null, t) -> s7 (-0x1d); heap_type t
     | (NoNull, t) -> s7 (-0x1c); heap_type t
