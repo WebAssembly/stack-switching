@@ -20,16 +20,15 @@ The mapping of numeric instructions to their underlying operators is expressed b
 
 .. math::
    \begin{array}{lll@{\qquad}l}
-   \X{op}_{\IN}(i_1,\dots,i_k) &=& \F{i}\X{op}_N(i_1,\dots,i_k) \\
-   \X{op}_{\FN}(z_1,\dots,z_k) &=& \F{f}\X{op}_N(z_1,\dots,z_k) \\
-   \X{op}_{\VN}(i_1,\dots,i_k) &=& \F{i}\X{op}_N(i_1,\dots,i_k) \\
+   \X{op}_{\IN}(i_1,\dots,i_k) &=& \xref{exec/numerics}{int-ops}{\F{i}\X{op}}_N(i_1,\dots,i_k) \\
+   \X{op}_{\FN}(z_1,\dots,z_k) &=& \xref{exec/numerics}{float-ops}{\F{f}\X{op}}_N(z_1,\dots,z_k) \\
    \end{array}
 
 And for :ref:`conversion operators <exec-cvtop>`:
 
 .. math::
    \begin{array}{lll@{\qquad}l}
-   \X{cvtop}^{\sx^?}_{t_1,t_2}(c) &=& \X{cvtop}^{\sx^?}_{|t_1|,|t_2|}(c) \\
+   \cvtop^{\sx^?}_{t_1,t_2}(c) &=& \xref{exec/numerics}{convert-ops}{\X{cvtop}}^{\sx^?}_{|t_1|,|t_2|}(c) \\
    \end{array}
 
 Where the underlying operators are partial, the corresponding instruction will :ref:`trap <trap>` when the result is not defined.
@@ -64,9 +63,9 @@ Where the underlying operators are non-deterministic, because they may return on
 
 2. Pop the value :math:`t.\CONST~c_1` from the stack.
 
-3. If :math:`\unop_t(c_1)` is defined, then:
+3. If :math:`\unopF_t(c_1)` is defined, then:
 
-   a. Let :math:`c` be a possible result of computing :math:`\unop_t(c_1)`.
+   a. Let :math:`c` be a possible result of computing :math:`\unopF_t(c_1)`.
 
    b. Push the value :math:`t.\CONST~c` to the stack.
 
@@ -77,9 +76,9 @@ Where the underlying operators are non-deterministic, because they may return on
 .. math::
    \begin{array}{lcl@{\qquad}l}
    (t\K{.}\CONST~c_1)~t\K{.}\unop &\stepto& (t\K{.}\CONST~c)
-     & (\iff c \in \unop_t(c_1)) \\
+     & (\iff c \in \unopF_t(c_1)) \\
    (t\K{.}\CONST~c_1)~t\K{.}\unop &\stepto& \TRAP
-     & (\iff \unop_{t}(c_1) = \{\})
+     & (\iff \unopF_{t}(c_1) = \{\})
    \end{array}
 
 
@@ -94,9 +93,9 @@ Where the underlying operators are non-deterministic, because they may return on
 
 3. Pop the value :math:`t.\CONST~c_1` from the stack.
 
-4. If :math:`\binop_t(c_1, c_2)` is defined, then:
+4. If :math:`\binopF_t(c_1, c_2)` is defined, then:
 
-   a. Let :math:`c` be a possible result of computing :math:`\binop_t(c_1, c_2)`.
+   a. Let :math:`c` be a possible result of computing :math:`\binopF_t(c_1, c_2)`.
 
    b. Push the value :math:`t.\CONST~c` to the stack.
 
@@ -107,9 +106,9 @@ Where the underlying operators are non-deterministic, because they may return on
 .. math::
    \begin{array}{lcl@{\qquad}l}
    (t\K{.}\CONST~c_1)~(t\K{.}\CONST~c_2)~t\K{.}\binop &\stepto& (t\K{.}\CONST~c)
-     & (\iff c \in \binop_t(c_1,c_2)) \\
+     & (\iff c \in \binopF_t(c_1,c_2)) \\
    (t\K{.}\CONST~c_1)~(t\K{.}\CONST~c_2)~t\K{.}\binop &\stepto& \TRAP
-     & (\iff \binop_{t}(c_1,c_2) = \{\})
+     & (\iff \binopF_{t}(c_1,c_2) = \{\})
    \end{array}
 
 
@@ -122,14 +121,14 @@ Where the underlying operators are non-deterministic, because they may return on
 
 2. Pop the value :math:`t.\CONST~c_1` from the stack.
 
-3. Let :math:`c` be the result of computing :math:`\testop_t(c_1)`.
+3. Let :math:`c` be the result of computing :math:`\testopF_t(c_1)`.
 
 4. Push the value :math:`\I32.\CONST~c` to the stack.
 
 .. math::
    \begin{array}{lcl@{\qquad}l}
    (t\K{.}\CONST~c_1)~t\K{.}\testop &\stepto& (\I32\K{.}\CONST~c)
-     & (\iff c = \testop_t(c_1)) \\
+     & (\iff c = \testopF_t(c_1)) \\
    \end{array}
 
 
@@ -144,14 +143,14 @@ Where the underlying operators are non-deterministic, because they may return on
 
 3. Pop the value :math:`t.\CONST~c_1` from the stack.
 
-4. Let :math:`c` be the result of computing :math:`\relop_t(c_1, c_2)`.
+4. Let :math:`c` be the result of computing :math:`\relopF_t(c_1, c_2)`.
 
 5. Push the value :math:`\I32.\CONST~c` to the stack.
 
 .. math::
    \begin{array}{lcl@{\qquad}l}
    (t\K{.}\CONST~c_1)~(t\K{.}\CONST~c_2)~t\K{.}\relop &\stepto& (\I32\K{.}\CONST~c)
-     & (\iff c = \relop_t(c_1,c_2)) \\
+     & (\iff c = \relopF_t(c_1,c_2)) \\
    \end{array}
 
 
@@ -455,7 +454,7 @@ Reference Instructions
 
 12. Append :math:`\X{si}` to :math:`S.\SSTRUCTS`.
 
-13. Return the :ref:`structure reference <syntax-ref.struct>` :math:`\REFSTRUCTADDR~a`.
+13. Push the :ref:`structure reference <syntax-ref.struct>` :math:`\REFSTRUCTADDR~a` to the stack.
 
 .. math::
    \begin{array}{lcl@{\qquad}l}
@@ -724,14 +723,14 @@ Reference Instructions
 
 11. Append :math:`\X{ai}` to :math:`S.\SARRAYS`.
 
-12. Return the :ref:`array reference <syntax-ref.array>` :math:`\REFARRAYADDR~a`.
+12. Push the :ref:`array reference <syntax-ref.array>` :math:`\REFARRAYADDR~a` to the stack.
 
 .. math::
    \begin{array}{lcl@{\qquad}l}
    S; F; \val^n~(\ARRAYNEWFIXED~x~n) &\stepto& S'; F; (\REFARRAYADDR~|S.\SARRAYS|)
      \\&&
      \begin{array}[t]{@{}r@{~}l@{}}
-      (\iff & \expanddt(F.\AMODULE.\MITYPES[x]) = \TARRAY~\X{ft}^n \\
+      (\iff & \expanddt(F.\AMODULE.\MITYPES[x]) = \TARRAY~\X{ft} \\
       \land & \X{ai} = \{\AITYPE~F.\AMODULE.\MITYPES[x], \AIFIELDS~(\packval_{\X{ft}}(\val))^n\} \\
       \land & S' = S \with \SARRAYS = S.\SARRAYS~\X{ai})
      \end{array} \\
@@ -802,7 +801,7 @@ Reference Instructions
      \begin{array}[t]{@{}r@{~}l@{}}
       (\iff & \expanddt(F.\AMODULE.\MITYPES[x]) = \TARRAY~\X{ft}^n \\
       \land & t = \unpacktype(\X{ft}) \\
-      \land & (\bytes_{\X{ft}}(c))^n = S.\SDATAS[F.\AMODULE.\MIDATAS[y]].\DIDATA[s \slice n\cdot|\X{ft}|/8] \\
+      \land & \concat((\bytes_{\X{ft}}(c))^n) = S.\SDATAS[F.\AMODULE.\MIDATAS[y]].\DIDATA[s \slice n\cdot|\X{ft}|/8] \\
      \end{array} \\
    \end{array}
 
@@ -828,13 +827,13 @@ Reference Instructions
 
 8. If the sum of :math:`s` and :math:`n` is larger than the length of :math:`\eleminst.\EIELEM`, then:
 
-    a. Trap.
+   a. Trap.
 
 9. Let :math:`\reff^\ast` be the :ref:`reference <syntax-ref>` sequence :math:`\eleminst.\EIELEM[s \slice n]`.
 
 10. Push the references :math:`\reff^\ast` to the stack.
 
-15. Execute the instruction :math:`(\ARRAYNEWFIXED~x~n)`.
+11. Execute the instruction :math:`(\ARRAYNEWFIXED~x~n)`.
 
 .. math::
    ~\\[-1ex]
@@ -894,16 +893,20 @@ Reference Instructions
 16. Push the value :math:`\val` to the stack.
 
 .. math::
+   ~\\[-1ex]
    \begin{array}{lcl@{\qquad}l}
-   S; F; (\REFARRAYADDR~a)~(\I32.\CONST~i)~(\ARRAYGET\K{\_}\sx^?~x) &\stepto& \val
-     &
+   S; F; (\REFARRAYADDR~a)~(\I32.\CONST~i)~(\ARRAYGET\K{\_}\sx^?~x) \stepto \TRAP
+   \\ \qquad
+    (\iff i \geq |\SARRAYS[a].\AIFIELDS|)
+   \\[1ex]
+   S; F; (\REFARRAYADDR~a)~(\I32.\CONST~i)~(\ARRAYGET\K{\_}\sx^?~x) \stepto \val
+   \\ \qquad
      \begin{array}[t]{@{}r@{~}l@{}}
       (\iff & \expanddt(F.\AMODULE.\MITYPES[x]) = \TARRAY~\X{ft} \\
-      \land & \val = \unpackval^{\sx^?}_{\X{ft}}(S.\SARRAYS[a].\AIFIELDS[i]))
-     \end{array} \\
-   S; F; (\REFARRAYADDR~a)~(\I32.\CONST~i)~(\ARRAYGET\K{\_}\sx^?~x) &\stepto& \val
-     & (\otherwise) \\
-   S; F; (\REFNULL~t)~(\I32.\CONST~i)~(\ARRAYGET\K{\_}\sx^?~x) &\stepto& \TRAP
+      \land & \val = \unpackval^{\sx^?}_{\X{ft}}(S.\SARRAYS[a].\AIFIELDS[i])) \\
+     \end{array}
+   \\[1ex]
+   S; F; (\REFNULL~t)~(\I32.\CONST~i)~(\ARRAYGET\K{\_}\sx^?~x) \stepto \TRAP
    \end{array}
 
 
@@ -951,14 +954,20 @@ Reference Instructions
 17. Replace the :ref:`field value <syntax-fieldval>` :math:`S.\SARRAYS[a].\AIFIELDS[i]` with :math:`\fieldval`.
 
 .. math::
+   ~\\[-1ex]
    \begin{array}{lcl@{\qquad}l}
-   S; F; (\REFARRAYADDR~a)~(\I32.\CONST~i)~\val~(\ARRAYSET~x) &\stepto& S'; \epsilon
-     &
+   S; F; (\REFARRAYADDR~a)~(\I32.\CONST~i)~\val~(\ARRAYSET~x) \stepto \TRAP
+   \\ \qquad
+    (\iff i \geq |\SARRAYS[a].\AIFIELDS|)
+   \\[1ex]
+   S; F; (\REFARRAYADDR~a)~(\I32.\CONST~i)~\val~(\ARRAYSET~x) \stepto S'; \epsilon
+   \\ \qquad
      \begin{array}[t]{@{}r@{~}l@{}}
-     (\iff & \expanddt(F.\AMODULE.\MITYPES[x]) = \TSTRUCT~\X{ft}^n \\
-      \land & S' = S \with \SARRAYS[a].\AIFIELDS[i] = \packval_{\X{ft}}(\val))
-     \end{array} \\
-   S; F; (\REFNULL~t)~(\I32.\CONST~i)~\val~(\ARRAYSET~x) &\stepto& \TRAP
+     (\iff & \expanddt(F.\AMODULE.\MITYPES[x]) = \TARRAY~\X{ft} \\
+      \land & S' = S \with \SARRAYS[a].\AIFIELDS[i] = \packval_{\X{ft}}(\val)) \\
+     \end{array}
+   \\[1ex]
+   S; F; (\REFNULL~t)~(\I32.\CONST~i)~\val~(\ARRAYSET~x) \stepto \TRAP
    \end{array}
 
 
@@ -1247,8 +1256,8 @@ Where:
 
 .. math::
    \begin{array}{lll}
-   \getfield(\valtype) &=& \ARRAYGET \\
-   \getfield(\packedtype) &=& \ARRAYGETU \\
+   \getfield(\valtype) &=& \ARRAYGET~y \\
+   \getfield(\packedtype) &=& \ARRAYGETU~y \\
    \end{array}
 
 
@@ -1538,20 +1547,27 @@ Where:
 Vector Instructions
 ~~~~~~~~~~~~~~~~~~~
 
-Most vector instructions are defined in terms of generic numeric operators applied lane-wise based on the :ref:`shape <syntax-vec-shape>`.
+Vector instructions that operate bitwise are handled as integer operations of respective width.
 
 .. math::
    \begin{array}{lll@{\qquad}l}
+   \X{op}_{\VN}(i_1,\dots,i_k) &=& \xref{exec/numerics}{int-ops}{\F{i}\X{op}}_N(i_1,\dots,i_k) \\
+   \end{array}
+
+Most other vector instructions are defined in terms of numeric operators that are applied lane-wise according to the given :ref:`shape <syntax-vec-shape>`.
+
+.. math::
+   \begin{array}{llll}
    \X{op}_{t\K{x}N}(n_1,\dots,n_k) &=&
-     \lanes^{-1}_{t\K{x}N}(op_t(\lanes_{t\K{x}N}(n_1) ~\dots~ \lanes_{t\K{x}N}(n_k))
+     \lanes^{-1}_{t\K{x}N}(\xref{exec/instructions}{exec-instr-numeric}{\X{op}}_t(i_1,\dots,i_k)^\ast) & \qquad(\iff i_1^\ast = \lanes_{t\K{x}N}(n_1) \land \dots \land i_k^\ast = \lanes_{t\K{x}N}(n_k) \\
    \end{array}
 
 .. note::
-   For example, the result of instruction :math:`\K{i32x4}.\ADD` applied to operands :math:`i_1, i_2`
-   invokes :math:`\ADD_{\K{i32x4}}(i_1, i_2)`, which maps to
-   :math:`\lanes^{-1}_{\K{i32x4}}(\ADD_{\I32}(i_1^+, i_2^+))`,
-   where :math:`i_1^+` and :math:`i_2^+` are sequences resulting from invoking
-   :math:`\lanes_{\K{i32x4}}(i_1)` and :math:`\lanes_{\K{i32x4}}(i_2)`
+   For example, the result of instruction :math:`\K{i32x4}.\ADD` applied to operands :math:`v_1, v_2`
+   invokes :math:`\ADD_{\K{i32x4}}(v_1, v_2)`, which maps to
+   :math:`\lanes^{-1}_{\K{i32x4}}(\ADD_{\I32}(i_1, i_2)^\ast)`,
+   where :math:`i_1^\ast` and :math:`i_2^\ast` are sequences resulting from invoking
+   :math:`\lanes_{\K{i32x4}}(v_1)` and :math:`\lanes_{\K{i32x4}}(v_2)`
    respectively.
 
 
@@ -4139,10 +4155,10 @@ Control Instructions
 
 .. math::
    \begin{array}{lcl@{\qquad}l}
-   S; \reff~(\BRONCAST~l~\X{rt}_1~X{rt}_2) &\stepto& \reff~(\BR~l)
+   S; F; \reff~(\BRONCAST~l~\X{rt}_1~\X{rt}_2) &\stepto& \reff~(\BR~l)
      & (\iff S \vdashval \reff : \X{rt}
         \land \vdashreftypematch \X{rt} \matchesreftype \insttype_{F.\AMODULE}(\X{rt}_2)) \\
-   S; \reff~(\BRONCAST~l~\X{rt}_1~\X{rt}_2) &\stepto& \reff
+   S; F; \reff~(\BRONCAST~l~\X{rt}_1~\X{rt}_2) &\stepto& \reff
      & (\otherwise) \\
    \end{array}
 
@@ -4174,10 +4190,10 @@ Control Instructions
 
 .. math::
    \begin{array}{lcl@{\qquad}l}
-   S; \reff~(\BRONCASTFAIL~l~\X{rt}_1~X{rt}_2) &\stepto& \reff
+   S; F; \reff~(\BRONCASTFAIL~l~\X{rt}_1~\X{rt}_2) &\stepto& \reff
      & (\iff S \vdashval \reff : \X{rt}
         \land \vdashreftypematch \X{rt} \matchesreftype \insttype_{F.\AMODULE}(\X{rt}_2)) \\
-   S; \reff~(\BRONCASTFAIL~l~\X{rt}_1~\X{rt}_2) &\stepto& \reff~(\BR~l)
+   S; F; \reff~(\BRONCASTFAIL~l~\X{rt}_1~\X{rt}_2) &\stepto& \reff~(\BR~l)
      & (\otherwise) \\
    \end{array}
 
