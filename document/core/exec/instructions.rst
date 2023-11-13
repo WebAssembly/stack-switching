@@ -454,7 +454,7 @@ Reference Instructions
 
 12. Append :math:`\X{si}` to :math:`S.\SSTRUCTS`.
 
-13. Return the :ref:`structure reference <syntax-ref.struct>` :math:`\REFSTRUCTADDR~a`.
+13. Push the :ref:`structure reference <syntax-ref.struct>` :math:`\REFSTRUCTADDR~a` to the stack.
 
 .. math::
    \begin{array}{lcl@{\qquad}l}
@@ -723,14 +723,14 @@ Reference Instructions
 
 11. Append :math:`\X{ai}` to :math:`S.\SARRAYS`.
 
-12. Return the :ref:`array reference <syntax-ref.array>` :math:`\REFARRAYADDR~a`.
+12. Push the :ref:`array reference <syntax-ref.array>` :math:`\REFARRAYADDR~a` to the stack.
 
 .. math::
    \begin{array}{lcl@{\qquad}l}
    S; F; \val^n~(\ARRAYNEWFIXED~x~n) &\stepto& S'; F; (\REFARRAYADDR~|S.\SARRAYS|)
      \\&&
      \begin{array}[t]{@{}r@{~}l@{}}
-      (\iff & \expanddt(F.\AMODULE.\MITYPES[x]) = \TARRAY~\X{ft}^n \\
+      (\iff & \expanddt(F.\AMODULE.\MITYPES[x]) = \TARRAY~\X{ft} \\
       \land & \X{ai} = \{\AITYPE~F.\AMODULE.\MITYPES[x], \AIFIELDS~(\packval_{\X{ft}}(\val))^n\} \\
       \land & S' = S \with \SARRAYS = S.\SARRAYS~\X{ai})
      \end{array} \\
@@ -801,7 +801,7 @@ Reference Instructions
      \begin{array}[t]{@{}r@{~}l@{}}
       (\iff & \expanddt(F.\AMODULE.\MITYPES[x]) = \TARRAY~\X{ft}^n \\
       \land & t = \unpacktype(\X{ft}) \\
-      \land & (\bytes_{\X{ft}}(c))^n = S.\SDATAS[F.\AMODULE.\MIDATAS[y]].\DIDATA[s \slice n\cdot|\X{ft}|/8] \\
+      \land & \concat((\bytes_{\X{ft}}(c))^n) = S.\SDATAS[F.\AMODULE.\MIDATAS[y]].\DIDATA[s \slice n\cdot|\X{ft}|/8] \\
      \end{array} \\
    \end{array}
 
@@ -827,13 +827,13 @@ Reference Instructions
 
 8. If the sum of :math:`s` and :math:`n` is larger than the length of :math:`\eleminst.\EIELEM`, then:
 
-    a. Trap.
+   a. Trap.
 
 9. Let :math:`\reff^\ast` be the :ref:`reference <syntax-ref>` sequence :math:`\eleminst.\EIELEM[s \slice n]`.
 
 10. Push the references :math:`\reff^\ast` to the stack.
 
-15. Execute the instruction :math:`(\ARRAYNEWFIXED~x~n)`.
+11. Execute the instruction :math:`(\ARRAYNEWFIXED~x~n)`.
 
 .. math::
    ~\\[-1ex]
@@ -893,16 +893,20 @@ Reference Instructions
 16. Push the value :math:`\val` to the stack.
 
 .. math::
+   ~\\[-1ex]
    \begin{array}{lcl@{\qquad}l}
-   S; F; (\REFARRAYADDR~a)~(\I32.\CONST~i)~(\ARRAYGET\K{\_}\sx^?~x) &\stepto& \val
-     &
+   S; F; (\REFARRAYADDR~a)~(\I32.\CONST~i)~(\ARRAYGET\K{\_}\sx^?~x) \stepto \TRAP
+   \\ \qquad
+    (\iff i \geq |\SARRAYS[a].\AIFIELDS|)
+   \\[1ex]
+   S; F; (\REFARRAYADDR~a)~(\I32.\CONST~i)~(\ARRAYGET\K{\_}\sx^?~x) \stepto \val
+   \\ \qquad
      \begin{array}[t]{@{}r@{~}l@{}}
       (\iff & \expanddt(F.\AMODULE.\MITYPES[x]) = \TARRAY~\X{ft} \\
-      \land & \val = \unpackval^{\sx^?}_{\X{ft}}(S.\SARRAYS[a].\AIFIELDS[i]))
-     \end{array} \\
-   S; F; (\REFARRAYADDR~a)~(\I32.\CONST~i)~(\ARRAYGET\K{\_}\sx^?~x) &\stepto& \val
-     & (\otherwise) \\
-   S; F; (\REFNULL~t)~(\I32.\CONST~i)~(\ARRAYGET\K{\_}\sx^?~x) &\stepto& \TRAP
+      \land & \val = \unpackval^{\sx^?}_{\X{ft}}(S.\SARRAYS[a].\AIFIELDS[i])) \\
+     \end{array}
+   \\[1ex]
+   S; F; (\REFNULL~t)~(\I32.\CONST~i)~(\ARRAYGET\K{\_}\sx^?~x) \stepto \TRAP
    \end{array}
 
 
@@ -950,14 +954,20 @@ Reference Instructions
 17. Replace the :ref:`field value <syntax-fieldval>` :math:`S.\SARRAYS[a].\AIFIELDS[i]` with :math:`\fieldval`.
 
 .. math::
+   ~\\[-1ex]
    \begin{array}{lcl@{\qquad}l}
-   S; F; (\REFARRAYADDR~a)~(\I32.\CONST~i)~\val~(\ARRAYSET~x) &\stepto& S'; \epsilon
-     &
+   S; F; (\REFARRAYADDR~a)~(\I32.\CONST~i)~\val~(\ARRAYSET~x) \stepto \TRAP
+   \\ \qquad
+    (\iff i \geq |\SARRAYS[a].\AIFIELDS|)
+   \\[1ex]
+   S; F; (\REFARRAYADDR~a)~(\I32.\CONST~i)~\val~(\ARRAYSET~x) \stepto S'; \epsilon
+   \\ \qquad
      \begin{array}[t]{@{}r@{~}l@{}}
-     (\iff & \expanddt(F.\AMODULE.\MITYPES[x]) = \TSTRUCT~\X{ft}^n \\
-      \land & S' = S \with \SARRAYS[a].\AIFIELDS[i] = \packval_{\X{ft}}(\val))
-     \end{array} \\
-   S; F; (\REFNULL~t)~(\I32.\CONST~i)~\val~(\ARRAYSET~x) &\stepto& \TRAP
+     (\iff & \expanddt(F.\AMODULE.\MITYPES[x]) = \TARRAY~\X{ft} \\
+      \land & S' = S \with \SARRAYS[a].\AIFIELDS[i] = \packval_{\X{ft}}(\val)) \\
+     \end{array}
+   \\[1ex]
+   S; F; (\REFNULL~t)~(\I32.\CONST~i)~\val~(\ARRAYSET~x) \stepto \TRAP
    \end{array}
 
 
@@ -1246,8 +1256,8 @@ Where:
 
 .. math::
    \begin{array}{lll}
-   \getfield(\valtype) &=& \ARRAYGET \\
-   \getfield(\packedtype) &=& \ARRAYGETU \\
+   \getfield(\valtype) &=& \ARRAYGET~y \\
+   \getfield(\packedtype) &=& \ARRAYGETU~y \\
    \end{array}
 
 
@@ -4145,10 +4155,10 @@ Control Instructions
 
 .. math::
    \begin{array}{lcl@{\qquad}l}
-   S; \reff~(\BRONCAST~l~\X{rt}_1~X{rt}_2) &\stepto& \reff~(\BR~l)
+   S; F; \reff~(\BRONCAST~l~\X{rt}_1~\X{rt}_2) &\stepto& \reff~(\BR~l)
      & (\iff S \vdashval \reff : \X{rt}
         \land \vdashreftypematch \X{rt} \matchesreftype \insttype_{F.\AMODULE}(\X{rt}_2)) \\
-   S; \reff~(\BRONCAST~l~\X{rt}_1~\X{rt}_2) &\stepto& \reff
+   S; F; \reff~(\BRONCAST~l~\X{rt}_1~\X{rt}_2) &\stepto& \reff
      & (\otherwise) \\
    \end{array}
 
@@ -4180,10 +4190,10 @@ Control Instructions
 
 .. math::
    \begin{array}{lcl@{\qquad}l}
-   S; \reff~(\BRONCASTFAIL~l~\X{rt}_1~X{rt}_2) &\stepto& \reff
+   S; F; \reff~(\BRONCASTFAIL~l~\X{rt}_1~\X{rt}_2) &\stepto& \reff
      & (\iff S \vdashval \reff : \X{rt}
         \land \vdashreftypematch \X{rt} \matchesreftype \insttype_{F.\AMODULE}(\X{rt}_2)) \\
-   S; \reff~(\BRONCASTFAIL~l~\X{rt}_1~\X{rt}_2) &\stepto& \reff~(\BR~l)
+   S; F; \reff~(\BRONCASTFAIL~l~\X{rt}_1~\X{rt}_2) &\stepto& \reff~(\BR~l)
      & (\otherwise) \\
    \end{array}
 

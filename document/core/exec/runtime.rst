@@ -592,7 +592,7 @@ and a reference to the function's own :ref:`module instance <syntax-moduleinst>`
    \production{frame} & \frame &::=&
      \FRAME_n\{ \framestate \} \\
    \production{frame state} & \framestate &::=&
-     \{ \ALOCALS~\val^\ast, \AMODULE~\moduleinst \} \\
+     \{ \ALOCALS~(\val^?)^\ast, \AMODULE~\moduleinst \} \\
    \end{array}
 
 Locals may be uninitialized, in which case they are empty.
@@ -642,7 +642,7 @@ In order to express the reduction of :ref:`traps <trap>`, :ref:`calls <syntax-ca
      \REFARRAYADDR~\arrayaddr \\&&|&
      \REFFUNCADDR~\funcaddr \\&&|&
      \REFHOSTADDR~\hostaddr \\&&|&
-     \REFEXTERN~\reff \\
+     \REFEXTERN~\reff \\&&|&
      \INVOKE~\funcaddr \\ &&|&
      \RETURNINVOKE~\funcaddr \\ &&|&
      \LABEL_n\{\instr^\ast\}~\instr^\ast~\END \\ &&|&
