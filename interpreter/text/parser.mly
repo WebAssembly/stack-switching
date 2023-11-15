@@ -8,11 +8,7 @@ open Script
 
 (* Error handling *)
 
-let error at msg = raise (Script.Syntax (at, msg))
-
-let parse_error msg =
-  error Source.no_region
-    (if msg = "syntax error" then "unexpected token" else msg)
+let error at msg = raise (Parse_error.Syntax (at, msg))
 
 
 (* Position handling *)
@@ -299,7 +295,7 @@ let inline_tag_type (c : context) (TagT ht) at =
 %token<Ast.idx -> Ast.instr'> STRUCT_NEW ARRAY_NEW ARRAY_GET
 %token STRUCT_SET
 %token<Ast.idx -> Ast.idx -> Ast.instr'> STRUCT_GET
-%token ARRAY_NEW ARRAY_NEW_FIXED ARRAY_NEW_ELEM ARRAY_NEW_DATA
+%token ARRAY_NEW_FIXED ARRAY_NEW_ELEM ARRAY_NEW_DATA
 %token ARRAY_SET ARRAY_LEN
 %token ARRAY_COPY ARRAY_FILL ARRAY_INIT_DATA ARRAY_INIT_ELEM
 %token<Ast.instr'> EXTERN_CONVERT
@@ -502,10 +498,6 @@ num :
   | INT { $1 @@ at () }
   | FLOAT { $1 @@ at () }
 
-num_list:
-  | /* empty */ { [] }
-  | num num_list { $1 :: $2 }
-
 var :
   | NAT { let at = at () in fun c lookup -> nat32 $1 at @@ at }
   | VAR { let at = at () in fun c lookup -> lookup c ($1 @@ at) @@ at }
@@ -577,6 +569,7 @@ plain_instr :
     { fun c -> let xs, x = Lib.List.split_last ($2 c label :: $3 c label) in
       br_table xs x }
   | BR_ON_NULL var { fun c -> $1 ($2 c label) }
+  | BR_ON_NON_NULL var { fun c -> br_on_non_null ($2 c label) }
   | BR_ON_CAST var ref_type ref_type { fun c -> $1 ($2 c label) ($3 c) ($4 c) }
   | RETURN { fun c -> return }
   | CALL var { fun c -> call ($2 c func) }
@@ -652,14 +645,14 @@ plain_instr :
   | UNARY { fun c -> $1 }
   | BINARY { fun c -> $1 }
   | CONVERT { fun c -> $1 }
-  | VEC_CONST VEC_SHAPE num_list { let at = at () in fun c -> fst (vec $1 $2 $3 at) }
+  | VEC_CONST VEC_SHAPE list(num) { let at = at () in fun c -> fst (vec $1 $2 $3 at) }
   | VEC_UNARY { fun c -> $1 }
   | VEC_BINARY { fun c -> $1 }
   | VEC_TERNARY { fun c -> $1 }
   | VEC_TEST { fun c -> $1 }
   | VEC_SHIFT { fun c -> $1 }
   | VEC_BITMASK { fun c -> $1 }
-  | VEC_SHUFFLE num_list { let at = at () in fun c -> i8x16_shuffle (shuffle_lit $2 at) }
+  | VEC_SHUFFLE list(num) { let at = at () in fun c -> i8x16_shuffle (shuffle_lit $2 at) }
   | VEC_SPLAT { fun c -> $1 }
   | VEC_EXTRACT NAT { let at = at () in fun c -> $1 (vec_lane_index $2 at) }
   | VEC_REPLACE NAT { let at = at () in fun c -> $1 (vec_lane_index $2 at) }
@@ -824,7 +817,6 @@ block_result_body :
   | LPAR RESULT val_type_list RPAR block_result_body
     { fun c -> let FuncT (ts1, ts2), es = $5 c in
       FuncT (ts1, snd $3 c @ ts2), es }
-
 
 expr :  /* Sugar */
   | LPAR expr1 RPAR
@@ -1060,10 +1052,10 @@ func_body :
   | LPAR LOCAL local_type_list RPAR func_body
     { let at3 = ati 3 in
       fun c -> anon_locals c (fst $3) at3; let f = $5 c in
-      {f with locals = snd $3 c @ f.locals} }
+      {f with locals = snd $3 c @ f.Ast.locals} }
   | LPAR LOCAL bind_var local_type RPAR func_body  /* Sugar */
     { fun c -> ignore (bind_local c $3); let f = $6 c in
-      {f with locals = $4 c :: f.locals} }
+      {f with locals = $4 c :: f.Ast.locals} }
 
 local_type :
   | val_type { let at = at () in fun c -> {ltype = $1 c} @@ at }
@@ -1397,12 +1389,12 @@ module_fields1 :
     { fun c -> let ef = $1 c in let mff = $2 c in
       fun () -> let mf = mff () in
       fun () -> let elems = ef () in let m = mf () in
-      {m with elems = elems :: m.elems} }
+      {m with elems = elems :: m.Ast.elems} }
   | data module_fields
     { fun c -> let df = $1 c in let mff = $2 c in
       fun () -> let mf = mff () in
       fun () -> let data = df () in let m = mf () in
-      {m with datas = data :: m.datas} }
+      {m with datas = data :: m.Ast.datas} }
   | start module_fields
     { fun c -> let mff = $2 c in
       fun () -> let mf = mff () in
@@ -1422,12 +1414,11 @@ module_fields1 :
       fun () -> let m = mf () in
       {m with exports = $1 c :: m.exports} }
 
-module_var_opt :
-  | /* empty */ { None }
-  | VAR { Some ($1 @@ at ()) }  /* Sugar */
+module_var :
+  | VAR { $1 @@ at () }  /* Sugar */
 
 module_ :
-  | LPAR MODULE module_var_opt module_fields RPAR
+  | LPAR MODULE option(module_var) module_fields RPAR
     { $3, Textual ($4 (empty_context ()) () () @@ at ()) @@ at () }
 
 inline_module :  /* Sugar */
@@ -1439,22 +1430,22 @@ inline_module1 :  /* Sugar */
 
 /* Scripts */
 
-script_var_opt :
-  | /* empty */ { None }
-  | VAR { Some ($1 @@ at ()) }  /* Sugar */
+script_var :
+  | VAR { $1 @@ at () }  /* Sugar */
 
 script_module :
   | module_ { $1 }
-  | LPAR MODULE module_var_opt BIN string_list RPAR
+  | LPAR MODULE option(module_var) BIN string_list RPAR
     { $3, Encoded ("binary:" ^ string_of_pos (at()).left, $5) @@ at() }
-  | LPAR MODULE module_var_opt QUOTE string_list RPAR
+  | LPAR MODULE option(module_var) QUOTE string_list RPAR
     { $3, Quoted ("quote:" ^ string_of_pos (at()).left, $5) @@ at() }
 
 action :
-  | LPAR INVOKE module_var_opt name literal_list RPAR
+  | LPAR INVOKE option(module_var) name list(literal) RPAR
     { Invoke ($3, $4, $5) @@ at () }
-  | LPAR GET module_var_opt name RPAR
+  | LPAR GET option(module_var) name RPAR
     { Get ($3, $4) @@ at() }
+
 
 assertion :
   | LPAR ASSERT_MALFORMED script_module STRING RPAR
@@ -1465,7 +1456,7 @@ assertion :
     { AssertUnlinkable (snd $3, $4) @@ at () }
   | LPAR ASSERT_TRAP script_module STRING RPAR
     { AssertUninstantiable (snd $3, $4) @@ at () }
-  | LPAR ASSERT_RETURN action result_list RPAR { AssertReturn ($3, $4) @@ at () }
+  | LPAR ASSERT_RETURN action list(result) RPAR { AssertReturn ($3, $4) @@ at () }
   | LPAR ASSERT_TRAP action STRING RPAR { AssertTrap ($3, $4) @@ at () }
   | LPAR ASSERT_EXCEPTION action STRING RPAR { AssertException ($3, $4) @@ at () }
   | LPAR ASSERT_SUSPENSION action STRING RPAR { AssertSuspension ($3, $4) @@ at () }
@@ -1475,24 +1466,20 @@ cmd :
   | action { Action $1 @@ at () }
   | assertion { Assertion $1 @@ at () }
   | script_module { Module (fst $1, snd $1) @@ at () }
-  | LPAR REGISTER name module_var_opt RPAR { Register ($3, $4) @@ at () }
+  | LPAR REGISTER name option(module_var) RPAR { Register ($3, $4) @@ at () }
   | meta { Meta $1 @@ at () }
 
-cmd_list :
-  | /* empty */ { [] }
-  | cmd cmd_list { $1 :: $2 }
-
 meta :
-  | LPAR SCRIPT script_var_opt cmd_list RPAR { Script ($3, $4) @@ at () }
-  | LPAR INPUT script_var_opt STRING RPAR { Input ($3, $4) @@ at () }
-  | LPAR OUTPUT script_var_opt STRING RPAR { Output ($3, Some $4) @@ at () }
-  | LPAR OUTPUT script_var_opt RPAR { Output ($3, None) @@ at () }
+  | LPAR SCRIPT option(script_var) list(cmd) RPAR { Script ($3, $4) @@ at () }
+  | LPAR INPUT option(script_var) STRING RPAR { Input ($3, $4) @@ at () }
+  | LPAR OUTPUT option(script_var) STRING RPAR { Output ($3, Some $4) @@ at () }
+  | LPAR OUTPUT option(script_var) RPAR { Output ($3, None) @@ at () }
 
 literal_num :
   | LPAR CONST num RPAR { snd (num $2 $3) }
 
 literal_vec :
-  | LPAR VEC_CONST VEC_SHAPE num_list RPAR { snd (vec $2 $3 $4 (at ())) }
+  | LPAR VEC_CONST VEC_SHAPE list(num) RPAR { snd (vec $2 $3 $4 (at ())) }
 
 literal_ref :
   | LPAR REF_NULL heap_type RPAR { Value.NullRef ($3 (empty_context ())) }
@@ -1504,17 +1491,9 @@ literal :
   | literal_vec { Value.Vec $1 @@ at () }
   | literal_ref { Value.Ref $1 @@ at () }
 
-literal_list :
-  | /* empty */ { [] }
-  | literal literal_list { $1 :: $2 }
-
 numpat :
   | num { fun sh -> vec_lane_lit sh $1.it $1.at }
   | NAN { fun sh -> vec_lane_nan sh $1 (ati 3) }
-
-numpat_list:
-  | /* empty */ { [] }
-  | numpat numpat_list { $1 :: $2 }
 
 result :
   | literal_num { NumResult (NumPat ($1 @@ at())) @@ at () }
@@ -1528,17 +1507,13 @@ result :
   | LPAR REF_NULL RPAR { RefResult NullPat @@ at () }
   | LPAR REF_FUNC RPAR { RefResult (RefTypePat FuncHT) @@ at () }
   | LPAR REF_EXTERN RPAR { RefResult (RefTypePat ExternHT) @@ at () }
-  | LPAR VEC_CONST VEC_SHAPE numpat_list RPAR
+  | LPAR VEC_CONST VEC_SHAPE list(numpat) RPAR
     { if V128.num_lanes $3 <> List.length $4 then
         error (at ()) "wrong number of lane literals";
       VecResult (VecPat (Value.V128 ($3, List.map (fun lit -> lit $3) $4))) @@ at () }
 
-result_list :
-  | /* empty */ { [] }
-  | result result_list { $1 :: $2 }
-
 script :
-  | cmd_list EOF { $1 }
+  | list(cmd) EOF { $1 }
   | inline_module1 EOF { [Module (None, $1) @@ at ()] }  /* Sugar */
 
 script1 :
