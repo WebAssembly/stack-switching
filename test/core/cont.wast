@@ -205,6 +205,29 @@
       (drop)))
   "non-continuation type 0")
 
+(assert_invalid
+  (module
+    (type $ct (cont $ct)))
+  "non-function type 0")
+
+(assert_invalid
+  (module
+    (rec
+      (type $s0 (struct (field (ref 0) (ref 1) (ref $s0) (ref $s1))))
+      (type $s1 (struct (field (ref 0) (ref 1) (ref $s0) (ref $s1))))
+    )
+    (type $ct (cont $s0)))
+  "non-function type 0")
+
+(module
+  (rec
+    (type $f1 (func (param (ref $f2))))
+    (type $f2 (func (param (ref $f1))))
+  )
+  (type $c1 (cont $f1))
+  (type $c2 (cont $f2))
+)
+
 ;; Simple state example
 
 (module $state
