@@ -1504,13 +1504,14 @@ result :
   | LPAR REF_I31 RPAR { RefResult (RefTypePat I31HT) @@ at () }
   | LPAR REF_STRUCT RPAR { RefResult (RefTypePat StructHT) @@ at () }
   | LPAR REF_ARRAY RPAR { RefResult (RefTypePat ArrayHT) @@ at () }
-  | LPAR REF_NULL RPAR { RefResult NullPat @@ at () }
   | LPAR REF_FUNC RPAR { RefResult (RefTypePat FuncHT) @@ at () }
   | LPAR REF_EXTERN RPAR { RefResult (RefTypePat ExternHT) @@ at () }
+  | LPAR REF_NULL RPAR { RefResult NullPat @@ at () }
   | LPAR VEC_CONST VEC_SHAPE list(numpat) RPAR
     { if V128.num_lanes $3 <> List.length $4 then
         error (at ()) "wrong number of lane literals";
-      VecResult (VecPat (Value.V128 ($3, List.map (fun lit -> lit $3) $4))) @@ at () }
+      VecResult (VecPat
+        (Value.V128 ($3, List.map (fun lit -> lit $3) $4))) @@ at () }
 
 script :
   | list(cmd) EOF { $1 }
