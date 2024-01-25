@@ -110,6 +110,7 @@ let input_from get_script run =
   | Import.Unknown (at, msg) -> error at "link failure" msg
   | Eval.Link (at, msg) -> error at "link failure" msg
   | Eval.Trap (at, msg) -> error at "runtime trap" msg
+  | Eval.Exception (at, msg) -> error at "runtime exception" msg
   | Eval.Exhaustion (at, msg) -> error at "resource exhaustion" msg
   | Eval.Crash (at, msg) -> error at "runtime crash" msg
   | Encode.Code (at, msg) -> error at "encoding error" msg
@@ -118,17 +119,20 @@ let input_from get_script run =
   | Assert (at, msg) -> error at "assertion failure" msg
   | Abort _ -> false
 
-let input_script start name lexbuf run =
-  input_from (fun _ -> Parse.parse name lexbuf start) run
+let input_script name lexbuf run =
+  input_from (fun () -> Parse.Script.parse name lexbuf) run
+
+let input_script1 name lexbuf run =
+  input_from (fun () -> Parse.Script1.parse name lexbuf) run
 
 let input_sexpr name lexbuf run =
-  input_from (fun _ ->
-    let var_opt, def = Parse.parse name lexbuf Parse.Module in
+  input_from (fun () ->
+    let var_opt, def = Parse.Module.parse name lexbuf in
     [Module (var_opt, def) @@ no_region]) run
 
 let input_binary name buf run =
   let open Source in
-  input_from (fun _ ->
+  input_from (fun () ->
     [Module (None, Encoded (name, buf) @@ no_region) @@ no_region]) run
 
 let input_sexpr_file input file run =
@@ -162,8 +166,8 @@ let input_file file run =
   dispatch_file_ext
     input_binary_file
     (input_sexpr_file input_sexpr)
-    (input_sexpr_file (input_script Parse.Script))
-    (input_sexpr_file (input_script Parse.Script))
+    (input_sexpr_file input_script)
+    (input_sexpr_file input_script)
     input_js_file
     file run
 
@@ -171,7 +175,7 @@ let input_string string run =
   trace ("Running (\"" ^ String.escaped string ^ "\")...");
   let lexbuf = Lexing.from_string string in
   trace "Parsing...";
-  input_script Parse.Script "string" lexbuf run
+  input_script "string" lexbuf run
 
 
 (* Interactive *)
@@ -195,7 +199,7 @@ let lexbuf_stdin buf len =
 let input_stdin run =
   let lexbuf = Lexing.from_function lexbuf_stdin in
   let rec loop () =
-    let success = input_script Parse.Script1 "stdin" lexbuf run in
+    let success = input_script1 "stdin" lexbuf run in
     if not success then Lexing.flush_input lexbuf;
     if Lexing.(lexbuf.lex_curr_pos >= lexbuf.lex_buffer_len - 1) then
       continuing := false;
@@ -208,73 +212,52 @@ let input_stdin run =
 
 (* Printing *)
 
-let print_import m im =
-  let open Types in
-  let category, annotation =
-    match Ast.import_type m im with
-    | ExternFuncType t -> "func", string_of_func_type t
-    | ExternTableType t -> "table", string_of_table_type t
-    | ExternMemoryType t -> "memory", string_of_memory_type t
-    | ExternGlobalType t -> "global", string_of_global_type t
-  in
-  Printf.printf "  import %s \"%s\" \"%s\" : %s\n"
-    category (Ast.string_of_name im.it.Ast.module_name)
-      (Ast.string_of_name im.it.Ast.item_name) annotation
-
-let print_export m ex =
-  let open Types in
-  let category, annotation =
-    match Ast.export_type m ex with
-    | ExternFuncType t -> "func", string_of_func_type t
-    | ExternTableType t -> "table", string_of_table_type t
-    | ExternMemoryType t -> "memory", string_of_memory_type t
-    | ExternGlobalType t -> "global", string_of_global_type t
-  in
-  Printf.printf "  export %s \"%s\" : %s\n"
-    category (Ast.string_of_name ex.it.Ast.name) annotation
+let indent s =
+  let lines = List.filter ((<>) "") (String.split_on_char '\n' s) in
+  String.concat "\n" (List.map ((^) "  ") lines) ^ "\n"
 
 let print_module x_opt m =
-  Printf.printf "module%s :\n"
-    (match x_opt with None -> "" | Some x -> " " ^ x.it);
-  List.iter (print_import m) m.it.Ast.imports;
-  List.iter (print_export m) m.it.Ast.exports;
-  flush_all ()
+  Printf.printf "module%s :\n%s%!"
+    (match x_opt with None -> "" | Some x -> " " ^ x.it)
+    (indent (Types.string_of_module_type (Ast.module_type_of m)))
 
 let print_values vs =
-  let ts = List.map Values.type_of_value vs in
-  Printf.printf "%s : %s\n"
-    (Values.string_of_values vs) (Types.string_of_value_types ts);
-  flush_all ()
+  let ts = List.map Value.type_of_value vs in
+  Printf.printf "%s : %s\n%!"
+    (Value.string_of_values vs) (Types.string_of_result_type ts)
 
 let string_of_nan = function
   | CanonicalNan -> "nan:canonical"
   | ArithmeticNan -> "nan:arithmetic"
 
 let type_of_result r =
+  let open Types in
   match r with
-  | NumResult (NumPat n) -> Types.NumType (Values.type_of_num n.it)
-  | NumResult (NanPat n) -> Types.NumType (Values.type_of_num n.it)
-  | VecResult (VecPat _) -> Types.VecType Types.V128Type
-  | RefResult (RefPat r) -> Types.RefType (Values.type_of_ref r.it)
-  | RefResult (RefTypePat t) -> Types.RefType t
+  | NumResult (NumPat n) -> NumT (Value.type_of_num n.it)
+  | NumResult (NanPat n) -> NumT (Value.type_of_num n.it)
+  | VecResult (VecPat v) -> VecT (Value.type_of_vec v)
+  | RefResult (RefPat r) -> RefT (Value.type_of_ref r.it)
+  | RefResult (RefTypePat t) -> RefT (NoNull, t)  (* assume closed *)
+  | RefResult (NullPat) -> RefT (Null, ExternHT)
 
 let string_of_num_pat (p : num_pat) =
   match p with
-  | NumPat n -> Values.string_of_num n.it
+  | NumPat n -> Value.string_of_num n.it
   | NanPat nanop ->
     match nanop.it with
-    | Values.I32 _ | Values.I64 _ -> assert false
-    | Values.F32 n | Values.F64 n -> string_of_nan n
+    | Value.I32 _ | Value.I64 _ -> assert false
+    | Value.F32 n | Value.F64 n -> string_of_nan n
 
 let string_of_vec_pat (p : vec_pat) =
   match p with
-  | VecPat (Values.V128 (shape, ns)) ->
+  | VecPat (Value.V128 (shape, ns)) ->
     String.concat " " (List.map string_of_num_pat ns)
 
 let string_of_ref_pat (p : ref_pat) =
   match p with
-  | RefPat r -> Values.string_of_ref r.it
-  | RefTypePat t -> Types.string_of_refed_type t
+  | RefPat r -> Value.string_of_ref r.it
+  | RefTypePat t -> Types.string_of_heap_type t
+  | NullPat -> "null"
 
 let string_of_result r =
   match r with
@@ -288,9 +271,8 @@ let string_of_results = function
 
 let print_results rs =
   let ts = List.map type_of_result rs in
-  Printf.printf "%s : %s\n"
-    (string_of_results rs) (Types.string_of_value_types ts);
-  flush_all ()
+  Printf.printf "%s : %s\n%!"
+    (string_of_results rs) (Types.string_of_result_type ts)
 
 
 (* Configuration *)
@@ -337,30 +319,31 @@ let rec run_definition def : Ast.module_ =
     Decode.decode name bs
   | Quoted (_, s) ->
     trace "Parsing quote...";
-    let def' = Parse.string_to_module s in
+    let _, def' = Parse.Module.parse_string s in
     run_definition def'
 
-let run_action act : Values.value list =
+let run_action act : Value.t list =
   match act.it with
   | Invoke (x_opt, name, vs) ->
-    trace ("Invoking function \"" ^ Ast.string_of_name name ^ "\"...");
+    trace ("Invoking function \"" ^ Types.string_of_name name ^ "\"...");
     let inst = lookup_instance x_opt act.at in
     (match Instance.export inst name with
     | Some (Instance.ExternFunc f) ->
-      let Types.FuncType (ins, out) = Func.type_of f in
-      if List.length vs <> List.length ins then
+      let Types.FuncT (ts1, _ts2) =
+        Types.(as_func_str_type (expand_def_type (Func.type_of f))) in
+      if List.length vs <> List.length ts1 then
         Script.error act.at "wrong number of arguments";
       List.iter2 (fun v t ->
-        if Values.type_of_value v.it <> t then
+        if not (Match.match_val_type [] (Value.type_of_value v.it) t) then
           Script.error v.at "wrong type of argument"
-      ) vs ins;
+      ) vs ts1;
       Eval.invoke f (List.map (fun v -> v.it) vs)
     | Some _ -> Assert.error act.at "export is not a function"
     | None -> Assert.error act.at "undefined export"
     )
 
  | Get (x_opt, name) ->
-    trace ("Getting global \"" ^ Ast.string_of_name name ^ "\"...");
+    trace ("Getting global \"" ^ Types.string_of_name name ^ "\"...");
     let inst = lookup_instance x_opt act.at in
     (match Instance.export inst name with
     | Some (Instance.ExternGlobal gl) -> [Global.load gl]
@@ -368,9 +351,8 @@ let run_action act : Values.value list =
     | None -> Assert.error act.at "undefined export"
     )
 
-
 let assert_nan_pat n nan =
-  let open Values in
+  let open Value in
   match n, nan.it with
   | F32 z, F32 CanonicalNan -> z = F32.pos_nan || z = F32.neg_nan
   | F64 z, F64 CanonicalNan -> z = F64.pos_nan || z = F64.neg_nan
@@ -388,7 +370,7 @@ let assert_num_pat n np =
     | NanPat nanop -> assert_nan_pat n nanop
 
 let assert_vec_pat v p =
-  let open Values in
+  let open Value in
   match v, p with
   | V128 v, VecPat (V128 (shape, ps)) ->
     let extract = match shape with
@@ -403,14 +385,21 @@ let assert_vec_pat v p =
       (List.init (V128.num_lanes shape) (extract v)) ps
 
 let assert_ref_pat r p =
-  match r, p with
-  | r, RefPat r' -> r = r'.it
-  | Instance.FuncRef _, RefTypePat Types.FuncRefType
-  | ExternRef _, RefTypePat Types.ExternRefType -> true
+  match p, r with
+  | RefPat r', r -> Value.eq_ref r r'.it
+  | RefTypePat Types.AnyHT, Instance.FuncRef _ -> false
+  | RefTypePat Types.AnyHT, _
+  | RefTypePat Types.EqHT, (I31.I31Ref _ | Aggr.StructRef _ | Aggr.ArrayRef _)
+  | RefTypePat Types.I31HT, I31.I31Ref _
+  | RefTypePat Types.StructHT, Aggr.StructRef _
+  | RefTypePat Types.ArrayHT, Aggr.ArrayRef _ -> true
+  | RefTypePat Types.FuncHT, Instance.FuncRef _
+  | RefTypePat Types.ExternHT, _ -> true
+  | NullPat, Value.NullRef _ -> true
   | _ -> false
 
 let assert_pat v r =
-  let open Values in
+  let open Value in
   match v, r with
   | Num n, NumResult np -> assert_num_pat n np
   | Vec v, VecResult vp -> assert_vec_pat v vp
@@ -497,6 +486,20 @@ let run_assertion ass =
     | _ -> Assert.error ass.at "expected runtime error"
     )
 
+  | AssertException (act, re) ->
+    trace ("Asserting exception...");
+    (match run_action act with
+    | exception Eval.Exception (_, msg) -> assert_message ass.at "runtime" msg re
+    | _ -> Assert.error ass.at "expected exception"
+    )
+
+  | AssertSuspension (act, re) ->
+    trace ("Asserting suspension...");
+    (match run_action act with
+    | exception Eval.Suspension (_, msg) -> assert_message ass.at "runtime" msg re
+    | _ -> Assert.error ass.at "expected suspension"
+    )
+
   | AssertExhaustion (act, re) ->
     trace ("Asserting exhaustion...");
     (match run_action act with
@@ -530,7 +533,7 @@ let rec run_command cmd =
   | Register (name, x_opt) ->
     quote := cmd :: !quote;
     if not !Flags.dry then begin
-      trace ("Registering module \"" ^ Ast.string_of_name name ^ "\"...");
+      trace ("Registering module \"" ^ Types.string_of_name name ^ "\"...");
       let inst = lookup_instance x_opt cmd.at in
       registry := Map.add (Utf8.encode name) inst !registry;
       Import.register name (lookup_registry (Utf8.encode name))

@@ -1,7 +1,8 @@
 open Source
 open Ast
+open Pack
 open Script
-open Values
+open Value
 open Types
 open Sexpr
 
@@ -40,6 +41,7 @@ let list_of_opt = function None -> [] | Some x -> [x]
 let list f xs = List.map f xs
 let listi f xs = List.mapi f xs
 let opt f xo = list f (list_of_opt xo)
+let opt_s f xo = Lib.Option.get (Lib.Option.map f xo) ""
 
 let tab head f xs = if xs = [] then [] else [Node (head, list f xs)]
 let atom f x = Atom (f x)
@@ -55,25 +57,68 @@ let break_string s =
 
 (* Types *)
 
+let mutability node = function
+  | Cons -> node
+  | Var -> Node ("mut", [node])
+
 let num_type t = string_of_num_type t
 let vec_type t = string_of_vec_type t
-let ref_type t = string_of_ref_type t
-let refed_type t = string_of_refed_type t
-let value_type t = string_of_value_type t
+let ref_type t =
+  match t with
+  | (Null, AnyHT) -> "anyref"
+  | (Null, EqHT) -> "eqref"
+  | (Null, I31HT) -> "i31ref"
+  | (Null, StructHT) -> "structref"
+  | (Null, ArrayHT) -> "arrayref"
+  | (Null, FuncHT) -> "funcref"
+  | t -> string_of_ref_type t
 
-let decls kind ts = tab kind (atom value_type) ts
+let heap_type t = string_of_heap_type t
+let val_type t = string_of_val_type t
+let storage_type t = string_of_storage_type t
 
-let func_type (FuncType (ins, out)) =
-  Node ("func", decls "param" ins @ decls "result" out)
+let final = function
+  | NoFinal -> ""
+  | Final -> " final"
 
-let struct_type = func_type
+let decls kind ts = tab kind (atom val_type) ts
+
+let field_type (FieldT (mut, t)) =
+  mutability (atom storage_type t) mut
+
+let struct_type (StructT fts) =
+  Node ("struct", list (fun ft -> Node ("field", [field_type ft])) fts)
+
+let array_type (ArrayT ft) =
+  Node ("array", [field_type ft])
+
+let func_type (FuncT (ts1, ts2)) =
+  Node ("func", decls "param" ts1 @ decls "result" ts2)
+
+let cont_type (ContT ct) =
+  Node ("cont", [atom heap_type ct])
+
+let str_type st =
+  match st with
+  | DefStructT st -> struct_type st
+  | DefArrayT at -> array_type at
+  | DefFuncT ft -> func_type ft
+  | DefContT ct -> cont_type ct
+
+let sub_type = function
+  | SubT (Final, [], st) -> str_type st
+  | SubT (fin, xs, st) ->
+    Node (String.concat " "
+      (("sub" ^ final fin ):: List.map heap_type xs), [str_type st])
+
+let rec_type i j st =
+  Node ("type $" ^ nat (i + j), [sub_type st])
 
 let limits nat {min; max} =
   String.concat " " (nat min :: opt nat max)
 
-let global_type = function
-  | GlobalType (t, Immutable) -> atom string_of_value_type t
-  | GlobalType (t, Mutable) -> Node ("mut", [atom string_of_value_type t])
+let global_type (GlobalT (mut, t)) =
+  mutability (atom string_of_val_type t) mut
 
 let pack_size = function
   | Pack8 -> "8"
@@ -352,7 +397,7 @@ struct
 end
 
 let oper (iop, fop) op =
-  num_type (type_of_num op) ^ "." ^
+  string_of_num_type (type_of_num op) ^ "." ^
   (match op with
   | I32 o -> iop "32" o
   | I64 o -> iop "64" o
@@ -418,14 +463,22 @@ let vec_laneop instr (op, i) =
   memop (instr ^ pack_size op.pack ^ "_lane") vec_type op
     (packed_size op.pack) ^ " " ^ nat i
 
+let initop = function
+  | Explicit -> ""
+  | Implicit -> "_default"
+
+let externop = function
+  | Internalize -> "any.convert_extern"
+  | Externalize -> "extern.convert_any"
+
 
 (* Expressions *)
 
 let var x = nat32 x.it
 let num v = string_of_num v.it
 let vec v = string_of_vec v.it
-let constop v = num_type (type_of_num v) ^ ".const"
-let vec_constop v = vec_type (type_of_vec v) ^ ".const i32x4"
+let constop v = string_of_num_type (type_of_num v) ^ ".const"
+let vec_constop v = string_of_vec_type (type_of_vec v) ^ ".const i32x4"
 
 let block_type = function
   | VarBlockType x -> [Node ("type " ^ var x, [])]
@@ -445,14 +498,47 @@ let rec instr e =
     | If (bt, es1, es2) ->
       "if", block_type bt @
         [Node ("then", list instr es1); Node ("else", list instr es2)]
+    | TryCatch (bt, es, ct, ca) ->
+      let catch (tag, es) = Node ("catch " ^ var tag, list instr es) in
+      let catch_all = match ca with
+        | Some es -> [Node ("catch_all", list instr es)]
+        | None -> [] in
+      let handler = list catch ct @ catch_all in
+      "try", block_type bt @ [Node ("do", list instr es)] @ handler
+    | TryDelegate (bt, es, x) ->
+      let delegate = [Node ("delegate " ^ var x, [])] in
+      "try", block_type bt @ [Node ("do", list instr es)] @ delegate
+    | Throw x -> "throw " ^ var x, []
+    | Rethrow x -> "rethrow " ^ var x, []
     | Br x -> "br " ^ var x, []
     | BrIf x -> "br_if " ^ var x, []
     | BrTable (xs, x) ->
       "br_table " ^ String.concat " " (list var (xs @ [x])), []
+    | BrOnNull x -> "br_on_null " ^ var x, []
+    | BrOnNonNull x -> "br_on_non_null " ^ var x, []
+    | BrOnCast (x, t1, t2) ->
+      "br_on_cast " ^ var x, [Atom (ref_type t1); Atom (ref_type t2)]
+    | BrOnCastFail (x, t1, t2) ->
+      "br_on_cast_fail " ^ var x, [Atom (ref_type t1); Atom (ref_type t2)]
     | Return -> "return", []
     | Call x -> "call " ^ var x, []
+    | CallRef x -> "call_ref " ^ var x, []
     | CallIndirect (x, y) ->
       "call_indirect " ^ var x, [Node ("type " ^ var y, [])]
+    | ReturnCall x -> "return_call " ^ var x, []
+    | ReturnCallRef x -> "return_call_ref " ^ var x, []
+    | ReturnCallIndirect (x, y) ->
+      "return_call_indirect " ^ var x, [Node ("type " ^ var y, [])]
+    | ContNew x -> "cont.new " ^ var x, []
+    | ContBind (x, y) -> "cont.bind " ^ var x ^ " " ^ var y, []
+    | Suspend x -> "suspend " ^ var x, []
+    | Resume (x, xys) ->
+      "resume " ^ var x,
+      List.map (fun (x, y) -> Node ("tag " ^ var x ^ " " ^ var y, [])) xys
+    | ResumeThrow (x, y, xys) ->
+      "resume_throw " ^ var x ^ " " ^ var y,
+      List.map (fun (x, y) -> Node ("tag " ^ var x ^ " " ^ var y, [])) xys
+    | Barrier (bt, es) -> "barrier", block_type bt @ list instr es
     | LocalGet x -> "local.get " ^ var x, []
     | LocalSet x -> "local.set " ^ var x, []
     | LocalTee x -> "local.tee " ^ var x, []
@@ -478,9 +564,31 @@ let rec instr e =
     | MemoryCopy -> "memory.copy", []
     | MemoryInit x -> "memory.init " ^ var x, []
     | DataDrop x -> "data.drop " ^ var x, []
-    | RefNull t -> "ref.null", [Atom (refed_type t)]
-    | RefIsNull -> "ref.is_null", []
+    | RefNull t -> "ref.null", [Atom (heap_type t)]
     | RefFunc x -> "ref.func " ^ var x, []
+    | RefIsNull -> "ref.is_null", []
+    | RefAsNonNull -> "ref.as_non_null", []
+    | RefTest t -> "ref.test", [Atom (ref_type t)]
+    | RefCast t -> "ref.cast", [Atom (ref_type t)]
+    | RefEq -> "ref.eq", []
+    | RefI31 -> "ref.i31", []
+    | I31Get ext -> "i31.get" ^ extension ext, []
+    | StructNew (x, op) -> "struct.new" ^ initop op ^ " " ^ var x, []
+    | StructGet (x, y, exto) ->
+      "struct.get" ^ opt_s extension exto ^ " " ^ var x ^ " " ^ var y, []
+    | StructSet (x, y) -> "struct.set " ^ var x ^ " " ^ var y, []
+    | ArrayNew (x, op) -> "array.new" ^ initop op ^ " " ^ var x, []
+    | ArrayNewFixed (x, n) -> "array.new_fixed " ^ var x ^ " " ^ nat32 n, []
+    | ArrayNewElem (x, y) -> "array.new_elem " ^ var x ^ " " ^ var y, []
+    | ArrayNewData (x, y) -> "array.new_data " ^ var x ^ " " ^ var y, []
+    | ArrayGet (x, exto) -> "array.get" ^ opt_s extension exto ^ " " ^ var x, []
+    | ArraySet x -> "array.set " ^ var x, []
+    | ArrayLen -> "array.len", []
+    | ArrayCopy (x, y) -> "array.copy " ^ var x ^ " " ^ var y, []
+    | ArrayFill x -> "array.fill " ^ var x, []
+    | ArrayInitData (x, y) -> "array.init_data " ^ var x ^ " " ^ var y, []
+    | ArrayInitElem (x, y) -> "array.init_elem " ^ var x ^ " " ^ var y, []
+    | ExternConvert op -> externop op, []
     | Const n -> constop n.it ^ " " ^ num n, []
     | Test op -> testop op, []
     | Compare op -> relop op, []
@@ -516,7 +624,7 @@ let func_with_name name f =
   let {ftype; locals; body} = f.it in
   Node ("func" ^ name,
     [Node ("type " ^ var ftype, [])] @
-    decls "local" locals @
+    decls "local" (List.map (fun loc -> loc.it.ltype) locals) @
     list instr body
   )
 
@@ -530,21 +638,27 @@ let func f =
 (* Tables & memories *)
 
 let table off i tab =
-  let {ttype = TableType (lim, t)} = tab.it in
+  let {ttype = TableT (lim, t); tinit} = tab.it in
   Node ("table $" ^ nat (off + i) ^ " " ^ limits nat32 lim,
-    [atom ref_type t]
+    atom ref_type t :: list instr tinit.it
   )
 
 let memory off i mem =
-  let {mtype = MemoryType lim} = mem.it in
+  let {mtype = MemoryT lim} = mem.it in
   Node ("memory $" ^ nat (off + i) ^ " " ^ limits nat32 lim, [])
 
+let tag off i tag =
+  let {tagtype = TagT et} = tag.it in
+  Node ("tag $" ^ nat (off + i),
+    [Node ("type", [atom heap_type et])]
+  )
+
 let is_elem_kind = function
-  | FuncRefType -> true
+  | (NoNull, FuncHT) -> true
   | _ -> false
 
 let elem_kind = function
-  | FuncRefType -> "func"
+  | (NoNull, FuncHT) -> "func"
   | _ -> assert false
 
 let is_elem_index e =
@@ -582,24 +696,30 @@ let data i seg =
 
 (* Modules *)
 
-let typedef i ty =
-  Node ("type $" ^ nat i, [struct_type ty.it])
+let type_ (ns, i) ty =
+  match ty.it with
+  | RecT [st] when not Free.(Set.mem (Int32.of_int i) (type_ ty).types) ->
+    rec_type i 0 st :: ns, i + 1
+  | RecT sts ->
+    Node ("rec", List.mapi (rec_type i) sts) :: ns, i + List.length sts
 
-let import_desc fx tx mx gx d =
+let import_desc fx tx mx ex gx d =
   match d.it with
   | FuncImport x ->
     incr fx; Node ("func $" ^ nat (!fx - 1), [Node ("type", [atom var x])])
   | TableImport t ->
-    incr tx; table 0 (!tx - 1) ({ttype = t} @@ d.at)
+    incr tx; table 0 (!tx - 1) ({ttype = t; tinit = [] @@ d.at} @@ d.at)
   | MemoryImport t ->
     incr mx; memory 0 (!mx - 1) ({mtype = t} @@ d.at)
+  | TagImport x ->
+    incr ex; Node ("tag $" ^ nat (!ex - 1), [Node ("type", [atom var x])])
   | GlobalImport t ->
     incr gx; Node ("global $" ^ nat (!gx - 1), [global_type t])
 
-let import fx tx mx gx im =
+let import fx tx mx ex gx im =
   let {module_name; item_name; idesc} = im.it in
   Node ("import",
-    [atom name module_name; atom name item_name; import_desc fx tx mx gx idesc]
+    [atom name module_name; atom name item_name; import_desc fx tx mx ex gx idesc]
   )
 
 let export_desc d =
@@ -608,6 +728,7 @@ let export_desc d =
   | TableExport x -> Node ("table", [atom var x])
   | MemoryExport x -> Node ("memory", [atom var x])
   | GlobalExport x -> Node ("global", [atom var x])
+  | TagExport x -> Node ("tag", [atom var x])
 
 let export ex =
   let {name = n; edesc} = ex.it in
@@ -631,13 +752,15 @@ let module_with_var_opt x_opt m =
   let fx = ref 0 in
   let tx = ref 0 in
   let mx = ref 0 in
+  let ex = ref 0 in
   let gx = ref 0 in
-  let imports = list (import fx tx mx gx) m.it.imports in
+  let imports = list (import fx tx mx ex gx) m.it.imports in
   Node ("module" ^ var_opt x_opt,
-    listi typedef m.it.types @
+    List.rev (fst (List.fold_left type_ ([], 0) m.it.types)) @
     imports @
     listi (table !tx) m.it.tables @
     listi (memory !mx) m.it.memories @
+    listi (tag !ex) m.it.tags @
     listi (global !gx) m.it.globals @
     listi (func_with_index !fx) m.it.funcs @
     list export m.it.exports @
@@ -661,8 +784,9 @@ let num mode = if mode = `Binary then hex_string_of_num else string_of_num
 let vec mode = if mode = `Binary then hex_string_of_vec else string_of_vec
 
 let ref_ = function
-  | NullRef t -> Node ("ref.null " ^ refed_type t, [])
-  | ExternRef n -> Node ("ref.extern " ^ nat32 n, [])
+  | NullRef t -> Node ("ref.null " ^ heap_type t, [])
+  | Script.HostRef n -> Node ("ref.host " ^ nat32 n, [])
+  | Extern.ExternRef (Script.HostRef n) -> Node ("ref.extern " ^ nat32 n, [])
   | _ -> assert false
 
 let literal mode lit =
@@ -679,14 +803,14 @@ let definition mode x_opt def =
         match def.it with
         | Textual m -> m
         | Encoded (_, bs) -> Decode.decode "" bs
-        | Quoted (_, s) -> unquote (Parse.string_to_module s)
+        | Quoted (_, s) -> unquote (snd (Parse.Module.parse_string s))
       in module_with_var_opt x_opt (unquote def)
     | `Binary ->
       let rec unquote def =
         match def.it with
         | Textual m -> Encode.encode m
         | Encoded (_, bs) -> Encode.encode (Decode.decode "" bs)
-        | Quoted (_, s) -> unquote (Parse.string_to_module s)
+        | Quoted (_, s) -> unquote (snd (Parse.Module.parse_string s))
       in binary_module_with_var_opt x_opt (unquote def)
     | `Original ->
       match def.it with
@@ -716,15 +840,15 @@ let nanop (n : nanop) =
   | _ -> .
 
 let num_pat mode = function
-  | NumPat n -> literal mode (Values.Num n.it @@ n.at)
+  | NumPat n -> literal mode (Value.Num n.it @@ n.at)
   | NanPat nan -> Node (constop nan.it ^ " " ^ nanop nan, [])
 
 let lane_pat mode pat shape =
   let choose fb ft = if mode = `Binary then fb else ft in
   match pat, shape with
-  | NumPat {it = Values.I32 i; _}, V128.I8x16 () ->
+  | NumPat {it = Value.I32 i; _}, V128.I8x16 () ->
     choose I8.to_hex_string I8.to_string_s i
-  | NumPat {it = Values.I32 i; _}, V128.I16x8 () ->
+  | NumPat {it = Value.I32 i; _}, V128.I16x8 () ->
     choose I16.to_hex_string I16.to_string_s i
   | NumPat n, _ -> num mode n.it
   | NanPat nan, _ -> nanop nan
@@ -736,7 +860,8 @@ let vec_pat mode = function
 
 let ref_pat = function
   | RefPat r -> ref_ r.it
-  | RefTypePat t -> Node ("ref." ^ refed_type t, [])
+  | RefTypePat t -> Node ("ref." ^ heap_type t, [])
+  | NullPat -> Node ("ref.null", [])
 
 let result mode res =
   match res.it with
@@ -762,6 +887,10 @@ let assertion mode ass =
     [Node ("assert_return", action mode act :: List.map (result mode) results)]
   | AssertTrap (act, re) ->
     [Node ("assert_trap", [action mode act; Atom (string re)])]
+  | AssertException (act, re) ->
+    [Node ("assert_exception", [action mode act; Atom (string re)])]
+  | AssertSuspension (act, re) ->
+    [Node ("assert_suspension", [action mode act; Atom (string re)])]
   | AssertExhaustion (act, re) ->
     [Node ("assert_exhaustion", [action mode act; Atom (string re)])]
 
@@ -773,4 +902,4 @@ let command mode cmd =
   | Assertion ass -> assertion mode ass
   | Meta _ -> assert false
 
-let script mode scr = Lib.List.concat_map (command mode) scr
+let script mode scr = List.concat_map (command mode) scr

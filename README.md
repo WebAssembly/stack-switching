@@ -1,14 +1,38 @@
-![Build Status](https://github.com/WebAssembly/spec/actions/workflows/main.yml/badge.svg)
+[![CI for specs](https://github.com/wasmfx/specfx/actions/workflows/ci-spec.yml/badge.svg)](https://github.com/wasmfx/specfx/actions/workflows/ci-spec.yml)
+[![CI for interpreter & tests](https://github.com/wasmfx/specfx/actions/workflows/ci-interpreter.yml/badge.svg)](https://github.com/wasmfx/specfx/actions/workflows/ci-interpreter.yml)
+
+# Typed Continuations Proposal for WebAssembly
+
+This repository is a clone of
+[github.com/WebAssembly/spec/](https://github.com/WebAssembly/spec/).
+It is meant for discussion, prototype specification and implementation
+of a proposal to add support for different patterns of non-local
+control flow to WebAssembly.
+
+The proposal is fully implemented as part of the reference interpreter.
+
+* See the [explainer](proposals/continuations/Explainer.md) for a high-level summary of the proposal.
+
+* See the [overview](proposals/continuations/Overview.md) for a more formal description of the proposal.
+
+* See the [examples](proposals/continuations/examples) for Wasm code for implementing various different features including lightweight threads, actors, and async/await.
+
+Original `README` from upstream repository follows.
 
 # spec
 
-This repository holds the sources for the WebAssembly draft specification
-(to seed a future
-[WebAssembly Working Group](https://lists.w3.org/Archives/Public/public-new-work/2017Jun/0005.html)),
-a reference implementation, and the official testsuite.
+This repository holds a prototypical reference implementation for WebAssembly,
+which is currently serving as the official specification. Eventually, we expect
+to produce a specification either written in human-readable prose or in a formal
+specification language.
 
-A formatted version of the spec is available here:
-[webassembly.github.io/spec](https://webassembly.github.io/spec/),
+It also holds the WebAssembly testsuite, which tests numerous aspects of
+conformance to the spec.
+
+View the work-in-progress spec at [webassembly.github.io/spec](https://webassembly.github.io/spec/).
+
+At this time, the contents of this repository are under development and known
+to be "incomplet and inkorrect".
 
 Participation is welcome. Discussions about new features, significant semantic
 changes, or any specification change likely to generate substantial discussion
