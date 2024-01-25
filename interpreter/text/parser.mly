@@ -375,8 +375,8 @@ val_type :
   | ref_type { fun c -> RefT ($1 c) }
 
 val_type_list :
-  | /* empty */ { 0l, fun c -> [] }
-  | val_type val_type_list { I32.add (fst $2) 1l, fun c -> $1 c :: snd $2 c }
+  | list(val_type)
+    { Lib.List32.length $1, fun c -> List.map (fun f -> f c) $1 }
 
 global_type :
   | val_type { fun c -> GlobalT (Cons, $1 c) }
