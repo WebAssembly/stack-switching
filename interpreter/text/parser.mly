@@ -135,9 +135,9 @@ let empty_context () =
     deferred_locals = ref []
   }
 
-let enter_block (c : context) at = {c with labels = scoped "label" 1l c.labels at}
-let enter_let (c : context) at = {c with locals = empty (); deferred_locals = ref []}
-let enter_func (c : context) at = {(enter_let c at) with labels = empty ()}
+let enter_block (c : context) loc = {c with labels = scoped "label" 1l c.labels (at loc)}
+let enter_let (c : context) loc = {c with locals = empty (); deferred_locals = ref []}
+let enter_func (c : context) loc = {(enter_let c at) with labels = empty ()}
 
 let defer_locals (c : context) f =
   c.deferred_locals := (fun () -> ignore (f ())) :: !(c.deferred_locals)
@@ -208,19 +208,19 @@ let define_def_type (c : context) (dt : def_type) =
   assert (c.types.space.count > Lib.List32.length c.types.ctx);
   c.types.ctx <- c.types.ctx @ [dt]
 
-let anon_type (c : context) at = new_fields c; bind "type" c.types.space 1l at
-let anon_func (c : context) at = bind "function" c.funcs 1l at
-let anon_locals (c : context) n at =
-  defer_locals c (fun () -> bind "local" c.locals n at)
-let anon_global (c : context) at = bind "global" c.globals 1l at
-let anon_table (c : context) at = bind "table" c.tables 1l at
-let anon_memory (c : context) at = bind "memory" c.memories 1l at
-let anon_tag (c : context) at = bind "tag" c.tags 1l at
-let anon_elem (c : context) at = bind "elem segment" c.elems 1l at
-let anon_data (c : context) at = bind "data segment" c.datas 1l at
-let anon_label (c : context) at = bind "label" c.labels 1l at
-let anon_fields (c : context) x n at =
-  bind "field" (Lib.List32.nth c.types.fields x) n at
+let anon_type (c : context) loc = bind "type" c.types.space 1l (at loc)
+let anon_func (c : context) loc = bind "function" c.funcs 1l (at loc)
+let anon_locals (c : context) n loc =
+  defer_locals c (fun () -> bind "local" c.locals n (at loc))
+let anon_global (c : context) loc = bind "global" c.globals 1l (at loc)
+let anon_table (c : context) loc = bind "table" c.tables 1l (at loc)
+let anon_memory (c : context) loc = bind "memory" c.memories 1l (at loc)
+let anon_tag (c : context) loc = bind "tag" c.tags 1l (at loc)
+let anon_elem (c : context) loc = bind "elem segment" c.elems 1l (at loc)
+let anon_data (c : context) loc = bind "data segment" c.datas 1l (at loc)
+let anon_label (c : context) loc = bind "label" c.labels 1l (at loc)
+let anon_fields (c : context) x n loc =
+  bind "field" (Lib.List32.nth c.types.fields x) n (at loc)
 
 let find_type_index (c : context) dt loc =
   let st = SubT (Final, [], dt) in
@@ -232,16 +232,16 @@ let find_type_index (c : context) dt loc =
   with
   | Some i -> Int32.of_int i @@ loc
   | None ->
-    let i = anon_type c (at loc) in
+    let i = anon_type c loc in
     define_type c (RecT [st] @@ loc);
     define_def_type c (DefT (RecT [st], 0l));
     i @@ loc
 
-let inline_func_type (c : context) ft at =
+let inline_func_type (c : context) ft loc =
   let dt = DefFuncT ft in
-  find_type_index c dt at
+  find_type_index c dt loc
 
-let inline_func_type_explicit (c : context) x ft (loc : (Lexing.position * Lexing.position)) =
+let inline_func_type_explicit (c : context) x ft loc =
   if ft = FuncT ([], []) then
     (* Deferring ensures that type lookup is only triggered when
        symbolic identifiers are used, and not for desugared functions *)
@@ -426,9 +426,9 @@ field_type_list :
 struct_field_list :
   | /* empty */ { fun c x -> [] }
   | LPAR FIELD field_type_list RPAR struct_field_list
-    { let at3 = $loc($3) in
+    { let loc3 = $loc($3) in
       fun c x -> let fts = $3 c in
-      ignore (anon_fields c x (Lib.List32.length fts) (at at3)); fts @ $5 c x }
+      ignore (anon_fields c x (Lib.List32.length fts) loc3); fts @ $5 c x }
   | LPAR FIELD bind_var field_type RPAR struct_field_list
     { fun c x -> ignore (bind_field c x $3); $4 c :: $6 c x }
 
@@ -508,7 +508,7 @@ var_list :
   | var var_list { fun c lookup -> $1 c lookup :: $2 c lookup }
 
 bind_var_opt :
-  | /* empty */ { let loc = $sloc in fun c anon bind -> anon c (at loc) }
+  | /* empty */ { let at = $sloc in fun c anon bind -> anon c at }
   | bind_var { fun c anon bind -> bind c $1 }  /* Sugar */
 
 bind_var :
@@ -519,13 +519,13 @@ labeling_opt :
     { let loc = $sloc in
       fun c xs ->
       List.iter (fun x -> error x.at "mismatching label") xs;
-      let c' = enter_block c (at loc) in ignore (anon_label c' (at loc)); c' }
+      let c' = enter_block c loc in ignore (anon_label c' loc); c' }
   | bind_var
     { let loc = $sloc in
       fun c xs ->
       List.iter
         (fun x -> if x.it <> $1.it then error x.at "mismatching label") xs;
-      let c' = enter_block c (at loc) in ignore (bind_label c' $1); c' }
+      let c' = enter_block c loc in ignore (bind_label c' $1); c' }
 
 labeling_end_opt :
   | /* empty */ { [] }
@@ -897,9 +897,9 @@ resume_expr_handler :
 
 if_block :
   | type_use if_block_param_body
-    { let at = $sloc in
+    { let loc = $sloc in
       fun c c' ->
-      VarBlockType (inline_func_type_explicit c ($1 c) (fst ($2 c c')) at),
+      VarBlockType (inline_func_type_explicit c ($1 c) (fst ($2 c c')) loc),
       snd ($2 c c') }
   | if_block_param_body  /* Sugar */
     { let at = $sloc in
@@ -1031,7 +1031,7 @@ func_fields_body :
     { let loc3 = $loc($3) in
       (fun c -> let FuncT (ts1, ts2) = fst $5 c in
         FuncT (snd $3 c @ ts1, ts2)),
-      (fun c -> anon_locals c (fst $3) (at loc3); snd $5 c) }
+      (fun c -> anon_locals c (fst $3) loc3; snd $5 c) }
   | LPAR PARAM bind_var val_type RPAR func_fields_body  /* Sugar */
     { (fun c -> let FuncT (ts1, ts2) = fst $6 c in
         FuncT ($4 c :: ts1, ts2)),
@@ -1047,11 +1047,11 @@ func_result_body :
 func_body :
   | instr_list
     { let loc = $sloc in
-      fun c -> ignore (anon_label c (at loc));
+      fun c -> ignore (anon_label c loc);
       {ftype = -1l @@ loc; locals = []; body = $1 c} }
   | LPAR LOCAL local_type_list RPAR func_body
     { let loc3 = $loc($3) in
-      fun c -> anon_locals c (fst $3) (at loc3); let f = $5 c in
+      fun c -> anon_locals c (fst $3) loc3; let f = $5 c in
       {f with locals = snd $3 c @ f.Ast.locals} }
   | LPAR LOCAL bind_var local_type RPAR func_body  /* Sugar */
     { fun c -> ignore (bind_local c $3); let f = $6 c in
@@ -1234,9 +1234,9 @@ global_fields :
 
 tag :
   | LPAR TAG bind_var_opt tag_fields RPAR
-    { let at = $sloc in
-      fun c -> let x = $3 c anon_tag bind_tag @@ at in
-      fun () -> $4 c x at }
+    { let loc = $sloc in
+      fun c -> let x = $3 c anon_tag bind_tag @@ loc in
+      fun () -> $4 c x loc }
 
 tag_fields :
   | tag_type
@@ -1305,7 +1305,7 @@ inline_export :
 type_def :
   | LPAR TYPE sub_type RPAR
     { let loc = $sloc in
-      fun c -> let x = anon_type c (at loc) in fun () -> $3 c x }
+      fun c -> let x = anon_type c loc in fun () -> $3 c x }
   | LPAR TYPE bind_var sub_type RPAR  /* Sugar */
     { fun c -> let x = bind_type c $3 in fun () -> $4 c x }
 
