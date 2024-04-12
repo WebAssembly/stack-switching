@@ -110,8 +110,8 @@
     (loop $l
       (if (call $queue-empty) (then (return)))
       (block $on_yield (result (ref $cont))
-        (resume (tag $yield $on_yield)
-                (call $dequeue)
+        (resume $cont (tag $yield $on_yield)
+                      (call $dequeue)
         )
         (br $l)  ;; thread terminated
       ) ;;   $on_yield (result (ref $cont))
@@ -138,9 +138,9 @@
   (elem declare func $thread1 $thread2 $thread3)
 
   (func (export "run")
-    (call $enqueue (cont.new (type $cont) (ref.func $thread1)))
-    (call $enqueue (cont.new (type $cont) (ref.func $thread2)))
-    (call $enqueue (cont.new (type $cont) (ref.func $thread3)))
+    (call $enqueue (cont.new $cont (ref.func $thread1)))
+    (call $enqueue (cont.new $cont (ref.func $thread2)))
+    (call $enqueue (cont.new $cont (ref.func $thread3)))
 
     (call $log (i32.const -1))
     (call $scheduler)

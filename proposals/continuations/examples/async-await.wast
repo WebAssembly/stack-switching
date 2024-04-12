@@ -72,11 +72,11 @@
      (local $y i32)
 
      (call $log (i32.const -1))
-     (local.set $p (suspend $async (cont.bind (type $i-cont) (i32.const 1) (i32.const 3) (cont.new (type $iii-cont) (ref.func $sum)))))
+     (local.set $p (suspend $async (cont.bind $iii-cont $i-cont (i32.const 1) (i32.const 3) (cont.new $iii-cont (ref.func $sum)))))
      (call $log (i32.const -2))
-     (local.set $q (suspend $async (cont.bind (type $i-cont) (i32.const 5) (i32.const 7) (cont.new (type $iii-cont) (ref.func $sum)))))
+     (local.set $q (suspend $async (cont.bind $iii-cont $i-cont (i32.const 5) (i32.const 7) (cont.new $iii-cont (ref.func $sum)))))
      (call $log (i32.const -3))
-     (local.set $r (suspend $async (cont.bind (type $i-cont) (i32.const 10) (i32.const 15) (cont.new (type $iii-cont) (ref.func $sum)))))
+     (local.set $r (suspend $async (cont.bind $iii-cont $i-cont (i32.const 10) (i32.const 15) (cont.new $iii-cont (ref.func $sum)))))
      (call $log (i32.const -4))
 
      (local.set $x (i32.mul (suspend $await (local.get $p))
@@ -163,8 +163,8 @@
   ;; a simplistic implementation of promises that assumes a maximum of
   ;; 1000 promises and a maximum of one observer per promise
 
-  (exception $too-many-promises)
-  (exception $too-many-observers)
+  (tag $too-many-promises)
+  (tag $too-many-observers)
 
   (global $num-promises (mut i32) (i32.const 0))
   (global $max-promises i32 (i32.const 1000))
@@ -217,7 +217,7 @@
     (if (ref.is_null (local.get $k))
       (then (return (ref.null $cont)))
     )
-    (return (cont.bind (type $cont) (local.get $v) (local.get $k)))
+    (return (cont.bind $i-cont $cont (local.get $v) (local.get $k)))
   )
 )
 (register "promise")
@@ -254,53 +254,56 @@
   (func $fulfill-promise (import "promise" "fulfill") (param $p i32) (param $v i32) (result (ref null $cont)))
 
   (func $run (export "run") (param $nextk (ref null $cont))
+    (local $p i32)
+    (local $v i32)
+    (local $ik (ref $i-cont))
+    (local $ak (ref $i-cont))
+    (local $k (ref null $cont))
     (loop $l
       (if (ref.is_null (local.get $nextk)) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_fulfill (result i32 i32 (ref $cont))
           (block $on_async (result (ref $i-cont) (ref $i-cont))
             (block $on_await (result i32 (ref $i-cont))
-              (resume (tag $yield $on_yield)
-                      (tag $fulfill $on_fulfill)
-                      (tag $async $on_async)
-                      (tag $await $on_await)
-                      (local.get $nextk)
+              (resume $cont (tag $yield $on_yield)
+                            (tag $fulfill $on_fulfill)
+                            (tag $async $on_async)
+                            (tag $await $on_await)
+                            (local.get $nextk)
               )
               (local.set $nextk (call $dequeue))
               (br $l)  ;; thread terminated
             ) ;;   $on_await (result i32 (ref $i-cont))
-            (let (local $p i32) (local $ik (ref $i-cont))
-              (if (call $promise-fulfilled (local.get $p))
-                 ;; if promise fulfilled then run continuation partially applied to value
-                 (then (local.set $nextk (cont.bind (type $cont) (call $promise-value (local.get $p)) (local.get $ik))))
-                 ;; else add continuation to promise and run next continuation from the queue
-                 (else (call $await-promise (local.get $p) (local.get $ik))
-                       (local.set $nextk (call $dequeue)))
-              )
+            (local.set $ik)
+            (local.set $p)
+            (if (call $promise-fulfilled (local.get $p))
+                ;; if promise fulfilled then run continuation partially applied to value
+                (then (local.set $nextk (cont.bind $i-cont $cont (call $promise-value (local.get $p)) (local.get $ik))))
+                ;; else add continuation to promise and run next continuation from the queue
+                (else (call $await-promise (local.get $p) (local.get $ik))
+                      (local.set $nextk (call $dequeue)))
             )
             (br $l)
           ) ;;   $on_async (result (ref $i-func) (ref $i-cont))
-          (let (local $ak (ref $i-cont)) (local $ik (ref $i-cont))
-             ;; create new promise
-             (call $new-promise)
-             (let (local $p i32)
-                ;; enqueue continuation partially applied to promise
-                (call $enqueue (cont.bind (type $cont) (local.get $p) (local.get $ik)))
-                ;; run computation partially applied to promise
-                (local.set $nextk (cont.bind (type $cont) (local.get $p) (local.get $ak)))
-             )
-          )
+          (local.set $ik)
+          (local.set $ak)
+            ;; create new promise
+            (call $new-promise)
+            (local.set $p)
+            ;; enqueue continuation partially applied to promise
+            (call $enqueue (cont.bind $i-cont $cont (local.get $p) (local.get $ik)))
+            ;; run computation partially applied to promise
+            (local.set $nextk (cont.bind $i-cont $cont (local.get $p) (local.get $ak)))
           (br $l)
         ) ;;   $on_fulfill (result i32 i32 (ref $cont))
         (local.set $nextk)
-        (let (local $p i32) (local $v i32)
-           (call $fulfill-promise (local.get $p) (local.get $v))
-           (let (local $k (ref null $cont))
-              (if (ref.is_null (local.get $k))
-                (then)
-                (else (call $enqueue (local.get $k)))
-              )
-           )
+        (local.set $v)
+        (local.set $p)
+        (call $fulfill-promise (local.get $p) (local.get $v))
+        (local.set $k)
+        (if (ref.is_null (local.get $k))
+          (then)
+          (else (call $enqueue (local.get $k)))
         )
         (br $l)
       ) ;;   $on_yield (result (ref $cont))
@@ -325,7 +328,7 @@
   (elem declare func $run-example)
 
   (func (export "run")
-    (call $scheduler (cont.new (type $cont) (ref.func $run-example)))
+    (call $scheduler (cont.new $cont (ref.func $run-example)))
   )
 )
 

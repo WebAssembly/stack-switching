@@ -19,7 +19,7 @@
       (if (local.get $consuming)
         (then
            (block $on-receive (result (ref $consumer))
-             (resume (tag $receive $on-receive) (local.get $n) (local.get $c))
+             (resume $consumer (tag $receive $on-receive) (local.get $n) (local.get $c))
              (return)
            ) ;; receive
            (local.set $c)
@@ -28,7 +28,7 @@
         )
       ) ;; else producing
            (block $on-send (result i32 (ref $producer))
-             (resume (tag $send $on-send) (local.get $p))
+             (resume $producer (tag $send $on-send) (local.get $p))
              (return)
            ) ;; send
            (local.set $p)
@@ -86,8 +86,8 @@
   )
 
   (func (export "run") (param $n i32)
-     (call $pipe (cont.bind (type $producer) (local.get $n) (cont.new (type $consumer) (ref.func $nats)))
-                 (cont.new (type $consumer) (ref.func $sum))
+     (call $pipe (cont.bind $consumer $producer (local.get $n) (cont.new $consumer (ref.func $nats)))
+                 (cont.new $consumer (ref.func $sum))
      )
  )
 )

@@ -24,16 +24,18 @@
   ;;
   ;; (Technically this is control0/prompt0 rather than
   ;; control/prompt.)
-  (tag $control (export "control") (param (ref $cont-func)))    ;; control : ([cont ([] -> [])] -> []) -> []
+  (tag $control (export "control") (param (ref $cont-cont)))    ;; control : ([cont ([] -> [])] -> []) -> []
   (func $prompt (export "prompt") (param $nextk (ref null $cont)) ;; prompt : cont ([] -> []) -> []
-    (block $on_control (result (ref $cont-func) (ref $cont))
-       (resume (tag $control $on_control)
-               (local.get $nextk))
+    (local $h (ref $cont-cont))
+    (local $k (ref $cont))
+    (block $on_control (result (ref $cont-cont) (ref $cont))
+       (resume $cont (tag $control $on_control)
+                     (local.get $nextk))
        (return)
     ) ;;   $on_control (param (ref $cont-func) (ref $cont))
-    (let (local $h (ref $cont-func)) (local $k (ref $cont))
-      (call_ref (local.get $k) (local.get $h))
-    )
+    (local.set $k)
+    (local.set $h)
+    (resume $cont-cont (local.get $k) (local.get $h))
   )
 )
 (register "control")
@@ -57,44 +59,44 @@
 
   (func $main (export "main") (param $yield (ref $func)) (param $fork (ref $cont-func))
     (call $log (i32.const 0))
-    (call_ref
-      (cont.bind (type $cont) (local.get $yield) (local.get $fork)
-        (cont.new (type $func-cont-func-cont) (ref.func $thread1)))
+    (call_ref $cont-func
+      (cont.bind $func-cont-func-cont $cont (local.get $yield) (local.get $fork)
+        (cont.new $func-cont-func-cont (ref.func $thread1)))
       (local.get $fork))
     (call $log (i32.const 1))
-    (call_ref
-      (cont.bind (type $cont) (local.get $yield) (local.get $fork)
-        (cont.new (type $func-cont-func-cont) (ref.func $thread2)))
+    (call_ref $cont-func
+      (cont.bind $func-cont-func-cont $cont (local.get $yield) (local.get $fork)
+        (cont.new $func-cont-func-cont (ref.func $thread2)))
       (local.get $fork))
     (call $log (i32.const 2))
-    (call_ref
-      (cont.bind (type $cont) (local.get $yield) (local.get $fork)
-        (cont.new (type $func-cont-func-cont) (ref.func $thread3)))
+    (call_ref $cont-func
+      (cont.bind $func-cont-func-cont $cont (local.get $yield) (local.get $fork)
+        (cont.new $func-cont-func-cont (ref.func $thread3)))
       (local.get $fork))
     (call $log (i32.const 3))
   )
 
   (func $thread1 (param $yield (ref $func)) (param $fork (ref $cont-func))
     (call $log (i32.const 10))
-    (call_ref (local.get $yield))
+    (call_ref $func (local.get $yield))
     (call $log (i32.const 11))
-    (call_ref (local.get $yield))
+    (call_ref $func (local.get $yield))
     (call $log (i32.const 12))
   )
 
   (func $thread2 (param $yield (ref $func)) (param $fork (ref $cont-func))
     (call $log (i32.const 20))
-    (call_ref (local.get $yield))
+    (call_ref $func (local.get $yield))
     (call $log (i32.const 21))
-    (call_ref (local.get $yield))
+    (call_ref $func (local.get $yield))
     (call $log (i32.const 22))
   )
 
   (func $thread3 (param $yield (ref $func)) (param $fork (ref $cont-func))
     (call $log (i32.const 30))
-    (call_ref (local.get $yield))
+    (call_ref $func (local.get $yield))
     (call $log (i32.const 31))
-    (call_ref (local.get $yield))
+    (call_ref $func (local.get $yield))
     (call $log (i32.const 32))
   )
 )
@@ -170,6 +172,9 @@
   (type $func-cont-func-func (func (param (ref $func)) (param (ref $cont-func)))) ;; ([] -> []) -> ([cont ([] -> [])] -> []) -> []
   (type $func-cont-func-cont (cont $func-cont-func-func))                         ;; cont (([] -> []) -> ([cont ([] -> [])] -> []) -> [])
 
+  (type $func-cont-cont (func (param (ref $cont)) (param (ref $cont))))
+  (type $cont-cont-func (cont $func-cont-cont))
+
   (func $log (import "spectest" "print_i32") (param i32))
 
   ;; queue interface
@@ -184,7 +189,7 @@
      $fork-sync $fork-kt $fork-tk $fork-ykt $fork-ytk)
 
   ;; control/prompt interface
-  (tag $control (import "control" "control") (param (ref $cont-func)))     ;; control : ([cont ([] -> [])] -> []) -> []
+  (tag $control (import "control" "control") (param (ref $cont-cont)))     ;; control : ([cont ([] -> [])] -> []) -> []
   (func $prompt (import "control" "prompt") (param $nextk (ref null $cont))) ;; prompt : cont ([] -> []) -> []
 
   ;; generic boilerplate scheduler
@@ -215,18 +220,20 @@
     (call $scheduler (local.get $k))
   )
   (func $yield-sync
-    (suspend $control (ref.func $handle-yield))
+    (suspend $control (cont.new $cont-cont (ref.func $handle-yield)))
   )
   (func $handle-fork-sync (param $t (ref $cont)) (param $k (ref $cont))
     (call $enqueue (local.get $t))
     (call $scheduler (local.get $k))
   )
   (func $fork-sync (param $t (ref $cont))
-    (suspend $control (func.bind (type $cont-func) (local.get $t) (ref.func $handle-fork-sync)))
+    (suspend $control
+      (cont.bind $cont-cont-func $cont-cont (local.get $t)
+        (cont.new $cont-cont-func (ref.func $handle-fork-sync))))
   )
   (func $sync (export "sync") (param $k (ref $func-cont-func-cont))
     (call $scheduler
-      (cont.bind (type $cont) (ref.func $yield) (ref.func $fork-sync) (local.get $k)))
+      (cont.bind $func-cont-func-cont $cont (ref.func $yield) (ref.func $fork-sync) (local.get $k)))
   )
 
   ;; asynchronous yield (used by all asynchronous schedulers)
@@ -235,7 +242,7 @@
     (call $scheduler (call $dequeue))
   )
   (func $yield
-    (suspend $control (ref.func $handle-yield))
+    (suspend $control (cont.new $cont-cont (ref.func $handle-yield)))
   )
   ;; four asynchronous implementations of fork:
   ;;   * kt and tk don't yield on encountering a fork
@@ -251,11 +258,13 @@
     (call $scheduler (local.get $k))
   )
   (func $fork-kt (param $t (ref $cont))
-    (suspend $control (func.bind (type $cont-func) (local.get $t) (ref.func $handle-fork-kt)))
+    (suspend $control
+      (cont.bind $cont-cont-func $cont-cont (local.get $t)
+        (cont.new $cont-cont-func (ref.func $handle-fork-kt))))
   )
   (func $kt (export "kt") (param $k (ref $func-cont-func-cont))
     (call $scheduler
-      (cont.bind (type $cont) (ref.func $yield) (ref.func $fork-kt) (local.get $k)))
+      (cont.bind $func-cont-func-cont $cont (ref.func $yield) (ref.func $fork-kt) (local.get $k)))
   )
 
   ;; no yield on fork, new thread first
@@ -264,11 +273,13 @@
     (call $scheduler (local.get $t))
   )
   (func $fork-tk (param $t (ref $cont))
-    (suspend $control (func.bind (type $cont-func) (local.get $t) (ref.func $handle-fork-tk)))
+    (suspend $control
+      (cont.bind $cont-cont-func $cont-cont (local.get $t)
+        (cont.new $cont-cont-func (ref.func $handle-fork-tk))))
   )
   (func $tk (export "tk") (param $k (ref $func-cont-func-cont))
     (call $scheduler
-      (cont.bind (type $cont) (ref.func $yield) (ref.func $fork-tk) (local.get $k)))
+      (cont.bind $func-cont-func-cont $cont (ref.func $yield) (ref.func $fork-tk) (local.get $k)))
   )
 
   ;; yield on fork, continuation first
@@ -278,11 +289,13 @@
     (call $scheduler (call $dequeue))
   )
   (func $fork-ykt (param $t (ref $cont))
-    (suspend $control (func.bind (type $cont-func) (local.get $t) (ref.func $handle-fork-ykt)))
+    (suspend $control
+      (cont.bind $cont-cont-func $cont-cont (local.get $t)
+        (cont.new $cont-cont-func (ref.func $handle-fork-ykt))))
   )
   (func $ykt (export "ykt") (param $k (ref $func-cont-func-cont))
     (call $scheduler
-      (cont.bind (type $cont) (ref.func $yield) (ref.func $fork-ykt) (local.get $k)))
+      (cont.bind $func-cont-func-cont $cont (ref.func $yield) (ref.func $fork-ykt) (local.get $k)))
   )
 
   ;; yield on fork, new thread first
@@ -292,11 +305,13 @@
     (call $scheduler (call $dequeue))
   )
   (func $fork-ytk (param $t (ref $cont))
-    (suspend $control (func.bind (type $cont-func) (local.get $t) (ref.func $handle-fork-ytk)))
+    (suspend $control
+      (cont.bind $cont-cont-func $cont-cont (local.get $t)
+        (cont.new $cont-cont-func (ref.func $handle-fork-ytk))))
   )
   (func $ytk (export "ytk") (param $k (ref $func-cont-func-cont))
     (call $scheduler
-      (cont.bind (type $cont) (ref.func $yield) (ref.func $fork-ytk) (local.get $k)))
+      (cont.bind $func-cont-func-cont $cont (ref.func $yield) (ref.func $fork-ytk) (local.get $k)))
   )
 )
 (register "scheduler")
@@ -325,15 +340,15 @@
 
   (func $run (export "run")
     (call $log (i32.const -1))
-    (call $scheduler-sync (cont.new (type $func-cont-func-cont) (ref.func $main)))
+    (call $scheduler-sync (cont.new $func-cont-func-cont (ref.func $main)))
     (call $log (i32.const -2))
-    (call $scheduler-kt (cont.new (type $func-cont-func-cont) (ref.func $main)))
+    (call $scheduler-kt (cont.new $func-cont-func-cont (ref.func $main)))
     (call $log (i32.const -3))
-    (call $scheduler-tk (cont.new (type $func-cont-func-cont) (ref.func $main)))
+    (call $scheduler-tk (cont.new $func-cont-func-cont (ref.func $main)))
     (call $log (i32.const -4))
-    (call $scheduler-ykt (cont.new (type $func-cont-func-cont) (ref.func $main)))
+    (call $scheduler-ykt (cont.new $func-cont-func-cont (ref.func $main)))
     (call $log (i32.const -5))
-    (call $scheduler-ytk (cont.new (type $func-cont-func-cont) (ref.func $main)))
+    (call $scheduler-ytk (cont.new $func-cont-func-cont (ref.func $main)))
     (call $log (i32.const -6))
   )
 )
