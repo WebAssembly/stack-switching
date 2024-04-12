@@ -810,11 +810,25 @@ The :ref:`external types <syntax-externtype>` classifying a module may contain f
   * For each :math:`\tag_i` in :math:`\module.\MTAGS`,
     the definition :math:`\tag_i` must be :ref:`valid <valid-tag>` with a :ref:`tag type <syntax-tagtype>` :math:`\X{ht}_i`.
 
+  * For each :math:`\table_i` in :math:`\module.\MTABLES`,
+    the definition :math:`\table_i` must be :ref:`valid <valid-table>` with a :ref:`table type <syntax-tabletype>` :math:`\X{tt}_i`.
+
+  * For each :math:`\mem_i` in :math:`\module.\MMEMS`,
+    the definition :math:`\mem_i` must be :ref:`valid <valid-mem>` with a :ref:`memory type <syntax-memtype>` :math:`\X{mt}_i`.
+
+  * For each :math:`\global_i` in :math:`\module.\MGLOBALS`,
+    the definition :math:`\global_i` must be :ref:`valid <valid-global>` with a :ref:`global type <syntax-globaltype>` :math:`\X{gt}_i`.
+
   * For each :math:`\elem_i` in :math:`\module.\MELEMS`,
     the segment :math:`\elem_i` must be :ref:`valid <valid-elem>` with :ref:`reference type <syntax-reftype>` :math:`\X{rt}_i`.
 
   * For each :math:`\data_i` in :math:`\module.\MDATAS`,
     the segment :math:`\data_i` must be :ref:`valid <valid-data>`.
+
+* Under the context :math:`C`:
+
+  * For each :math:`\func_i` in :math:`\module.\MFUNCS`,
+    the definition :math:`\func_i` must be :ref:`valid <valid-func>` with a :ref:`function type <syntax-functype>` :math:`\X{ft}_i`.
 
   * If :math:`\module.\MSTART` is non-empty,
     then :math:`\module.\MSTART` must be :ref:`valid <valid-start>`.
@@ -825,7 +839,11 @@ The :ref:`external types <syntax-externtype>` classifying a module may contain f
   * For each :math:`\export_i` in :math:`\module.\MEXPORTS`,
     the segment :math:`\export_i` must be :ref:`valid <valid-export>` with :ref:`external type <syntax-externtype>` :math:`\X{et}_i`.
 
-* Let :math:`\X{dt}^\ast` be the concatenation of the internal :ref:`function types <syntax-functype>` :math:`\X{dt}_i`, in index order.
+* The length of :math:`C.\CMEMS` must not be larger than :math:`1`.
+
+* All export names :math:`\export_i.\ENAME` must be different.
+
+* Let :math:`\X{ft}^\ast` be the concatenation of the internal :ref:`function types <syntax-functype>` :math:`\X{ft}_i`, in index order.
 
 * Let :math:`\X{tt}^\ast` be the concatenation of the internal :ref:`table types <syntax-tabletype>` :math:`\X{tt}_i`, in index order.
 
@@ -894,6 +912,9 @@ The :ref:`external types <syntax-externtype>` classifying a module may contain f
        \CREFS~x^\ast \}
      \\
      C' = \{ \CTYPES~C_0.\CTYPES, \CGLOBALS~\X{igt}^\ast, \CFUNCS~(C.\CFUNCS), \CTABLES~(C.\CTABLES), \CMEMS~(C.\CMEMS), \CREFS~(C.\CREFS) \}
+     %C' = C \with \CGLOBALS = \X{igt}^\ast
+     %\qquad
+     %|C.\CMEMS| \leq 1
      \qquad
      (\export.\ENAME)^\ast ~\F{disjoint}
      \\
