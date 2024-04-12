@@ -2,7 +2,7 @@
   (type $t (func (result i32)))
 
   (func $nn (param $r (ref $t)) (result i32)
-    (call_ref
+    (call_ref $t
       (block $l (result (ref $t))
         (br_on_non_null $l (local.get $r))
         (return (i32.const -1))
@@ -10,7 +10,7 @@
     )
   )
   (func $n (param $r (ref null $t)) (result i32)
-    (call_ref
+    (call_ref $t
       (block $l (result (ref $t))
         (br_on_non_null $l (local.get $r))
         (return (i32.const -1))
@@ -26,10 +26,11 @@
   (func (export "nullable-f") (result i32) (call $n (ref.func $f)))
 
   (func (export "unreachable") (result i32)
-    (block $l
-      (return (call_ref (br_on_null $l (unreachable))))
+    (block $l (result (ref $t))
+      (br_on_non_null $l (unreachable))
+      (return (i32.const -1))
     )
-    (i32.const -1)
+    (call_ref $t)
   )
 )
 
@@ -53,7 +54,7 @@
   (func $f (param i32) (result i32) (i32.mul (local.get 0) (local.get 0)))
 
   (func $a (param $n i32) (param $r (ref null $t)) (result i32)
-    (call_ref
+    (call_ref $t
       (block $l (result i32 (ref $t))
         (return (br_on_non_null $l (local.get $n) (local.get $r)))
       )
@@ -70,3 +71,20 @@
 
 (assert_return (invoke "args-null" (i32.const 3)) (i32.const 3))
 (assert_return (invoke "args-f" (i32.const 3)) (i32.const 9))
+
+
+;; https://github.com/WebAssembly/gc/issues/516
+(assert_invalid
+  (module
+    (type $t (func))
+    (func $f (param (ref null $t)) (result funcref) (local.get 0))
+    (func (param funcref) (result funcref funcref)
+      (ref.null $t)
+      (local.get 0)
+      (br_on_non_null 0)  ;; only leaves a funcref on the stack
+      (call $f)
+      (local.get 0)
+    )
+  )
+  "type mismatch"
+)

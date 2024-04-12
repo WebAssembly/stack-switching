@@ -112,23 +112,27 @@ let input_from get_script run =
   | Eval.Trap (at, msg) -> error at "runtime trap" msg
   | Eval.Exhaustion (at, msg) -> error at "resource exhaustion" msg
   | Eval.Crash (at, msg) -> error at "runtime crash" msg
+  | Eval.Exception (at, msg) -> error at "uncaught exception" msg
   | Encode.Code (at, msg) -> error at "encoding error" msg
   | Script.Error (at, msg) -> error at "script error" msg
   | IO (at, msg) -> error at "i/o error" msg
   | Assert (at, msg) -> error at "assertion failure" msg
   | Abort _ -> false
 
-let input_script start name lexbuf run =
-  input_from (fun _ -> Parse.parse name lexbuf start) run
+let input_script name lexbuf run =
+  input_from (fun () -> Parse.Script.parse name lexbuf) run
+
+let input_script1 name lexbuf run =
+  input_from (fun () -> Parse.Script1.parse name lexbuf) run
 
 let input_sexpr name lexbuf run =
-  input_from (fun _ ->
-    let var_opt, def = Parse.parse name lexbuf Parse.Module in
+  input_from (fun () ->
+    let var_opt, def = Parse.Module.parse name lexbuf in
     [Module (var_opt, def) @@ no_region]) run
 
 let input_binary name buf run =
   let open Source in
-  input_from (fun _ ->
+  input_from (fun () ->
     [Module (None, Encoded (name, buf) @@ no_region) @@ no_region]) run
 
 let input_sexpr_file input file run =
@@ -162,8 +166,8 @@ let input_file file run =
   dispatch_file_ext
     input_binary_file
     (input_sexpr_file input_sexpr)
-    (input_sexpr_file (input_script Parse.Script))
-    (input_sexpr_file (input_script Parse.Script))
+    (input_sexpr_file input_script)
+    (input_sexpr_file input_script)
     input_js_file
     file run
 
@@ -171,7 +175,7 @@ let input_string string run =
   trace ("Running (\"" ^ String.escaped string ^ "\")...");
   let lexbuf = Lexing.from_string string in
   trace "Parsing...";
-  input_script Parse.Script "string" lexbuf run
+  input_script "string" lexbuf run
 
 
 (* Interactive *)
@@ -195,7 +199,7 @@ let lexbuf_stdin buf len =
 let input_stdin run =
   let lexbuf = Lexing.from_function lexbuf_stdin in
   let rec loop () =
-    let success = input_script Parse.Script1 "stdin" lexbuf run in
+    let success = input_script1 "stdin" lexbuf run in
     if not success then Lexing.flush_input lexbuf;
     if Lexing.(lexbuf.lex_curr_pos >= lexbuf.lex_buffer_len - 1) then
       continuing := false;
@@ -227,13 +231,14 @@ let string_of_nan = function
   | ArithmeticNan -> "nan:arithmetic"
 
 let type_of_result r =
+  let open Types in
   match r with
-  | NumResult (NumPat n) -> Types.NumType (Value.type_of_num n.it)
-  | NumResult (NanPat n) -> Types.NumType (Value.type_of_num n.it)
-  | VecResult (VecPat _) -> Types.VecType Types.V128Type
-  | RefResult (RefPat r) -> Types.RefType (Value.type_of_ref r.it)
-  | RefResult (RefTypePat t) -> Types.(RefType (NonNullable, t))
-  | RefResult (NullPat) -> Types.(RefType (Nullable, ExternHeapType))
+  | NumResult (NumPat n) -> NumT (Value.type_of_num n.it)
+  | NumResult (NanPat n) -> NumT (Value.type_of_num n.it)
+  | VecResult (VecPat v) -> VecT (Value.type_of_vec v)
+  | RefResult (RefPat r) -> RefT (Value.type_of_ref r.it)
+  | RefResult (RefTypePat t) -> RefT (NoNull, t)  (* assume closed *)
+  | RefResult (NullPat) -> RefT (Null, ExternHT)
 
 let string_of_num_pat (p : num_pat) =
   match p with
@@ -314,7 +319,7 @@ let rec run_definition def : Ast.module_ =
     Decode.decode name bs
   | Quoted (_, s) ->
     trace "Parsing quote...";
-    let def' = Parse.string_to_module s in
+    let _, def' = Parse.Module.parse_string s in
     run_definition def'
 
 let run_action act : Value.t list =
@@ -324,13 +329,14 @@ let run_action act : Value.t list =
     let inst = lookup_instance x_opt act.at in
     (match Instance.export inst name with
     | Some (Instance.ExternFunc f) ->
-      let Types.FuncType (ins, out) = Func.type_of f in
-      if List.length vs <> List.length ins then
+      let Types.FuncT (ts1, _ts2) =
+        Types.(as_func_str_type (expand_def_type (Func.type_of f))) in
+      if List.length vs <> List.length ts1 then
         Script.error act.at "wrong number of arguments";
       List.iter2 (fun v t ->
-        if not (Match.match_value_type [] [] (Value.type_of_value v.it) t) then
+        if not (Match.match_val_type [] (Value.type_of_value v.it) t) then
           Script.error v.at "wrong type of argument"
-      ) vs ins;
+      ) vs ts1;
       Eval.invoke f (List.map (fun v -> v.it) vs)
     | Some _ -> Assert.error act.at "export is not a function"
     | None -> Assert.error act.at "undefined export"
@@ -379,11 +385,17 @@ let assert_vec_pat v p =
       (List.init (V128.num_lanes shape) (extract v)) ps
 
 let assert_ref_pat r p =
-  match r, p with
-  | r, RefPat r' -> Value.eq_ref r r'.it
-  | Instance.FuncRef _, RefTypePat Types.FuncHeapType
-  | ExternRef _, RefTypePat Types.ExternHeapType -> true
-  | Value.NullRef _, NullPat -> true
+  match p, r with
+  | RefPat r', r -> Value.eq_ref r r'.it
+  | RefTypePat Types.AnyHT, Instance.FuncRef _ -> false
+  | RefTypePat Types.AnyHT, _
+  | RefTypePat Types.EqHT, (I31.I31Ref _ | Aggr.StructRef _ | Aggr.ArrayRef _)
+  | RefTypePat Types.I31HT, I31.I31Ref _
+  | RefTypePat Types.StructHT, Aggr.StructRef _
+  | RefTypePat Types.ArrayHT, Aggr.ArrayRef _ -> true
+  | RefTypePat Types.FuncHT, Instance.FuncRef _
+  | RefTypePat Types.ExternHT, _ -> true
+  | NullPat, Value.NullRef _ -> true
   | _ -> false
 
 let assert_pat v r =
@@ -466,6 +478,13 @@ let run_assertion ass =
     let got_vs = run_action act in
     let expect_rs = List.map (fun r -> r.it) rs in
     assert_result ass.at got_vs expect_rs
+
+  | AssertException act ->
+    trace ("Asserting exception...");
+    (match run_action act with
+    | exception Eval.Exception (_, msg) -> ()
+    | _ -> Assert.error ass.at "expected exception"
+    )
 
   | AssertTrap (act, re) ->
     trace ("Asserting trap...");

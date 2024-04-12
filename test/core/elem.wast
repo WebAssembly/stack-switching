@@ -84,6 +84,14 @@
   (table $t funcref (elem (ref.func $f) (ref.null func) (ref.func $g)))
 )
 
+(module
+  (func $f)
+  (func $g)
+
+  (table $t 10 (ref func) (ref.func $f))
+  (elem (i32.const 3) $g)
+)
+
 
 ;; Basic use
 
@@ -148,6 +156,35 @@
 (assert_return (invoke "call-7") (i32.const 65))
 (assert_return (invoke "call-9") (i32.const 66))
 
+;; Same as the above, but use ref.null to ensure the elements use exprs.
+;; Note: some tools like wast2json avoid using exprs when possible.
+(module
+  (type $out-i32 (func (result i32)))
+  (table 11 funcref)
+  (elem (i32.const 6) funcref (ref.null func) (ref.func $const-i32-a))
+  (elem (i32.const 9) funcref (ref.func $const-i32-b) (ref.null func))
+  (func $const-i32-a (type $out-i32) (i32.const 65))
+  (func $const-i32-b (type $out-i32) (i32.const 66))
+  (func (export "call-7") (type $out-i32)
+    (call_indirect (type $out-i32) (i32.const 7))
+  )
+  (func (export "call-9") (type $out-i32)
+    (call_indirect (type $out-i32) (i32.const 9))
+  )
+)
+(assert_return (invoke "call-7") (i32.const 65))
+(assert_return (invoke "call-9") (i32.const 66))
+
+(module
+  (global i32 (i32.const 0))
+  (table 1 funcref) (elem (global.get 0) $f) (func $f)
+)
+(module
+  (global $g i32 (i32.const 0))
+  (table 1 funcref) (elem (global.get $g) $f) (func $f)
+)
+
+
 ;; Corner cases
 
 (module
@@ -203,6 +240,7 @@
   (func $f)
   (elem (i32.const 1) $f)
 )
+
 
 ;; Invalid bounds for elements
 
@@ -308,6 +346,7 @@
   "out of bounds table access"
 )
 
+
 ;; Implicitly dropped elements
 
 (module
@@ -330,6 +369,7 @@
 )
 (assert_trap (invoke "init") "out of bounds table access")
 
+
 ;; Element without table
 
 (assert_invalid
@@ -339,6 +379,7 @@
   )
   "unknown table"
 )
+
 
 ;; Invalid offsets
 
@@ -425,11 +466,14 @@
   "constant expression required"
 )
 
-;; Use of internal globals in constant expressions is not allowed in MVP.
-;; (assert_invalid
-;;   (module (table 1 funcref) (elem (global.get $g)) (global $g i32 (i32.const 0)))
-;;   "constant expression required"
-;; )
+(assert_invalid
+  (module
+    (global $g (import "test" "g") (mut i32))
+    (table 1 funcref)
+    (elem (global.get $g))
+  )
+  "constant expression required"
+)
 
 (assert_invalid
    (module 
@@ -456,6 +500,7 @@
    )
    "constant expression required"
 )
+
 
 ;; Invalid elements
 
@@ -500,13 +545,6 @@
   "constant expression required"
 )
 
-(assert_invalid
-  (module
-    (table 1 funcref)
-    (elem (i32.const 0) funcref (item (i32.add (i32.const 0) (i32.const 1))))
-  )
-  "constant expression required"
-)
 
 ;; Two elements target the same slot
 
@@ -535,6 +573,7 @@
   )
 )
 (assert_return (invoke "call-overwritten-element") (i32.const 66))
+
 
 ;; Element sections across multiple modules change the same table
 
@@ -587,3 +626,139 @@
 (assert_return (invoke $module1 "call-7") (i32.const 67))
 (assert_return (invoke $module1 "call-8") (i32.const 69))
 (assert_return (invoke $module1 "call-9") (i32.const 70))
+
+;; Element segments must match element type of table
+
+(assert_invalid
+  (module (func $f) (table 1 externref) (elem (i32.const 0) $f))
+  "type mismatch"
+)
+
+(assert_invalid
+  (module (table 1 funcref) (elem (i32.const 0) externref (ref.null extern)))
+  "type mismatch"
+)
+
+(assert_invalid
+  (module
+    (func $f)
+    (table $t 1 externref)
+    (elem $e funcref (ref.func $f))
+    (func (table.init $t $e (i32.const 0) (i32.const 0) (i32.const 1))))
+  "type mismatch"
+)
+
+(assert_invalid
+  (module
+    (table $t 1 funcref)
+    (elem $e externref (ref.null extern))
+    (func (table.init $t $e (i32.const 0) (i32.const 0) (i32.const 1))))
+  "type mismatch"
+)
+
+;; Initializing a table with an externref-type element segment
+
+(module $m
+	(table $t (export "table") 2 externref)
+	(func (export "get") (param $i i32) (result externref)
+	      (table.get $t (local.get $i)))
+	(func (export "set") (param $i i32) (param $x externref)
+	      (table.set $t (local.get $i) (local.get $x))))
+
+(register "exporter" $m)
+
+(assert_return (invoke $m "get" (i32.const 0)) (ref.null extern))
+(assert_return (invoke $m "get" (i32.const 1)) (ref.null extern))
+
+(assert_return (invoke $m "set" (i32.const 0) (ref.extern 42)))
+(assert_return (invoke $m "set" (i32.const 1) (ref.extern 137)))
+
+(assert_return (invoke $m "get" (i32.const 0)) (ref.extern 42))
+(assert_return (invoke $m "get" (i32.const 1)) (ref.extern 137))
+
+(module
+  (import "exporter" "table" (table $t 2 externref))
+  (elem (i32.const 0) externref (ref.null extern)))
+
+(assert_return (invoke $m "get" (i32.const 0)) (ref.null extern))
+(assert_return (invoke $m "get" (i32.const 1)) (ref.extern 137))
+
+;; Initializing a table with imported funcref global
+
+(module $module4
+  (func (result i32)
+    i32.const 42
+  )
+  (global (export "f") funcref (ref.func 0))
+)
+
+(register "module4" $module4)
+
+(module
+  (import "module4" "f" (global funcref))
+  (type $out-i32 (func (result i32)))
+  (table 10 funcref)
+  (elem (offset (i32.const 0)) funcref (global.get 0))
+  (func (export "call_imported_elem") (type $out-i32)
+    (call_indirect (type $out-i32) (i32.const 0))
+  )
+)
+
+(assert_return (invoke "call_imported_elem") (i32.const 42))
+
+;; Extended contant expressions
+
+(module
+  (table 10 funcref)
+  (func (result i32) (i32.const 42))
+  (func (export "call_in_table") (param i32) (result i32)
+    (call_indirect (type 0) (local.get 0)))
+  (elem (table 0) (offset (i32.add (i32.const 1) (i32.const 2))) funcref (ref.func 0))
+)
+
+(assert_return (invoke "call_in_table" (i32.const 3)) (i32.const 42))
+(assert_trap (invoke "call_in_table" (i32.const 0)) "uninitialized element")
+
+(module
+  (table 10 funcref)
+  (func (result i32) (i32.const 42))
+  (func (export "call_in_table") (param i32) (result i32)
+    (call_indirect (type 0) (local.get 0)))
+  (elem (table 0) (offset (i32.sub (i32.const 2) (i32.const 1))) funcref (ref.func 0))
+)
+
+(assert_return (invoke "call_in_table" (i32.const 1)) (i32.const 42))
+(assert_trap (invoke "call_in_table" (i32.const 0)) "uninitialized element")
+
+(module
+  (table 10 funcref)
+  (func (result i32) (i32.const 42))
+  (func (export "call_in_table") (param i32) (result i32)
+    (call_indirect (type 0) (local.get 0)))
+  (elem (table 0) (offset (i32.mul (i32.const 2) (i32.const 2))) funcref (ref.func 0))
+)
+
+(assert_return (invoke "call_in_table" (i32.const 4)) (i32.const 42))
+(assert_trap (invoke "call_in_table" (i32.const 0)) "uninitialized element")
+
+;; Combining add, sub, mul and global.get
+
+(module
+  (global (import "spectest" "global_i32") i32)
+  (table 10 funcref)
+  (func (result i32) (i32.const 42))
+  (func (export "call_in_table") (param i32) (result i32)
+    (call_indirect (type 0) (local.get 0)))
+  (elem (table 0)
+        (offset
+          (i32.mul
+            (i32.const 2)
+            (i32.add
+              (i32.sub (global.get 0) (i32.const 665))
+              (i32.const 2))))
+        funcref
+        (ref.func 0))
+)
+
+(assert_return (invoke "call_in_table" (i32.const 6)) (i32.const 42))
+(assert_trap (invoke "call_in_table" (i32.const 0)) "uninitialized element")

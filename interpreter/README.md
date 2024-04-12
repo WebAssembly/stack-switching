@@ -1,6 +1,6 @@
 # WebAssembly Reference Interpreter
 
-This repository implements a interpreter for WebAssembly. It is written for clarity and simplicity, _not_ speed. It is intended as a playground for trying out ideas and a device for nailing down the exact semantics, and as a proxy for the (yet to be produced) formal specification of WebAssembly. For that purpose, the code is written in a fairly declarative, "speccy" way.
+This repository implements an interpreter for WebAssembly. It is written for clarity and simplicity, _not_ speed. It is intended as a playground for trying out ideas and a device for nailing down their exact semantics. For that purpose, the code is written in a fairly declarative, "speccy" way.
 
 The interpreter can
 
@@ -10,22 +10,21 @@ The interpreter can
 * *export* test scripts to self-contained JavaScript test cases
 * *run* as an interactive interpreter
 
-The text format defines modules in S-expression syntax. Moreover, it is generalised to a (very dumb) form of *script* that can define multiples module and a batch of invocations, assertions, and conversions between them. As such it is richer than the binary format, with the additional functionality purely intended as testing infrastructure. (See [below](#scripts) for details.)
+The text format defines modules in S-expression syntax. Moreover, it is generalised to a form of *script* that can define multiples module and a batch of invocations, assertions, and conversions between them. As such it is richer than the binary format, with the additional functionality purely intended as testing infrastructure. (See [below](#scripts) for details.)
 
 
 ## Building
 
-You'll need OCaml 4.08 or higher. Instructions for installing a recent version of OCaml on multiple platforms are available [here](https://ocaml.org/docs/install.html). On most platforms, the recommended way is through [OPAM](https://ocaml.org/docs/install.html#OPAM).
+You'll need OCaml 4.12 or higher. Instructions for installing a recent version of OCaml on multiple platforms are available [here](https://ocaml.org/docs/install.html). On most platforms, the recommended way is through [OPAM](https://ocaml.org/docs/install.html#OPAM).
+
+You'll also need to install the dune build system. See the [installation instructions](https://github.com/ocaml/dune#installation-1).
 
 Once you have OCaml, simply do
 
 ```
 make
 ```
-You'll get an executable named `./wasm`. This is a byte code executable. If you want a (faster) native code executable, do
-```
-make opt
-```
+You'll get an executable named `./wasm`.
 To run the test suite,
 ```
 make test
@@ -34,12 +33,6 @@ To do everything:
 ```
 make all
 ```
-Before committing changes, you should do
-```
-make land
-```
-That builds `all`, plus updates `winmake.bat`.
-
 
 #### Building on Windows
 
@@ -48,12 +41,6 @@ The instructions depend on how you [installed OCaml on Windows](https://ocaml.or
 1. *Cygwin*: If you want to build a native code executable, or want to hack on the interpreter (i.e., use incremental compilation), then you need to install the Cygwin core that is included with the OCaml installer. Then you can build the interpreter using `make` in the Cygwin terminal, as described above.
 
 2. *Windows Subsystem for Linux* (WSL): You can build the interpreter using `make`, as described above.
-
-3. *From source*: If you just want to build the interpreter and don't care about modifying it, you don't need to install the Cygwin core that comes with the installer. Just install OCaml itself and run
-```
-winmake.bat
-```
-in a Windows shell, which creates a program named `wasm`. Note that this will be a byte code executable only, i.e., somewhat slower.
 
 In any way, in order to run the test suite you'll need to have Python installed. If you used Option 3, you can invoke the test runner `runtests.py` directly instead of doing it through `make`.
 
@@ -65,7 +52,10 @@ The Makefile also provides a target to compile (parts of) the interpreter into a
 ```
 make wast.js
 ```
-Building this target requires node.js and BuckleScript.
+Building this target requires `js_of_ocaml`, which can be installed with OPAM:
+```
+opam install js_of_ocaml js_of_ocaml-ppx
+```
 
 
 ## Synopsis
@@ -139,7 +129,7 @@ WebAssemblyText.encode(source)
 ```
 which turns a module in S-expression syntax into a WebAssembly binary, and
 ```
-WebAssemblyText.decode(binary, width = 80)
+WebAssemblyText.decode(binary, width)
 ```
 which pretty-prints a binary back into a canonicalised S-expression string.
 
@@ -151,13 +141,27 @@ let binary = WebAssemblyText.encode(source)
 (new WebAssembly.Instance(new WebAssembly.Module(binary))).exports.f(3, 4)
 // => 7
 
-WebAssemblyText.decode(binary)
+WebAssemblyText.decode(binary, 80)
 // =>
 // (module
 //   (type $0 (func (param i32 i32) (result i32)))
 //   (func $0 (type 0) (local.get 0) (local.get 1) (i32.add))
 //   (export "f" (func 0))
 // )
+```
+
+Depending on how you load the library, the object may be accessed in different ways. For example, using `require` in node.js:
+
+```
+let wast = require("./wast.js");
+let binary = wast.WebAssemblyText.encode("(module)");
+```
+
+Or using `load` from a JavaScript shell:
+
+```
+load("./wast.js");
+let binary = WebAssemblyText.encode("(module)");
 ```
 
 
@@ -175,21 +179,43 @@ float:  <num>.<num>?(e|E <num>)? | 0x<hexnum>.<hexnum>?(p|P <num>)?
 name:   $(<letter> | <digit> | _ | . | + | - | * | / | \ | ^ | ~ | = | < | > | ! | ? | @ | # | $ | % | & | | | : | ' | `)+
 string: "(<char> | \n | \t | \\ | \' | \" | \<hex><hex> | \u{<hex>+})*"
 
+num: <int> | <float>
+var: <nat> | <name>
+
+unop:  ctz | clz | popcnt | ...
+binop: add | sub | mul | ...
+relop: eq | ne | lt | ...
+sign:  s | u
+offset: offset=<nat>
+align: align=(1|2|4|8|...)
+cvtop: trunc | extend | wrap | ...
+castop: data | array | i31
+externop: internalize | externalize
+
 num_type: i32 | i64 | f32 | f64
 vec_type: v128
 vec_shape: i8x16 | i16x8 | i32x4 | i64x2 | f32x4 | f64x2 | v128
-heap_type: func | extern | (type <var>)
+heap_type: any | eq | i31 | data | array | func | extern | none | nofunc | noextern | <var> | (rtt <var>)
 ref_type:
   ( ref null? <heap_type> )
-  ( ref null? <var> )         ;; = (ref null (type <var>))
+  ( rtt <var> )               ;; = (ref (rtt <var>))
+  anyref                      ;; = (ref null any)
+  eqref                       ;; = (ref null eq)
+  i31ref                      ;; = (ref i31)
+  dataref                     ;; = (ref null data)
+  arrayref                    ;; = (ref null array)
   funcref                     ;; = (ref null func)
   externref                   ;; = (ref null extern)
+  nullref                     ;; = (ref null none)
+  nullfuncref                 ;; = (ref null nofunc)
+  nullexternref               ;; = (ref null noextern)
 val_type: <num_type> | <vec_type> | <ref_type>
 block_type : ( result <val_type>* )*
 func_type:   ( type <var> )? <param>* <result>*
 global_type: <val_type> | ( mut <val_type> )
 table_type:  <nat> <nat>? <ref_type>
 memory_type: <nat> <nat>?
+tag_type: ( type <var> )? <param>*
 
 num: <int> | <float>
 var: <nat> | <name>
@@ -217,7 +243,7 @@ expr:
   ( loop <name>? <block_type> <instr>* )
   ( if <name>? <block_type> ( then <instr>* ) ( else <instr>* )? )
   ( if <name>? <block_type> <expr>+ ( then <instr>* ) ( else <instr>* )? ) ;; = <expr>+ (if <name>? <block_type> (then <instr>*) (else <instr>*)?)
-  ( let <name>? <block_type> <local>* <instr>* )
+  ( try_table <name>? <block_type>  <catch>* <instr>* )
 
 instr:
   <expr>
@@ -226,7 +252,7 @@ instr:
   loop <name>? <block_type> <instr>* end <name>?                     ;; = (loop <name>? <block_type> <instr>*)
   if <name>? <block_type> <instr>* end <name>?                       ;; = (if <name>? <block_type> (then <instr>*))
   if <name>? <block_type> <instr>* else <name>? <instr>* end <name>? ;; = (if <name>? <block_type> (then <instr>*) (else <instr>*))
-  let <name>? <block_type> <local>* <instr>* end <name>?             ;; = (let <name>? <block_type> <local>* <instr>*)
+  try_table <name>? <block_type> <catch>* <instr>* end <name>?       ;; = (try_table <name>? <block_type> <catch>* <instr>*)
 
 op:
   unreachable
@@ -236,15 +262,19 @@ op:
   br <var>
   br_if <var>
   br_table <var>+
-  br_on_null <var> <heap_type>
+  br_on_null <var>
+  br_on_non_null <var>
+  br_on_cast <var> <ref_type> <ref_type>
+  br_on_cast_fail <var> <ref_type> <ref_type> 
+  call <var>
+  call_ref <var>
+  call_indirect <var>? (type <var>)? <func_type>
   return
   return_call <var>
-  return_call_indirect <func_type>
-  call <var>
-  call_indirect <var>? <func_type>
-  call_ref
-  return_call_ref
-  func.bind <func_type>
+  return_call_ref <var>
+  return_call_indirect <var>? (type <var>)? <func_type>
+  throw <tag_type>
+  throw_ref
   local.get <var>
   local.set <var>
   local.tee <var>
@@ -271,9 +301,25 @@ op:
   memory.init <var>
   data.drop <var>
   ref.null <heap_type>
-  ref.is_null <heap_type>
-  ref_as_non_null <heap_type>
   ref.func <var>
+  ref.is_null
+  ref_as_non_null
+  ref.test <var>
+  ref.cast <var>
+  ref.eq
+  i31.new
+  i31.get_<sign>
+  struct.new(_<default>)? <var>
+  struct.get(_<sign>)? <var> <var>
+  struct.set <var> <var>
+  array.new(_<default>)? <var>
+  array.new_fixed <var> <nat>
+  array.new_elem <var> <var>
+  array.new_data <var> <var>
+  array.get(_<sign>)? <var>
+  array.set <var>
+  array.len <var>
+  extern.<externop>
   <num_type>.const <num>
   <num_type>.<unop>
   <num_type>.<binop>
@@ -292,6 +338,12 @@ op:
   <vec_shape>.splat
   <vec_shape>.extract_lane(_<sign>)? <nat>
   <vec_shape>.replace_lane <nat>
+
+catch:
+  catch <var> <var>
+  catch_ref <var> <var>
+  catch_all <var>
+  catch_all_ref <var>
 
 func:    ( func <name>? <func_type> <local>* <instr>* )
          ( func <name>? ( export <string> ) <...> )                         ;; = (export <string> (func <N>)) (func <name>? <...>)
@@ -368,7 +420,7 @@ In particular, comments of the latter form nest properly.
 
 ## Scripts
 
-In order to be able to check and run modules for testing purposes, the S-expression format is interpreted as a very simple and dumb notion of "script", with commands as follows:
+In order to be able to check and run modules for testing purposes, the S-expression format is interpreted as a very simple notion of "script", with commands as follows:
 
 ```
 script: <cmd>*
@@ -393,10 +445,12 @@ const:
   ( <num_type>.const <num> )                 ;; number value
   ( <vec_type> <vec_shape> <num>+ )          ;; vector value
   ( ref.null <ref_kind> )                    ;; null reference
-  ( ref.extern <nat> )                       ;; host reference
+  ( ref.host <nat> )                         ;; host reference
+  ( ref.extern <nat> )                       ;; external host reference
 
 assertion:
   ( assert_return <action> <result_pat>* )   ;; assert action has expected results
+  ( assert_exception <action> )              ;; assert action throws an exception
   ( assert_trap <action> <failure> )         ;; assert action traps with given failure string
   ( assert_exhaustion <action> <failure> )   ;; assert action exhausts system resources
   ( assert_malformed <module> <failure> )    ;; assert module cannot be decoded with given failure string
@@ -407,9 +461,11 @@ assertion:
 result_pat:
   ( <num_type>.const <num_pat> )
   ( <vec_type>.const <vec_shape> <num_pat>+ )
-  ( ref.extern )
-  ( ref.func )
+  ( ref )
   ( ref.null )
+  ( ref.func )
+  ( ref.extern )
+  ( ref.<castop> )
 
 num_pat:
   <num>                                      ;; literal result
@@ -483,11 +539,12 @@ module:
   ( module <name>? binary <string>* )        ;; module in binary format (may be malformed)
 
 action:
-  ( invoke <name>? <string> <expr>* )        ;; invoke function export
+  ( invoke <name>? <string> <const>* )       ;; invoke function export
   ( get <name>? <string> )                   ;; get global export
 
 assertion:
   ( assert_return <action> <result_pat>* )   ;; assert action has expected results
+  ( assert_exception <action> )              ;; assert action throws an exception
   ( assert_trap <action> <failure> )         ;; assert action traps with given failure string
   ( assert_exhaustion <action> <failure> )   ;; assert action exhausts system resources
   ( assert_malformed <module> <failure> )    ;; assert module cannot be decoded with given failure string
@@ -497,9 +554,11 @@ assertion:
 
 result_pat:
   ( <num_type>.const <num_pat> )
-  ( ref.extern )
-  ( ref.func )
+  ( ref )
   ( ref.null )
+  ( ref.func )
+  ( ref.extern )
+  ( ref.<castop> )
 
 num_pat:
   <value>                                    ;; literal result

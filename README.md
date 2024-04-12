@@ -1,34 +1,5 @@
-![Build Status](https://github.com/WebAssembly/stack-switching/actions/workflows/main.yml/badge.svg)
-
-# Stack Switching Proposal for WebAssembly
-
-This repository is a clone of [github.com/WebAssembly/spec/](https://github.com/WebAssembly/spec/).
-It is meant for discussion, prototype specification and implementation of a proposal to
-add support for different patterns of non-local control flow to WebAssembly.
-
-* See the [overview](proposals/stack-switching/Overview.md) for a summary of the proposal.
-
-* See the [modified spec](https://webassembly.github.io/stack-switching/) for details.
-
-## Typed Continuations Proposal for WebAssembly
-
-This is a proposed solution addressing the aims of the stack-switching proposal.
-
-It depends on the [function references](proposals/function-references/Overview.md) and the [exception handling](https://github.com/WebAssembly/exception-handling/blob/main/proposals/exception-handling/Exceptions.md) proposals.
-
-A complete [implementation](https://github.com/effect-handlers/wasm-spec) is available as an extension to the reference interpreter.
-
-* See the [explainer](proposals/continuations/Explainer.md) for a high-level summary of the proposal.
-
-* See the [overview](proposals/continuations/Overview.md) for a more formal description of the proposal.
-
-* See the [examples](proposals/continuations/examples) for Wasm code for implementing various different features including lightweight threads, actors, and async/await.
-
-## Fiber-based Stack Switching Proposal
-
-An alternate approach to stack switching revolves around the concept of fibers rather than continuation functions. An explainer for this proposal can be seen [here](proposals/fibers/Explainer.md).
-
-Original `README` from upstream repository follows.
+[![CI for specs](https://github.com/WebAssembly/stack-switching/actions/workflows/ci-spec.yml/badge.svg)](https://github.com/WebAssembly/stack-switching/actions/workflows/ci-spec.yml)
+[![CI for interpreter & tests](https://github.com/WebAssembly/stack-switching/actions/workflows/ci-interpreter.yml/badge.svg)](https://github.com/WebAssembly/stack-switching/actions/workflows/ci-interpreter.yml)
 
 # spec
 

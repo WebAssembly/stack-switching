@@ -16,6 +16,10 @@
   (memory (export "memory-2-inf") 2)
   ;; Multiple memories are not yet supported
   ;; (memory (export "memory-2-4") 2 4)
+  (tag (export "tag"))
+  (tag $tag-i32 (param i32))
+  (export "tag-i32" (tag $tag-i32))
+  (tag (export "tag-f32") (param f32))
 )
 
 (register "test")
@@ -30,11 +34,9 @@
   (type $func_f64 (func (param f64)))
 
   (import "spectest" "print_i32" (func (param i32)))
-  ;; JavaScript can't handle i64 yet.
-  ;; (func (import "spectest" "print_i64") (param i64))
+  (func (import "spectest" "print_i64") (param i64))
   (import "spectest" "print_i32" (func $print_i32 (param i32)))
-  ;; JavaScript can't handle i64 yet.
-  ;; (import "spectest" "print_i64" (func $print_i64 (param i64)))
+  (import "spectest" "print_i64" (func $print_i64 (param i64)))
   (import "spectest" "print_f32" (func $print_f32 (param f32)))
   (import "spectest" "print_f64" (func $print_f64 (param f64)))
   (import "spectest" "print_i32_f32" (func $print_i32_f32 (param i32 f32)))
@@ -42,6 +44,9 @@
   (func $print_i32-2 (import "spectest" "print_i32") (param i32))
   (func $print_f64-2 (import "spectest" "print_f64") (param f64))
   (import "test" "func-i64->i64" (func $i64->i64 (param i64) (result i64)))
+
+  (tag (import "test" "tag-i32") (param i32))
+  (import "test" "tag-f32" (tag (param f32)))
 
   (func (export "p1") (import "spectest" "print_i32") (param i32))
   (func $p (export "p2") (import "spectest" "print_i32") (param i32))
@@ -72,14 +77,12 @@
   (func (export "print64") (param $i i64)
     (local $x f64)
     (local.set $x (f64.convert_i64_s (call $i64->i64 (local.get $i))))
-    ;; JavaScript can't handle i64 yet.
-    ;; (call 1 (local.get $i))
+    (call 1 (local.get $i))
     (call $print_f64_f64
       (f64.add (local.get $x) (f64.const 1))
       (f64.const 53)
     )
-    ;; JavaScript can't handle i64 yet.
-    ;; (call $print_i64 (local.get $i))
+    (call $print_i64 (local.get $i))
     (call $print_f64 (local.get $x))
     (call $print_f64-2 (local.get $x))
     (call_indirect (type $func_f64) (local.get $x) (i32.const 1))
@@ -212,6 +215,10 @@
   "incompatible import type"
 )
 (assert_unlinkable
+  (module (import "test" "tag" (func)))
+  "incompatible import type"
+)
+(assert_unlinkable
   (module (import "spectest" "global_i32" (func)))
   "incompatible import type"
 )
@@ -221,6 +228,27 @@
 )
 (assert_unlinkable
   (module (import "spectest" "memory" (func)))
+  "incompatible import type"
+)
+
+(assert_unlinkable
+  (module (tag (import "test" "unknown")))
+  "unknown import"
+)
+(assert_unlinkable
+  (module (tag (import "test" "tag") (param f32)))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (tag (import "test" "tag-i32")))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (tag (import "test" "tag-i32") (param f32)))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (tag (import "test" "func-i32") (param f32)))
   "incompatible import type"
 )
 
@@ -234,8 +262,7 @@
   (import "spectest" "global_i32" (global $x i32))
   (global $y (import "spectest" "global_i32") i32)
 
-  ;; JavaScript can't handle i64 yet.
-  ;; (import "spectest" "global_i64" (global i64))
+  (import "spectest" "global_i64" (global i64))
   (import "spectest" "global_f32" (global f32))
   (import "spectest" "global_f64" (global f64))
 
@@ -243,12 +270,18 @@
   (func (export "get-1") (result i32) (global.get 1))
   (func (export "get-x") (result i32) (global.get $x))
   (func (export "get-y") (result i32) (global.get $y))
+  (func (export "get-4") (result i64) (global.get 4))
+  (func (export "get-5") (result f32) (global.get 5))
+  (func (export "get-6") (result f64) (global.get 6))
 )
 
 (assert_return (invoke "get-0") (i32.const 666))
 (assert_return (invoke "get-1") (i32.const 666))
 (assert_return (invoke "get-x") (i32.const 666))
 (assert_return (invoke "get-y") (i32.const 666))
+(assert_return (invoke "get-4") (i64.const 666))
+(assert_return (invoke "get-5") (f32.const 666.6))
+(assert_return (invoke "get-6") (f64.const 666.6))
 
 (module (import "test" "global-i32" (global i32)))
 (module (import "test" "global-f32" (global f32)))
@@ -483,19 +516,6 @@
 (assert_return (invoke "load" (i32.const 10)) (i32.const 16))
 (assert_return (invoke "load" (i32.const 8)) (i32.const 0x100000))
 (assert_trap (invoke "load" (i32.const 1000000)) "out of bounds memory access")
-
-(assert_invalid
-  (module (import "" "" (memory 1)) (import "" "" (memory 1)))
-  "multiple memories"
-)
-(assert_invalid
-  (module (import "" "" (memory 1)) (memory 0))
-  "multiple memories"
-)
-(assert_invalid
-  (module (memory 0) (memory 0))
-  "multiple memories"
-)
 
 (module (import "test" "memory-2-inf" (memory 2)))
 (module (import "test" "memory-2-inf" (memory 1)))

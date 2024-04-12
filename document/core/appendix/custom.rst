@@ -36,7 +36,7 @@ Each subsection consists of a
 
 * a one-byte subsection *id*,
 * the |U32| *size* of the contents, in bytes,
-* the actual *contents*, whose structure is depended on the subsection id.
+* the actual *contents*, whose structure is dependent on the subsection id.
 
 .. math::
    \begin{array}{llcll}
@@ -46,7 +46,8 @@ Each subsection consists of a
      n{:}\Bname & (\iff n = \text{name}) \\ &&&
      \Bmodulenamesubsec^? \\ &&&
      \Bfuncnamesubsec^? \\ &&&
-     \Blocalnamesubsec^? \\
+     \Blocalnamesubsec^? \\ &&&
+     \Btagnamesubsec^? \\
    \production{name subsection} & \Bnamesubsection_N(\B{B}) &::=&
      N{:}\Bbyte~~\X{size}{:}\Bu32~~\B{B}
        & (\iff \X{size} = ||\B{B}||) \\
@@ -60,6 +61,9 @@ Id  Subsection
  0  :ref:`module name <binary-modulenamesec>`
  1  :ref:`function names <binary-funcnamesec>`    
  2  :ref:`local names <binary-localnamesec>`
+ 4  :ref:`type names <binary-typenamesec>`
+10  :ref:`field names <binary-fieldnamesec>`
+11  :ref:`tag names <binary-tagnamesec>`
 ==  ===========================================
 
 Each subsection may occur at most once, and in order of increasing id.
@@ -142,4 +146,52 @@ It consists of an :ref:`indirect name map <binary-indirectnamemap>` assigning lo
    \begin{array}{llclll}
    \production{local name subsection} & \Blocalnamesubsec &::=&
      \Bnamesubsection_2(\Bindirectnamemap) \\
+   \end{array}
+
+
+.. index:: type, type index
+.. _binary-typenamesec:
+
+Type Names
+..............
+
+The *type name subsection* has the id 4.
+It consists of a :ref:`name map <binary-namemap>` assigning type names to :ref:`type indices <syntax-typeidx>`.
+
+.. math::
+   \begin{array}{llclll}
+   \production{type name subsection} & \Btypenamesubsec &::=&
+     \Bnamesubsection_1(\Bnamemap) \\
+   \end{array}
+
+
+.. index:: type, field, type index, field index
+.. _binary-fieldnamesec:
+
+Field Names
+...........
+
+The *field name subsection* has the id 10.
+It consists of an :ref:`indirect name map <binary-indirectnamemap>` assigning field names to :ref:`field indices <syntax-fieldidx>` grouped by :ref:`type indices <syntax-typeidx>`.
+
+.. math::
+   \begin{array}{llclll}
+   \production{field name subsection} & \Bfieldnamesubsec &::=&
+     \Bnamesubsection_2(\Bindirectnamemap) \\
+   \end{array}
+
+
+.. index:: tag, tag index
+.. _binary-tagnamesec:
+
+Tag Names
+.........
+
+The *tag name subsection* has the id 11.
+It consists of a :ref:`name map <binary-namemap>` assigning tag names to :ref:`tag indices <syntax-tagidx>`.
+
+.. math::
+   \begin{array}{llclll}
+   \production{tag name subsection} & \Btagnamesubsec &::=&
+     \Bnamesubsection_1(\Bnamemap) \\
    \end{array}

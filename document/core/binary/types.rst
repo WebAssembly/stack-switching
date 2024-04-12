@@ -48,6 +48,7 @@ Vector Types
 .. index:: heap type
    pair: binary format; heap type
 .. _binary-heaptype:
+.. _binary-absheaptype:
 
 Heap Types
 ~~~~~~~~~~
@@ -56,9 +57,21 @@ Heap Types
 
 .. math::
    \begin{array}{llclll@{\qquad\qquad}l}
-   \production{heap type} & \Bheaptype &::=&
-     \hex{6F} &\Rightarrow& \EXTERN \\ &&|&
+   \production{abstract heap type} & \Babsheaptype &::=&
+     \hex{74} &\Rightarrow& \NOEXN \\ &&|&
+     \hex{73} &\Rightarrow& \NOFUNC \\ &&|&
+     \hex{72} &\Rightarrow& \NOEXTERN \\ &&|&
+     \hex{71} &\Rightarrow& \NONE \\ &&|&
      \hex{70} &\Rightarrow& \FUNC \\ &&|&
+     \hex{6F} &\Rightarrow& \EXTERN \\ &&|&
+     \hex{6E} &\Rightarrow& \ANY \\ &&|&
+     \hex{6D} &\Rightarrow& \EQT \\ &&|&
+     \hex{6C} &\Rightarrow& \I31 \\ &&|&
+     \hex{6B} &\Rightarrow& \STRUCT \\ &&|&
+     \hex{6A} &\Rightarrow& \ARRAY \\ &&|&
+     \hex{69} &\Rightarrow& \EXN \\
+   \production{heap type} & \Bheaptype &::=&
+     \X{ht}{:}\Babsheaptype &\Rightarrow& \X{ht} \\ &&|&
      x{:}\Bs33 &\Rightarrow& x & (\iff x \geq 0) \\
    \end{array}
 
@@ -70,15 +83,14 @@ Heap Types
 Reference Types
 ~~~~~~~~~~~~~~~
 
-:ref:`Reference types <syntax-reftype>` are either encoded by a single byte followed by a :ref:`heap type <binary-heaptype>`, or, as a short form, directly as a non-index heap type.
+:ref:`Reference types <syntax-reftype>` are either encoded by a single byte followed by a :ref:`heap type <binary-heaptype>`, or, as a short form, directly as an :ref:`abstract heap type <binary-absheaptype>`.
 
 .. math::
    \begin{array}{llclll@{\qquad\qquad}l}
    \production{reference type} & \Breftype &::=&
-     \hex{6B}~~\X{ht}{:}\Bheaptype &\Rightarrow& \REF~\X{ht} \\ &&|&
-     \hex{6C}~~\X{ht}{:}\Bheaptype &\Rightarrow& \REF~\NULL~\X{ht} \\ &&|&
-     \hex{6F} &\Rightarrow& \EXTERNREF \\ &&|&
-     \hex{70} &\Rightarrow& \FUNCREF \\
+     \hex{64}~~\X{ht}{:}\Bheaptype &\Rightarrow& \REF~\X{ht} \\ &&|&
+     \hex{63}~~\X{ht}{:}\Bheaptype &\Rightarrow& \REF~\NULL~\X{ht} \\ &&|&
+     \X{ht}{:}\Babsheaptype &\Rightarrow& \REF~\NULL~\X{ht} \\
    \end{array}
 
 
@@ -89,12 +101,13 @@ Reference Types
 Value Types
 ~~~~~~~~~~~
 
-:ref:`Value types <syntax-valtype>` are encoded with their respective encoding as a :ref:`number type <binary-numtype>` or :ref:`reference type <binary-reftype>`.
+:ref:`Value types <syntax-valtype>` are encoded with their respective encoding as a :ref:`number type <binary-numtype>`, :ref:`vector type <binary-vectype>`, or :ref:`reference type <binary-reftype>`.
 
 .. math::
    \begin{array}{llclll@{\qquad\qquad}l}
    \production{value type} & \Bvaltype &::=&
      t{:}\Bnumtype &\Rightarrow& t \\ &&|&
+     t{:}\Bvectype &\Rightarrow& t \\ &&|&
      t{:}\Breftype &\Rightarrow& t \\
    \end{array}
 
@@ -112,7 +125,7 @@ Value Types
 Result Types
 ~~~~~~~~~~~~
 
-:ref:`Result types <syntax-resulttype>` are encoded by the respective :ref:`vectors <binary-vec>` of :ref:`value types `<binary-valtype>`.
+:ref:`Result types <syntax-resulttype>` are encoded by the respective :ref:`vectors <binary-vec>` of :ref:`value types <binary-valtype>`.
 
 .. math::
    \begin{array}{llclll@{\qquad\qquad}l}
@@ -128,13 +141,106 @@ Result Types
 Function Types
 ~~~~~~~~~~~~~~
 
-:ref:`Function types <syntax-functype>` are encoded by the byte :math:`\hex{60}` followed by the respective :ref:`vectors <binary-vec>` of parameter and result types.
+:ref:`Function types <syntax-functype>` are encoded by the respective :ref:`vectors <binary-vec>` of parameter and result types.
 
 .. math::
    \begin{array}{llclll@{\qquad\qquad}l}
    \production{function type} & \Bfunctype &::=&
-     \hex{60}~~\X{rt}_1{:\,}\Bresulttype~~\X{rt}_2{:\,}\Bresulttype
+     \X{rt}_1{:\,}\Bresulttype~~\X{rt}_2{:\,}\Bresulttype
        &\Rightarrow& \X{rt}_1 \to \X{rt}_2 \\
+   \end{array}
+
+
+.. index:: aggregate type, value type, structure type, array type, field type, storage type, packed type, mutability
+   pair: binary format; aggregate type
+   pair: binary format; structure type
+   pair: binary format; array type
+   pair: binary format; field type
+   pair: binary format; storage type
+   pair: binary format; packed type
+.. _binary-aggrtype:
+.. _binary-structtype:
+.. _binary-arraytype:
+.. _binary-fieldtype:
+.. _binary-storagetype:
+.. _binary-packedtype:
+
+Aggregate Types
+~~~~~~~~~~~~~~~
+
+:ref:`Aggregate types <syntax-aggrtype>` are encoded with their respective :ref:`field types <syntax-fieldtype>`.
+
+.. math::
+   \begin{array}{llclll@{\qquad\qquad}l}
+   \production{array type} & \Barraytype &::=&
+     \X{ft}{:\,}\Bfieldtype
+       &\Rightarrow& \X{ft} \\
+   \production{structure type} & \Bstructtype &::=&
+     \X{ft}^\ast{:\,}\Bvec(\Bfieldtype)
+       &\Rightarrow& \X{ft}^\ast \\
+   \production{field type} & \Bfieldtype &::=&
+     \X{st}{:}\Bstoragetype~~m{:}\Bmut
+       &\Rightarrow& m~\X{st} \\
+   \production{storage type} & \Bstoragetype &::=&
+     t{:}\Bvaltype
+       &\Rightarrow& t \\ &&|&
+     t{:}\Bpackedtype
+       &\Rightarrow& t \\
+   \production{packed type} & \Bpackedtype &::=&
+     \hex{78}
+       &\Rightarrow& \I8 \\ &&|&
+     \hex{77}
+       &\Rightarrow& \I16 \\
+   \end{array}
+
+
+.. index:: composite type, structure type, array type, function type
+   pair: binary format; composite type
+.. _binary-comptype:
+
+Composite Types
+~~~~~~~~~~~~~~~
+
+:ref:`Composite types <syntax-comptype>` are encoded by a distinct byte followed by a type encoding of the respective form.
+
+.. math::
+   \begin{array}{llclll@{\qquad\qquad}l}
+   \production{composite type} & \Bcomptype &::=&
+     \hex{5E}~~\X{at}{:}\Barraytype
+       &\Rightarrow& \TARRAY~\X{at} \\ &&|&
+     \hex{5F}~~\X{st}{:}\Bstructtype
+       &\Rightarrow& \TSTRUCT~\X{st} \\ &&|&
+     \hex{60}~~\X{ft}{:}\Bfunctype
+       &\Rightarrow& \TFUNC~\X{ft} \\
+   \end{array}
+
+
+.. index:: recursive type, sub type, composite type
+   pair: binary format; recursive type
+   pair: binary format; sub type
+.. _binary-rectype:
+.. _binary-subtype:
+
+Recursive Types
+~~~~~~~~~~~~~~~
+
+:ref:`Recursive types <syntax-rectype>` are encoded by the byte :math:`\hex{4E}` followed by a :ref:`vector <binary-vec>` of :ref:`sub types <syntax-subtype>`.
+Additional shorthands are recognized for unary recursions and sub types without super types.
+
+.. math::
+   \begin{array}{llclll@{\qquad\qquad}l}
+   \production{recursive type} & \Brectype &::=&
+     \hex{4E}~~\X{st}^\ast{:\,}\Bvec(\Bsubtype)
+       &\Rightarrow& \TREC~\X{st}^\ast \\ &&|&
+     \X{st}{:}\Bsubtype
+       &\Rightarrow& \TREC~\X{st} \\
+   \production{sub type} & \Bsubtype &::=&
+     \hex{50}~~x^\ast{:\,}\Bvec(\Btypeidx)~~\X{ct}{:}\Bcomptype
+       &\Rightarrow& \TSUB~x^\ast~\X{ct} \\ &&|&
+     \hex{4F}~~x^\ast{:\,}\Bvec(\Btypeidx)~~\X{ct}{:}\Bcomptype
+       &\Rightarrow& \TSUB~\TFINAL~x^\ast~\X{ct} \\ &&|&
+     \X{ct}{:}\Bcomptype
+       &\Rightarrow& \TSUB~\TFINAL~\epsilon~\X{ct} \\
    \end{array}
 
 
@@ -206,3 +312,26 @@ Global Types
      \hex{00} &\Rightarrow& \MCONST \\ &&|&
      \hex{01} &\Rightarrow& \MVAR \\
    \end{array}
+
+
+.. index:: tag type, function type, exception tag
+   pair: binary format; tag type
+.. _binary-tagtype:
+
+Tag Types
+~~~~~~~~~
+
+:ref:`Tag types <syntax-tagtype>` are encoded by their function type.
+
+.. math::
+   \begin{array}{llclll}
+   \production{tag type} & \Btagtype &::=&
+     \hex{00}~~ft{:}\Bfunctype &\Rightarrow& ft \\
+   \end{array}
+
+The |Bfunctype| of a tag is used to characterise exceptions.
+The :math:`\hex{00}` bit signifies an exception and is currently the only allowed value.
+
+.. note::
+   In future versions of WebAssembly,
+   the preceding zero byte may encode additional flags.
