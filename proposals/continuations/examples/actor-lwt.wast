@@ -52,7 +52,7 @@
     (loop $l
       (if (i32.eqz (local.get $n))
         (then (suspend $send (i32.const 42) (local.get $p)))
-        (else (local.set $p (suspend $spawn (cont.bind (type $cont) (local.get $p) (cont.new (type $i-cont) (ref.func $next)))))
+        (else (local.set $p (suspend $spawn (cont.bind $i-cont $cont (local.get $p) (cont.new $i-cont (ref.func $next)))))
               (local.set $n (i32.sub (local.get $n) (i32.const 1)))
               (br $l))
       )
@@ -73,7 +73,7 @@
   (table $queue 0 (ref null $cont))
   (memory 1)
 
-  (exception $too-many-mailboxes)
+  (tag $too-many-mailboxes)
 
   (global $qdelta i32 (i32.const 10))
 
@@ -190,8 +190,8 @@
 
   (func $log (import "spectest" "print_i32") (param i32))
 
-  (exception $too-many-mailboxes)
-  (exception $too-many-messages)
+  (tag $too-many-mailboxes)
+  (tag $too-many-messages)
 
   (memory 1)
 
@@ -274,7 +274,7 @@
     (loop $l
       (if (i32.eqz (local.get $n))
         (then (suspend $send (i32.const 42) (local.get $p)))
-        (else (local.set $p (suspend $spawn (cont.bind (type $cont) (local.get $p) (cont.new (type $i-cont) (ref.func $next)))))
+        (else (local.set $p (suspend $spawn (cont.bind $i-cont $cont (local.get $p) (cont.new $i-cont (ref.func $next)))))
               (local.set $n (i32.sub (local.get $n) (i32.const 1)))
               (br $l))
       )
@@ -371,7 +371,7 @@
       (if (call $queue-empty) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_fork (result (ref $cont) (ref $cont))
-          (resume (tag $yield $on_yield) (tag $fork $on_fork)
+          (resume $cont (tag $yield $on_yield) (tag $fork $on_fork)
             (call $dequeue)
           )
           (br $l)  ;; thread terminated
@@ -397,8 +397,8 @@
 
   ;; -1 means empty
 
-  (exception $too-many-mailboxes)
-  (exception $too-many-messages)
+  (tag $too-many-mailboxes)
+  (tag $too-many-messages)
 
   (memory 1)
 
@@ -489,52 +489,52 @@
   (elem declare func $actk)
 
   (func $actk (param $mine i32) (param $nextk (ref $cont))
+    (local $ik (ref $i-cont))
+    (local $k (ref $cont))
+    (local $you (ref $cont))
+    (local $yours i32)
     (loop $l
       (block $on_self (result (ref $i-cont))
         (block $on_spawn (result (ref $cont) (ref $i-cont))
           (block $on_send (result i32 i32 (ref $cont))
             (block $on_recv (result (ref $i-cont))
-               (resume (tag $self $on_self)
-                       (tag $spawn $on_spawn)
-                       (tag $send $on_send)
-                       (tag $recv $on_recv)
-                       (local.get $nextk)
+               (resume $cont (tag $self $on_self)
+                             (tag $spawn $on_spawn)
+                             (tag $send $on_send)
+                             (tag $recv $on_recv)
+                             (local.get $nextk)
                )
                (return)
             ) ;;   $on_recv (result (ref $i-cont))
-            (let (local $ik (ref $i-cont))
-              ;; block this thread until the mailbox is non-empty
-              (loop $blocked
-                (if (call $empty-mb (local.get $mine))
-                    (then (suspend $yield)
-                          (br $blocked))
-                )
+            (local.set $ik)
+            ;; block this thread until the mailbox is non-empty
+            (loop $blocked
+              (if (call $empty-mb (local.get $mine))
+                  (then (suspend $yield)
+                        (br $blocked))
               )
-              (local.set $nextk (cont.bind (type $cont) (call $recv-from-mb (local.get $mine)) (local.get $ik)))
             )
+            (local.set $nextk (cont.bind $i-cont $cont (call $recv-from-mb (local.get $mine)) (local.get $ik)))
             (br $l)
           ) ;;   $on_send (result i32 i32 (ref $cont))
-          (let (param i32 i32) (local $k (ref $cont))
-            (call $send-to-mb)
-            (local.set $nextk (local.get $k))
-          )
+          (local.set $k)
+          (call $send-to-mb)
+          (local.set $nextk (local.get $k))
           (br $l)
         ) ;;   $on_spawn (result (ref $cont) (ref $i-cont))
-        (let (local $you (ref $cont)) (local $ik (ref $i-cont))
-          (call $new-mb)
-          (let (local $yours i32)
-            (suspend $fork (cont.bind (type $cont)
-                                      (local.get $yours)
-                                      (local.get $you)
-                                      (cont.new (type $ic-cont) (ref.func $actk))))
-            (local.set $nextk (cont.bind (type $cont) (local.get $yours) (local.get $ik)))
-          )
-        )
+        (local.set $ik)
+        (local.set $you)
+        (call $new-mb)
+        (local.set $yours)
+        (suspend $fork (cont.bind $ic-cont $cont
+                                  (local.get $yours)
+                                  (local.get $you)
+                                  (cont.new $ic-cont (ref.func $actk))))
+        (local.set $nextk (cont.bind $i-cont $cont (local.get $yours) (local.get $ik)))
         (br $l)
       ) ;;   $on_self (result (ref $i-cont))
-      (let (local $ik (ref $i-cont))
-        (local.set $nextk (cont.bind (type $cont) (local.get $mine) (local.get $ik)))
-      )
+      (local.set $ik)
+      (local.set $nextk (cont.bind $i-cont $cont (local.get $mine) (local.get $ik)))
       (br $l)
     )
   )
@@ -560,7 +560,7 @@
   (func $scheduler (import "scheduler" "run") (param $k (ref $cont)))
 
   (func $run-actor (export "run-actor") (param $k (ref $cont))
-    (call $scheduler (cont.bind (type $cont) (local.get $k) (cont.new (type $cont-cont) (ref.func $act))))
+    (call $scheduler (cont.bind $cont-cont $cont (local.get $k) (cont.new $cont-cont (ref.func $act))))
   )
 )
 (register "actor-scheduler")
@@ -578,7 +578,7 @@
   (func $chain (import "chain" "chain") (param $n i32))
 
   (func $run-chain (export "run-chain") (param $n i32)
-    (call $run-actor (cont.bind (type $cont) (local.get $n) (cont.new (type $i-cont) (ref.func $chain))))
+    (call $run-actor (cont.bind $i-cont $cont (local.get $n) (cont.new $i-cont (ref.func $chain))))
   )
 )
 

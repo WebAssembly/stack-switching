@@ -12,7 +12,7 @@
   (func $getting (param $k (ref $gk)) (param $s i32) (result i32)
      (block $on_get (result (ref $gk))
        (block $on_set (result i32 (ref $sk))
-          (resume (tag $get $on_get) (tag $set $on_set)
+          (resume $gk (tag $get $on_get) (tag $set $on_set)
             (local.get $s) (local.get $k)
           )
           (return)
@@ -26,7 +26,7 @@
   (func $setting (param $s i32) (param $k (ref $sk)) (result i32)
      (block $on_get (result (ref $gk))
        (block $on_set (result i32 (ref $sk))
-          (resume (tag $get $on_get) (tag $set $on_set)
+          (resume $sk (tag $get $on_get) (tag $set $on_set)
             (local.get $k)
           )
           (return)
@@ -54,7 +54,7 @@
 
   (elem declare func $f)
   (func (export "run") (result i32)
-    (call $setting (i32.const 0) (cont.new (type $sk) (ref.func $f)))
+    (call $setting (i32.const 0) (cont.new $sk (ref.func $f)))
   )
 )
 
