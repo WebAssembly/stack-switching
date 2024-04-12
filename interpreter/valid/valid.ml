@@ -15,27 +15,25 @@ let require b at s = if not b then error at s
 
 (* Context *)
 
-type label_kind = BlockLabel | CatchLabel
-
 type context =
 {
   types : def_type list;
   funcs : def_type list;
   tables : table_type list;
   memories : memory_type list;
-  globals : global_type list;
   tags : tag_type list;
+  globals : global_type list;
   elems : ref_type list;
   datas : unit list;
   locals : local_type list;
   results : val_type list;
-  labels : (label_kind * result_type) list;
+  labels : result_type list;
   refs : Free.t;
 }
 
 let empty_context =
-  { types = []; funcs = []; globals = []; tables = []; memories = [];
-    tags = []; elems = []; datas = [];
+  { types = []; funcs = []; globals = []; tables = [];
+    memories = []; tags = []; elems = []; datas = [];
     locals = []; results = []; labels = [];
     refs = Free.empty
   }
@@ -139,8 +137,9 @@ let check_heap_type (c : context) (t : heap_type) at =
   match t with
   | AnyHT | NoneHT | EqHT | I31HT | StructHT | ArrayHT
   | FuncHT | NoFuncHT
-  | ExternHT | NoExternHT
-  | ContHT | NoContHT -> ()
+  | ContHT | NoContHT
+  | ExnHT | NoExnHT
+  | ExternHT | NoExternHT -> ()
   | VarHT (StatX x) -> let _dt = type_ c (x @@ at) in ()
   | VarHT (RecX _) | DefHT _ -> assert false
   | BotHT -> ()
@@ -269,19 +268,22 @@ let stack ts = (NoEllipses, ts)
 let (-->) ts1 ts2 = {ins = NoEllipses, ts1; outs = NoEllipses, ts2}
 let (-->...) ts1 ts2 = {ins = Ellipses, ts1; outs = Ellipses, ts2}
 
-let check_stack (c : context) ts1 ts2 at =
+let match_resulttype s1 s2 (c : context) ts1 ts2 at =
   require
     ( List.length ts1 = List.length ts2 &&
       List.for_all2 (match_val_type c.types) ts1 ts2 ) at
-    ("type mismatch: instruction requires " ^ string_of_result_type ts2 ^
-     " but stack has " ^ string_of_result_type ts1)
+    ("type mismatch: " ^ s2 ^ " requires " ^ string_of_result_type ts2 ^
+     " but " ^ s1 ^ " has " ^ string_of_result_type ts1)
+
+let match_stack (c : context) ts1 ts2 at =
+  match_resulttype "stack" "instruction" c ts1 ts2 at
 
 let pop c (ell1, ts1) (ell2, ts2) at =
   let n1 = List.length ts1 in
   let n2 = List.length ts2 in
   let n = min n1 n2 in
   let n3 = if ell2 = Ellipses then (n1 - n) else 0 in
-  check_stack c (Lib.List.make n3 (BotT : val_type) @ Lib.List.drop (n2 - n) ts2) ts1 at;
+  match_stack c (Lib.List.make n3 (BotT : val_type) @ Lib.List.drop (n2 - n) ts2) ts1 at;
   (ell2, if ell1 = Ellipses then [] else Lib.List.take (n2 - n) ts2)
 
 let push c (ell1, ts1) (ell2, ts2) =
@@ -389,7 +391,6 @@ let check_vec_binop binop at =
   | _ -> ()
 
 let check_memop (c : context) (memop : ('t, 's) memop) ty_size get_sz at =
-  let _mt = memory c (0l @@ at) in
   let size =
     match get_sz memop.pack with
     | None -> ty_size memop.ty
@@ -425,14 +426,14 @@ let check_memop (c : context) (memop : ('t, 's) memop) ty_size get_sz at =
 let check_resume_table (c : context) ts2 (xys : (idx * idx) list) at =
   List.iter (fun (x1, x2) ->
     let FuncT (ts3, ts4) = func_type_of_tag_type c (tag c x1) x1.at in
-    let (_, ts') = label c x2 in
+    let ts' = label c x2 in
     match Lib.List.last_opt ts' with
     | Some (RefT (nul', ht)) ->
       let ct = cont_type_of_heap_type c ht x2.at in
       let ft' = func_type_of_cont_type c ct x2.at in
       require (match_func_type c.types (FuncT (ts4, ts2)) ft') x2.at
         "type mismatch in continuation type";
-      check_stack c (ts3 @ [RefT (nul', ht)]) ts' x2.at
+      match_stack c (ts3 @ [RefT (nul', ht)]) ts' x2.at
     | _ ->
       error at
         ("type mismatch: instruction requires continuation reference type" ^
@@ -472,73 +473,48 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
 
   | Block (bt, es) ->
     let InstrT (ts1, ts2, xs) as it = check_block_type c bt e.at in
-    check_block {c with labels = (BlockLabel, ts2) :: c.labels} es it e.at;
+    check_block {c with labels = ts2 :: c.labels} es it e.at;
     ts1 --> ts2, List.map (fun x -> x @@ e.at) xs
 
   | Loop (bt, es) ->
     let InstrT (ts1, ts2, xs) as it = check_block_type c bt e.at in
-    check_block {c with labels = (BlockLabel, ts1) :: c.labels} es it e.at;
+    check_block {c with labels = ts1 :: c.labels} es it e.at;
     ts1 --> ts2, List.map (fun x -> x @@ e.at) xs
 
   | If (bt, es1, es2) ->
     let InstrT (ts1, ts2, xs) as it = check_block_type c bt e.at in
-    check_block {c with labels = (BlockLabel, ts2) :: c.labels} es1 it e.at;
-    check_block {c with labels = (BlockLabel, ts2) :: c.labels} es2 it e.at;
+    check_block {c with labels = ts2 :: c.labels} es1 it e.at;
+    check_block {c with labels = ts2 :: c.labels} es2 it e.at;
     (ts1 @ [NumT I32T]) --> ts2, List.map (fun x -> x @@ e.at) xs
 
-  | Throw x ->
-    let tag = tag c x in
-    let FuncT (ts1, _) = func_type_of_tag_type c tag x.at in
-    ts1 -->... [], []
-
-  | Rethrow x ->
-    let (kind, _) = label c x in
-    require (kind = CatchLabel) e.at "invalid rethrow label";
-    [] -->... [], []
-
-  | TryCatch (bt, es, cts, ca) ->
-    let InstrT (ts1, ts2, xs) as ft = check_block_type c bt e.at in
-    let c_try = {c with labels = (BlockLabel, ts2) :: c.labels} in
-    let c_catch = {c with labels = (CatchLabel, ts2) :: c.labels} in
-    check_block c_try es ft e.at;
-    List.iter (fun ct -> check_catch ct c_catch ft e.at) cts;
-    Lib.Option.app (fun es -> check_block c_catch es ft e.at) ca;
-    ts1 --> ts2, List.map (fun x -> x @@ e.at) xs
-
-  | TryDelegate (bt, es, x) ->
-    let InstrT (ts1, ts2, xs) as ft = check_block_type c bt e.at in
-    ignore (label c x);
-    check_block {c with labels = (BlockLabel, ts2) :: c.labels} es ft e.at;
-    ts1 --> ts2, List.map (fun x -> x @@ e.at) xs
-
   | Br x ->
-    let (_, ts) = label c x in
+    let ts = label c x in
     ts -->... [], []
 
   | BrIf x ->
-    let (_, ts) = label c x in
+    let ts = label c x in
     (ts @ [NumT I32T]) --> ts, []
 
   | BrTable (xs, x) ->
-    let n = List.length (snd (label c x)) in
+    let n = List.length (label c x) in
     let ts = List.init n (fun i -> peek (n - i) s) in
-    check_stack c ts (snd (label c x)) x.at;
-    List.iter (fun x' -> check_stack c ts (snd (label c x')) x'.at) xs;
+    match_stack c ts (label c x) x.at;
+    List.iter (fun x' -> match_stack c ts (label c x') x'.at) xs;
     (ts @ [NumT I32T]) -->... [], []
 
   | BrOnNull x ->
     let (_nul, ht) = peek_ref 0 s e.at in
-    let (_, ts) = label c x in
+    let ts = label c x in
     (ts @ [RefT (Null, ht)]) --> (ts @ [RefT (NoNull, ht)]), []
 
   | BrOnNonNull x ->
     let (_nul, ht) = peek_ref 0 s e.at in
     let t' = RefT (NoNull, ht) in
-    let (_, ts) = label c x in
+    let ts = label c x in
     require (ts <> []) e.at
       ("type mismatch: instruction requires type " ^ string_of_val_type t' ^
-       " but label has " ^ string_of_result_type (snd (label c x)));
-    let ts0, t1 = Lib.List.split_last (snd (label c x)) in
+       " but label has " ^ string_of_result_type (label c x));
+    let ts0, t1 = Lib.List.split_last (label c x) in
     require (match_val_type c.types t' t1) e.at
       ("type mismatch: instruction requires type " ^ string_of_val_type t' ^
        " but label has " ^ string_of_result_type ts);
@@ -551,13 +527,13 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
       (match_ref_type c.types rt2 rt1) e.at
       ("type mismatch on cast: type " ^ string_of_ref_type rt2 ^
        " does not match " ^ string_of_ref_type rt1);
-    require (label c x <> (BlockLabel, [])) e.at
+    require (label c x <> []) e.at
       ("type mismatch: instruction requires type " ^ string_of_ref_type rt2 ^
-       " but label has " ^ string_of_result_type (snd (label c x)));
-    let ts0, t1 = Lib.List.split_last (snd (label c x)) in
+       " but label has " ^ string_of_result_type (label c x));
+    let ts0, t1 = Lib.List.split_last (label c x) in
     require (match_val_type c.types (RefT rt2) t1) e.at
       ("type mismatch: instruction requires type " ^ string_of_ref_type rt2 ^
-       " but label has " ^ string_of_result_type (snd (label c x)));
+       " but label has " ^ string_of_result_type (label c x));
     (ts0 @ [RefT rt1]) --> (ts0 @ [RefT (diff_ref_type rt1 rt2)]), []
 
   | BrOnCastFail (x, rt1, rt2) ->
@@ -568,13 +544,13 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
       (match_ref_type c.types rt2 rt1) e.at
       ("type mismatch on cast: type " ^ string_of_ref_type rt2 ^
        " does not match " ^ string_of_ref_type rt1);
-    require (label c x <> (BlockLabel, [])) e.at
+    require (label c x <> []) e.at
       ("type mismatch: instruction requires type " ^ string_of_ref_type rt1' ^
-       " but label has " ^ string_of_result_type (snd (label c x)));
-    let ts0, t1 = Lib.List.split_last (snd (label c x)) in
+       " but label has " ^ string_of_result_type (label c x));
+    let ts0, t1 = Lib.List.split_last (label c x) in
     require (match_val_type c.types (RefT rt1') t1) e.at
       ("type mismatch: instruction requires type " ^ string_of_ref_type rt1' ^
-       " but label has " ^ string_of_result_type (snd (label c x)));
+       " but label has " ^ string_of_result_type (label c x));
     (ts0 @ [RefT rt1]) --> (ts0 @ [RefT rt2]), []
 
   | Return ->
@@ -661,7 +637,21 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
 
   | Barrier (bt, es) ->
     let InstrT (ts1, ts2, xs) as ft = check_block_type c bt e.at in
-    check_block {c with labels = (BlockLabel, ts2) :: c.labels} es ft e.at;
+    check_block {c with labels = ts2 :: c.labels} es ft e.at;
+    ts1 --> ts2, List.map (fun x -> x @@ e.at) xs
+
+  | Throw x ->
+    let FuncT (ts1, ts2) = func_type_of_tag_type c (tag c x) x.at in
+    ts1 -->... [], []
+
+  | ThrowRef ->
+    [RefT (Null, ExnHT)] -->... [], []
+
+  | TryTable (bt, cs, es) ->
+    let InstrT (ts1, ts2, xs) as it = check_block_type c bt e.at in
+    let c' = {c with labels = ts2 :: c.labels} in
+    List.iter (fun ct -> check_catch c ct ts2 e.at) cs;
+    check_block c' es it e.at;
     ts1 --> ts2, List.map (fun x -> x @@ e.at) xs
 
   | LocalGet x ->
@@ -726,53 +716,60 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
     ignore (elem c x);
     [] --> [], []
 
-  | Load memop ->
+  | Load (x, memop) ->
+    let _mt = memory c x in
     let t = check_memop c memop num_size (Lib.Option.map fst) e.at in
     [NumT I32T] --> [NumT t], []
 
-  | Store memop ->
+  | Store (x, memop) ->
+    let _mt = memory c x in
     let t = check_memop c memop num_size (fun sz -> sz) e.at in
     [NumT I32T; NumT t] --> [], []
 
-  | VecLoad memop ->
+  | VecLoad (x, memop) ->
+    let _mt = memory c x in
     let t = check_memop c memop vec_size (Lib.Option.map fst) e.at in
     [NumT I32T] --> [VecT t], []
 
-  | VecStore memop ->
+  | VecStore (x, memop) ->
+    let _mt = memory c x in
     let t = check_memop c memop vec_size (fun _ -> None) e.at in
     [NumT I32T; VecT t] --> [], []
 
-  | VecLoadLane (memop, i) ->
+  | VecLoadLane (x, memop, i) ->
+    let _mt = memory c x in
     let t = check_memop c memop vec_size (fun sz -> Some sz) e.at in
     require (i < vec_size t / Pack.packed_size memop.pack) e.at
       "invalid lane index";
     [NumT I32T; VecT t] -->  [VecT t], []
 
-  | VecStoreLane (memop, i) ->
+  | VecStoreLane (x, memop, i) ->
+    let _mt = memory c x in
     let t = check_memop c memop vec_size (fun sz -> Some sz) e.at in
     require (i < vec_size t / Pack.packed_size memop.pack) e.at
       "invalid lane index";
     [NumT I32T; VecT t] -->  [], []
 
-  | MemorySize ->
-    let _mt = memory c (0l @@ e.at) in
+  | MemorySize x ->
+    let _mt = memory c x in
     [] --> [NumT I32T], []
 
-  | MemoryGrow ->
-    let _mt = memory c (0l @@ e.at) in
+  | MemoryGrow x ->
+    let _mt = memory c x in
     [NumT I32T] --> [NumT I32T], []
 
-  | MemoryFill ->
-    let _mt = memory c (0l @@ e.at) in
+  | MemoryFill x ->
+    let _mt = memory c x in
     [NumT I32T; NumT I32T; NumT I32T] --> [], []
 
-  | MemoryCopy ->
-    let _mt = memory c (0l @@ e.at) in
+  | MemoryCopy (x, y)->
+    let _mt = memory c x in
+    let _mt = memory c y in
     [NumT I32T; NumT I32T; NumT I32T] --> [], []
 
-  | MemoryInit x ->
-    let _mt = memory c (0l @@ e.at) in
-    let () = data c x in
+  | MemoryInit (x, y) ->
+    let _mt = memory c x in
+    let () = data c y in
     [NumT I32T; NumT I32T; NumT I32T] --> [], []
 
   | DataDrop x ->
@@ -1035,11 +1032,20 @@ and check_block (c : context) (es : instr list) (it : instr_type) at =
     ("type mismatch: block requires " ^ string_of_result_type ts2 ^
      " but stack has " ^ string_of_result_type (snd s))
 
-and check_catch (ct : idx * instr list) (c : context) (ft : instr_type) at =
-  let (x, es) = ct in
-  let FuncT (ts1, _) = func_type_of_tag_type c (tag c x) x.at in
-  let InstrT (_, ts2, xs) = ft in
-  check_block c es (InstrT (ts1, ts2, xs)) at
+and check_catch (c : context) (cc : catch) (ts : val_type list) at =
+  let match_target = match_resulttype "label" "catch handler" in
+  match cc.it with
+  | Catch (x1, x2) ->
+    let FuncT (ts1, ts2) = func_type_of_tag_type c (tag c x1) x1.at in
+    match_target c ts1 (label c x2) cc.at
+  | CatchRef (x1, x2) ->
+    let FuncT (ts1, ts2) = func_type_of_tag_type c (tag c x1) x1.at in
+    match_target c (ts1 @ [RefT (Null, ExnHT)]) (label c x2) cc.at
+  | CatchAll x ->
+    match_target c [] (label c x) cc.at
+  | CatchAllRef x ->
+    match_target c [RefT (Null, ExnHT)] (label c x) cc.at
+
 
 (* Functions & Constants *)
 
@@ -1073,14 +1079,15 @@ let check_func_body (c : context) (f : func) =
     { c with
       locals = List.map (fun t -> LocalT (Set, t)) ts1 @ lts;
       results = ts2;
-      labels = [(BlockLabel, ts2)]
+      labels = [ts2]
     }
   in check_block c' body (InstrT ([], ts2, [])) f.at
-
 
 let is_const (c : context) (e : instr) =
   match e.it with
   | Const _ | VecConst _
+  | Binary (Value.I32 I32Op.(Add | Sub | Mul))
+  | Binary (Value.I64 I64Op.(Add | Sub | Mul))
   | RefNull _ | RefFunc _
   | RefI31 | StructNew _ | ArrayNew _ | ArrayNewFixed _ -> true
   | GlobalGet x -> let GlobalT (mut, _t) = global c x in mut = Cons
@@ -1135,7 +1142,7 @@ let check_data_mode (c : context) (mode : segment_mode) =
   match mode.it with
   | Passive -> ()
   | Active {index; offset} ->
-    ignore (memory c index);
+    let _mt = memory c index in
     check_const c offset (NumT I32T)
   | Declarative -> assert false
 
@@ -1168,16 +1175,16 @@ let check_import (c : context) (im : import) : context =
   | GlobalImport gt ->
     check_global_type c gt idesc.at;
     {c with globals = c.globals @ [gt]}
-  | TagImport x ->
-     let tag = (TagT (VarHT (StatX x.it))) in
-     check_tag_type c tag idesc.at;
-     {c with tags = c.tags @ [tag]}
   | TableImport tt ->
     check_table_type c tt idesc.at;
     {c with tables = c.tables @ [tt]}
   | MemoryImport mt ->
     check_memory_type c mt idesc.at;
     {c with memories = c.memories @ [mt]}
+  | TagImport x ->
+     let tag = (TagT (VarHT (StatX x.it))) in
+     check_tag_type c tag idesc.at;
+     {c with tags = c.tags @ [tag]}
 
 module NameSet = Set.Make(struct type t = Ast.name let compare = compare end)
 
@@ -1208,11 +1215,10 @@ let check_module (m : module_) =
     |> check_list check_table m.it.tables
     |> check_list check_memory m.it.memories
     |> check_list check_global m.it.globals
+    |> check_list check_tag m.it.tags
     |> check_list check_elem m.it.elems
     |> check_list check_data m.it.datas
   in
-  require (List.length c.memories <= 1) m.at
-    "multiple memories are not allowed (yet)";
   List.iter (check_func_body c) m.it.funcs;
   Option.iter (check_start c) m.it.start;
   ignore (List.fold_left (check_export c) NameSet.empty m.it.exports)

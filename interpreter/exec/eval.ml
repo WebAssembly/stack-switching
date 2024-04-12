@@ -64,20 +64,16 @@ and admin_instr' =
   | Plain of instr'
   | Refer of ref_
   | Invoke of func_inst
-  | Label of int32 * instr list * code
-  | Frame of int32 * frame * code
-  | Handle of (tag_inst * idx) list option * code
-  | Trapping of string
-  | Throwing of tag_inst * value stack
-  | Rethrowing of int32 * (admin_instr -> admin_instr)
-  | Suspending of tag_inst * value stack * ctxt
+  | Breaking of int32 * value stack
   | Returning of value stack
   | ReturningInvoke of value stack * func_inst
-  | Breaking of int32 * value stack
-  | Catch of int32 * (Tag.t * instr list) list * instr list option * code
-  | Caught of int32 * Tag.t * value stack * code
-  | Delegate of int32 * code
-  | Delegating of int32 * Tag.t * value stack
+  | Throwing of Tag.t * value stack
+  | Trapping of string
+  | Label of int * instr list * code
+  | Frame of int * frame * code
+  | Handler of int * catch list * code
+  | Handle of (tag_inst * idx) list option * code
+  | Suspending of tag_inst * value stack * ctxt
 
 and ctxt = code -> code
 
@@ -100,10 +96,10 @@ let plain e = Plain e.it @@ e.at
 
 let is_jumping e =
   match e.it with
-  | Trapping _ | Throwing _ | Suspending _
-  | Returning _ | ReturningInvoke _ | Breaking _ ->
-    true
+  | Returning _ | ReturningInvoke _ | Breaking _
+  | Throwing _ | Trapping _ | Suspending _ -> true
   | _ -> false
+
 
 let compose (vs1, es1) (vs2, es2) = vs1 @ vs2, es1 @ es2
 
@@ -170,12 +166,18 @@ let block_type (inst : module_inst) bt at =
     let FuncT (ts1, ts2) = func_type inst x in InstrT (ts1, ts2, [])
 
 let take n (vs : 'a stack) at =
-  try Lib.List32.take n vs with Failure _ -> Crash.error at "stack underflow"
+  try Lib.List.take n vs with Failure _ -> Crash.error at "stack underflow"
 
 let drop n (vs : 'a stack) at =
-  try Lib.List32.drop n vs with Failure _ -> Crash.error at "stack underflow"
+  try Lib.List.drop n vs with Failure _ -> Crash.error at "stack underflow"
 
 let split n (vs : 'a stack) at = take n vs at, drop n vs at
+
+let i32_split n (vs : 'a stack) at =
+  try
+    Lib.List32.take n vs, Lib.List32.drop n vs
+  with
+    Failure _ -> Crash.error at "stack underflow"
 
 let str_type_of_heap_type (inst : module_inst) ht : str_type =
   match ht with
@@ -221,6 +223,7 @@ let array_oob a i n =
   I64.gt_u (I64.add (I64_convert.extend_i32_u i) (I64_convert.extend_i32_u n))
     (I64_convert.extend_i32_u (Aggr.array_length a))
 
+
 let rec step (c : config) : config =
   let vs, es = c.code in
   let e = List.hd es in
@@ -236,14 +239,14 @@ let rec step (c : config) : config =
 
       | Block (bt, es'), vs ->
         let InstrT (ts1, ts2, _xs) = block_type c.frame.inst bt e.at in
-        let n1 = Lib.List32.length ts1 in
-        let n2 = Lib.List32.length ts2 in
+        let n1 = List.length ts1 in
+        let n2 = List.length ts2 in
         let args, vs' = split n1 vs e.at in
         vs', [Label (n2, [], (args, List.map plain es')) @@ e.at]
 
       | Loop (bt, es'), vs ->
         let InstrT (ts1, ts2, _xs) = block_type c.frame.inst bt e.at in
-        let n1 = Lib.List32.length ts1 in
+        let n1 = List.length ts1 in
         let args, vs' = split n1 vs e.at in
         vs', [Label (n1, [e' @@ e.at], (args, List.map plain es')) @@ e.at]
 
@@ -252,30 +255,6 @@ let rec step (c : config) : config =
           vs', [Plain (Block (bt, es2)) @@ e.at]
         else
           vs', [Plain (Block (bt, es1)) @@ e.at]
-
-      | Throw x, vs ->
-        let tagt = tag c.frame.inst x in
-        let FuncT (ts, _) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
-        let vs0, vs' = split (Lib.List32.length ts) vs e.at in
-        vs', [Throwing (tagt, vs0) @@ e.at]
-
-      | Rethrow x, vs ->
-        vs, [Rethrowing (x.it, fun e -> e) @@ e.at]
-
-      | TryCatch (bt, es', cts, ca), vs ->
-        let InstrT (ts1, ts2, _xs) = block_type c.frame.inst bt e.at in
-        let n1 = Lib.List32.length ts1 in
-        let n2 = Lib.List32.length ts2 in
-        let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-        let cts' = List.map (fun (x, es'') -> ((tag c.frame.inst x), es'')) cts in
-        vs', [Label (n2, [], ([], [Catch (n2, cts', ca, (args, List.map plain es')) @@ e.at])) @@ e.at]
-
-      | TryDelegate (bt, es', x), vs ->
-        let InstrT (ts1, ts2, _xs) = block_type c.frame.inst bt e.at in
-        let n1 = Lib.List32.length ts1 in
-        let n2 = Lib.List32.length ts2 in
-        let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-        vs', [Label (n2, [], ([], [Delegate (x.it, (args, List.map plain es')) @@ e.at])) @@ e.at]
 
       | Br x, vs ->
         [], [Breaking (x.it, vs) @@ e.at]
@@ -368,17 +347,17 @@ let rec step (c : config) : config =
         let ct = subst_cont_type (subst_of c.frame.inst) ct in
         let FuncT (ts', _) = func_type_of_cont_type c.frame.inst ct in
         let args, vs' =
-          try split (Int32.sub n (Lib.List32.length ts')) vs e.at
+          try i32_split (I32.sub n (Lib.List32.length ts')) vs e.at
           with Failure _ -> Crash.error e.at "type mismatch at continuation bind"
         in
         cont := None;
         let ctxt' code = ctxt (compose code (args, [])) in
-        Ref (ContRef (ref (Some (Int32.sub n (Lib.List32.length args), ctxt')))) :: vs', []
+        Ref (ContRef (ref (Some (I32.sub n (Lib.List32.length args), ctxt')))) :: vs', []
 
       | Suspend x, vs ->
         let tagt = tag c.frame.inst x in
         let FuncT (ts, _) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
-        let args, vs' = split (Lib.List32.length ts) vs e.at in
+        let args, vs' = i32_split (Lib.List32.length ts) vs e.at in
         vs', [Suspending (tagt, args, fun code -> code) @@ e.at]
 
       | Resume (x, xls), Ref (NullRef _) :: vs ->
@@ -389,7 +368,7 @@ let rec step (c : config) : config =
 
       | Resume (x, xls), Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
         let hs = List.map (fun (x, l) -> tag c.frame.inst x, l) xls in
-        let args, vs' = split n vs e.at in
+        let args, vs' = i32_split n vs e.at in
         cont := None;
         vs', [Handle (Some hs, ctxt (args, [])) @@ e.at]
 
@@ -403,13 +382,13 @@ let rec step (c : config) : config =
         let tagt = tag c.frame.inst y in
         let FuncT (ts, _) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
         let hs = List.map (fun (x, l) -> tag c.frame.inst x, l) xls in
-        let args, vs' = split (Lib.List32.length ts) vs e.at in
+        let args, vs' = split (List.length ts) vs e.at in
         cont := None;
         vs', [Handle (Some hs, ctxt (args, [Plain (Throw x) @@ e.at])) @@ e.at]
 
       | Barrier (bt, es'), vs ->
         let InstrT (ts1, _, _xs) = block_type c.frame.inst bt e.at in
-        let args, vs' = split (Lib.List32.length ts1) vs e.at in
+        let args, vs' = i32_split (Lib.List32.length ts1) vs e.at in
         vs', [
           Handle (None,
             (args, [Plain (Block (bt, es')) @@ e.at])
@@ -430,6 +409,26 @@ let rec step (c : config) : config =
         | vs', [{it = Trapping s; at}] -> vs', [Trapping s @@ at]
         | _ -> assert false
         )
+
+      | Throw x, vs ->
+        let t = tag c.frame.inst x in
+        let FuncT (ts, _) = func_type_of_tag_type c.frame.inst (Tag.type_of t) in
+        let n = List.length ts in
+        let args, vs' = split n vs e.at in
+        vs', [Throwing (t, args) @@ e.at]
+
+      | ThrowRef, Ref (NullRef _) :: vs ->
+        vs, [Trapping "null exception reference" @@ e.at]
+
+      | ThrowRef, Ref (ExnRef (t, args)) :: vs ->
+        vs, [Throwing (t, args) @@ e.at]
+
+      | TryTable (bt, cs, es'), vs ->
+        let InstrT (ts1, ts2, _xs) = block_type c.frame.inst bt e.at in
+        let n1 = List.length ts1 in
+        let n2 = List.length ts2 in
+        let args, vs' = split n1 vs e.at in
+        vs', [Handler (n2, cs, (args, [Label (n2, [], ([], List.map plain es')) @@ e.at])) @@ e.at]
 
       | Drop, v :: vs' ->
         vs', []
@@ -551,8 +550,8 @@ let rec step (c : config) : config =
         Elem.drop seg;
         vs, []
 
-      | Load {offset; ty; pack; _}, Num (I32 i) :: vs' ->
-        let mem = memory c.frame.inst (0l @@ e.at) in
+      | Load (x, {offset; ty; pack; _}), Num (I32 i) :: vs' ->
+        let mem = memory c.frame.inst x in
         let a = I64_convert.extend_i32_u i in
         (try
           let n =
@@ -562,8 +561,8 @@ let rec step (c : config) : config =
           in Num n :: vs', []
         with exn -> vs', [Trapping (memory_error e.at exn) @@ e.at])
 
-      | Store {offset; pack; _}, Num n :: Num (I32 i) :: vs' ->
-        let mem = memory c.frame.inst (0l @@ e.at) in
+      | Store (x, {offset; pack; _}), Num n :: Num (I32 i) :: vs' ->
+        let mem = memory c.frame.inst x in
         let a = I64_convert.extend_i32_u i in
         (try
           (match pack with
@@ -573,8 +572,8 @@ let rec step (c : config) : config =
           vs', []
         with exn -> vs', [Trapping (memory_error e.at exn) @@ e.at]);
 
-      | VecLoad {offset; ty; pack; _}, Num (I32 i) :: vs' ->
-        let mem = memory c.frame.inst (0l @@ e.at) in
+      | VecLoad (x, {offset; ty; pack; _}), Num (I32 i) :: vs' ->
+        let mem = memory c.frame.inst x in
         let a = I64_convert.extend_i32_u i in
         (try
           let v =
@@ -584,16 +583,16 @@ let rec step (c : config) : config =
           in Vec v :: vs', []
         with exn -> vs', [Trapping (memory_error e.at exn) @@ e.at])
 
-      | VecStore {offset; _}, Vec v :: Num (I32 i) :: vs' ->
-        let mem = memory c.frame.inst (0l @@ e.at) in
+      | VecStore (x, {offset; _}), Vec v :: Num (I32 i) :: vs' ->
+        let mem = memory c.frame.inst x in
         let addr = I64_convert.extend_i32_u i in
         (try
           Memory.store_vec mem addr offset v;
           vs', []
         with exn -> vs', [Trapping (memory_error e.at exn) @@ e.at]);
 
-      | VecLoadLane ({offset; ty; pack; _}, j), Vec (V128 v) :: Num (I32 i) :: vs' ->
-        let mem = memory c.frame.inst (0l @@ e.at) in
+      | VecLoadLane (x, {offset; ty; pack; _}, j), Vec (V128 v) :: Num (I32 i) :: vs' ->
+        let mem = memory c.frame.inst x in
         let addr = I64_convert.extend_i32_u i in
         (try
           let v =
@@ -613,8 +612,8 @@ let rec step (c : config) : config =
           in Vec (V128 v) :: vs', []
         with exn -> vs', [Trapping (memory_error e.at exn) @@ e.at])
 
-      | VecStoreLane ({offset; ty; pack; _}, j), Vec (V128 v) :: Num (I32 i) :: vs' ->
-        let mem = memory c.frame.inst (0l @@ e.at) in
+      | VecStoreLane (x, {offset; ty; pack; _}, j), Vec (V128 v) :: Num (I32 i) :: vs' ->
+        let mem = memory c.frame.inst x in
         let addr = I64_convert.extend_i32_u i in
         (try
           (match pack with
@@ -630,20 +629,20 @@ let rec step (c : config) : config =
           vs', []
         with exn -> vs', [Trapping (memory_error e.at exn) @@ e.at])
 
-      | MemorySize, vs ->
-        let mem = memory c.frame.inst (0l @@ e.at) in
+      | MemorySize x, vs ->
+        let mem = memory c.frame.inst x in
         Num (I32 (Memory.size mem)) :: vs, []
 
-      | MemoryGrow, Num (I32 delta) :: vs' ->
-        let mem = memory c.frame.inst (0l @@ e.at) in
+      | MemoryGrow x, Num (I32 delta) :: vs' ->
+        let mem = memory c.frame.inst x in
         let old_size = Memory.size mem in
         let result =
           try Memory.grow mem delta; old_size
           with Memory.SizeOverflow | Memory.SizeLimit | Memory.OutOfMemory -> -1l
         in Num (I32 result) :: vs', []
 
-      | MemoryFill, Num (I32 n) :: Num k :: Num (I32 i) :: vs' ->
-        if mem_oob c.frame (0l @@ e.at) i n then
+      | MemoryFill x, Num (I32 n) :: Num k :: Num (I32 i) :: vs' ->
+        if mem_oob c.frame x i n then
           vs', [Trapping (memory_error e.at Memory.Bounds) @@ e.at]
         else if n = 0l then
           vs', []
@@ -652,15 +651,15 @@ let rec step (c : config) : config =
             Plain (Const (I32 i @@ e.at));
             Plain (Const (k @@ e.at));
             Plain (Store
-              {ty = Types.I32T; align = 0; offset = 0l; pack = Some Pack8});
+              (x, {ty = I32T; align = 0; offset = 0l; pack = Some Pack8}));
             Plain (Const (I32 (I32.add i 1l) @@ e.at));
             Plain (Const (k @@ e.at));
             Plain (Const (I32 (I32.sub n 1l) @@ e.at));
-            Plain (MemoryFill);
+            Plain (MemoryFill x);
           ]
 
-      | MemoryCopy, Num (I32 n) :: Num (I32 s) :: Num (I32 d) :: vs' ->
-        if mem_oob c.frame (0l @@ e.at) s n || mem_oob c.frame (0l @@ e.at) d n then
+      | MemoryCopy (x, y), Num (I32 n) :: Num (I32 s) :: Num (I32 d) :: vs' ->
+        if mem_oob c.frame x d n || mem_oob c.frame y s n then
           vs', [Trapping (memory_error e.at Memory.Bounds) @@ e.at]
         else if n = 0l then
           vs', []
@@ -669,13 +668,13 @@ let rec step (c : config) : config =
             Plain (Const (I32 d @@ e.at));
             Plain (Const (I32 s @@ e.at));
             Plain (Load
-              {ty = Types.I32T; align = 0; offset = 0l; pack = Some (Pack8, ZX)});
+              (y, {ty = I32T; align = 0; offset = 0l; pack = Some (Pack8, ZX)}));
             Plain (Store
-              {ty = Types.I32T; align = 0; offset = 0l; pack = Some Pack8});
+              (x, {ty = I32T; align = 0; offset = 0l; pack = Some Pack8}));
             Plain (Const (I32 (I32.add d 1l) @@ e.at));
             Plain (Const (I32 (I32.add s 1l) @@ e.at));
             Plain (Const (I32 (I32.sub n 1l) @@ e.at));
-            Plain (MemoryCopy);
+            Plain (MemoryCopy (x, y));
           ]
         else (* d > s *)
           let n' = I32.sub n 1l in
@@ -683,33 +682,33 @@ let rec step (c : config) : config =
             Plain (Const (I32 (I32.add d n') @@ e.at));
             Plain (Const (I32 (I32.add s n') @@ e.at));
             Plain (Load
-              {ty = Types.I32T; align = 0; offset = 0l; pack = Some (Pack8, ZX)});
+              (y, {ty = I32T; align = 0; offset = 0l; pack = Some (Pack8, ZX)}));
             Plain (Store
-              {ty = Types.I32T; align = 0; offset = 0l; pack = Some Pack8});
+              (x, {ty = I32T; align = 0; offset = 0l; pack = Some Pack8}));
             Plain (Const (I32 d @@ e.at));
             Plain (Const (I32 s @@ e.at));
             Plain (Const (I32 n' @@ e.at));
-            Plain (MemoryCopy);
+            Plain (MemoryCopy (x, y));
           ]
 
-      | MemoryInit x, Num (I32 n) :: Num (I32 s) :: Num (I32 d) :: vs' ->
-        if mem_oob c.frame (0l @@ e.at) d n || data_oob c.frame x s n then
+      | MemoryInit (x, y), Num (I32 n) :: Num (I32 s) :: Num (I32 d) :: vs' ->
+        if mem_oob c.frame x d n || data_oob c.frame y s n then
           vs', [Trapping (memory_error e.at Memory.Bounds) @@ e.at]
         else if n = 0l then
           vs', []
         else
-          let seg = data c.frame.inst x in
+          let seg = data c.frame.inst y in
           let a = I64_convert.extend_i32_u s in
           let b = Data.load_byte seg a in
           vs', List.map (Lib.Fun.flip (@@) e.at) [
             Plain (Const (I32 d @@ e.at));
             Plain (Const (I32 (I32.of_int_u (Char.code b)) @@ e.at));
             Plain (Store
-              {ty = Types.I32T; align = 0; offset = 0l; pack = Some Pack8});
+              (x, {ty = I32T; align = 0; offset = 0l; pack = Some Pack8}));
             Plain (Const (I32 (I32.add d 1l) @@ e.at));
             Plain (Const (I32 (I32.add s 1l) @@ e.at));
             Plain (Const (I32 (I32.sub n 1l) @@ e.at));
-            Plain (MemoryInit x);
+            Plain (MemoryInit (x, y));
           ]
 
       | DataDrop x, vs ->
@@ -766,7 +765,7 @@ let rec step (c : config) : config =
         let args, vs'' =
           match initop with
           | Explicit ->
-            let args, vs'' = split (Lib.List32.length fts) vs' e.at in
+            let args, vs'' = i32_split (Lib.List32.length fts) vs' e.at in
             List.rev args, vs''
           | Implicit ->
             let ts = List.map unpacked_field_type fts in
@@ -815,7 +814,7 @@ let rec step (c : config) : config =
         in Ref (Aggr.ArrayRef array) :: vs'', []
 
       | ArrayNewFixed (x, n), vs' ->
-        let args, vs'' = split n vs' e.at in
+        let args, vs'' = i32_split n vs' e.at in
         let array =
           try Aggr.alloc_array (type_ c.frame.inst x) (List.rev args)
           with Failure _ -> Crash.error e.at "type mismatch packing value"
@@ -1111,6 +1110,19 @@ let rec step (c : config) : config =
     | Refer r, vs ->
       Ref r :: vs, []
 
+    | Trapping _, vs ->
+      assert false
+
+    | Returning _, vs
+    | ReturningInvoke _, vs ->
+      Crash.error e.at "undefined frame"
+
+    | Breaking _, vs ->
+      Crash.error e.at "undefined label"
+
+    | Throwing _, _ ->
+      assert false
+
     | Label (n, es0, (vs', [])), vs ->
       vs' @ vs, []
 
@@ -1152,72 +1164,52 @@ let rec step (c : config) : config =
 
     | Frame (n, frame', (vs', {it = ReturningInvoke (vs0, f); at} :: es')), vs ->
       let FuncT (ts1, _ts2) = as_func_str_type (expand_def_type (Func.type_of f)) in
-      take (Lib.List32.length ts1) vs0 e.at @ vs, [Invoke f @@ at]
+      take (List.length ts1) vs0 e.at @ vs, [Invoke f @@ at]
+
+    | Frame (n, frame', (vs', e' :: es')), vs when is_jumping e' ->
+      vs, [e']
 
     | Frame (n, frame', code'), vs ->
       let c' = step {frame = frame'; code = code'; budget = c.budget - 1} in
       vs, [Frame (n, frame', c'.code) @@ e.at]
 
-    | Catch (n, cts, ca, (vs', [])), vs ->
+    | Handler (n, cs, (vs', [])), vs ->
       vs' @ vs, []
 
-    | Catch (n, cts, ca, (vs', ({it = Trapping _ | Breaking _ | Returning _ | Delegating _; at} as e) :: es')), vs ->
-      vs, [e]
-
-    | Catch (n, cts, ca, (vs', {it = Rethrowing (k, cont); at} :: es')), vs ->
-      vs, [Rethrowing (k, (fun e -> Catch (n, cts, ca, (vs', (cont e) :: es')) @@ e.at)) @@ at]
-
-    | Catch (n, (a', es'') :: cts, ca, (vs', {it = Throwing (a, vs0); at} :: es')), vs ->
-      if a == a' then
-        vs, [Caught (n, a, vs0, (vs0, List.map plain es'')) @@ at]
+    | Handler (n, {it = Catch (x1, x2); _} :: cs, (vs', {it = Throwing (a, vs0); at} :: es')), vs ->
+      if a == tag c.frame.inst x1 then
+        vs0 @ vs, [Plain (Br x2) @@ e.at]
       else
-        vs, [Catch (n, cts, ca, (vs', {it = Throwing (a, vs0); at} :: es')) @@ e.at]
+        vs, [Handler (n, cs, (vs', {it = Throwing (a, vs0); at} :: es')) @@ e.at]
 
-    | Catch (n, [], Some es'', (vs', {it = Throwing (a, vs0); at} :: es')), vs ->
-      vs, [Caught (n, a, vs0, (vs0, List.map plain es'')) @@ at]
+    | Handler (n, {it = CatchRef (x1, x2); _} :: cs, (vs', {it = Throwing (a, vs0); at} :: es')), vs ->
+      if a == tag c.frame.inst x1 then
+        Ref (ExnRef (a, vs0)) :: vs0 @ vs, [Plain (Br x2) @@ e.at]
+      else
+        vs, [Handler (n, cs, (vs', {it = Throwing (a, vs0); at} :: es')) @@ e.at]
 
-    | Catch (n, [], None, (vs', {it = Throwing (a, vs0); at} :: es')), vs ->
+    | Handler (n, {it = CatchAll x; _} :: cs, (vs', {it = Throwing (a, vs0); at} :: es')), vs ->
+      vs, [Plain (Br x) @@ e.at]
+
+    | Handler (n, {it = CatchAllRef x; _} :: cs, (vs', {it = Throwing (a, vs0); at} :: es')), vs ->
+      Ref (ExnRef (a, vs0)) :: vs, [Plain (Br x) @@ e.at]
+
+    | Handler (n, [], (vs', {it = Throwing (a, vs0); at} :: es')), vs ->
       vs, [Throwing (a, vs0) @@ at]
 
-    | Catch (n, cts, ca, code'), vs ->
+    | Handler (n, cs, (vs', e' :: es')), vs when is_jumping e' ->
+      vs, [e']
+
+    | Handler (n, cs, code'), vs ->
       let c' = step {c with code = code'} in
-      vs, [Catch (n, cts, ca, c'.code) @@ e.at]
-
-    | Caught (n, a, vs0, (vs', [])), vs ->
-      vs' @ vs, []
-
-    | Caught (n, a, vs0, (vs', ({it = Trapping _ | Breaking _ | Returning _ | Throwing _ | Delegating _; at} as e) :: es')), vs ->
-      vs, [e]
-
-    | Caught (n, a, vs0, (vs', {it = Rethrowing (0l, cont); at} :: es')), vs ->
-      vs, [Caught (n, a, vs0, (vs', (cont (Throwing (a, vs0) @@ at)) :: es')) @@ e.at]
-
-    | Caught (n, a, vs0, (vs', {it = Rethrowing (k, cont); at} :: es')), vs ->
-      vs, [Rethrowing (k, (fun e -> Caught (n, a, vs0, (vs', (cont e) :: es')) @@ e.at)) @@ at]
-
-    | Caught (n, a, vs0, code'), vs ->
-      let c' = step {c with code = code'} in
-      vs, [Caught (n, a, vs0, c'.code) @@ e.at]
-
-    | Delegate (l, (vs', [])), vs ->
-      vs' @ vs, []
-
-    | Delegate (l, (vs', ({it = Trapping _ | Breaking _ | Returning _ | Rethrowing _ | Delegating _; at} as e) :: es')), vs ->
-      vs, [e]
-
-    | Delegate (l, (vs', {it = Throwing (a, vs0); at} :: es')), vs ->
-      vs, [Delegating (l, a, vs0) @@ e.at]
-
-    | Delegate (l, code'), vs ->
-      let c' = step {c with code = code'} in
-      vs, [Delegate (l, c'.code) @@ e.at]
+      vs, [Handler (n, cs, c'.code) @@ e.at]
 
     | Invoke f, vs when c.budget = 0 ->
       Exhaustion.error e.at "call stack exhausted"
 
     | Invoke f, vs ->
       let FuncT (ts1, ts2) = as_func_str_type (expand_def_type (Func.type_of f)) in
-      let n1, n2 = Lib.List32.length ts1, Lib.List32.length ts2 in
+      let n1, n2 = List.length ts1, List.length ts2 in
       let args, vs' = split n1 vs e.at in
       (match f with
        | Func.AstFunc (_, inst', func) ->
@@ -1259,19 +1251,7 @@ let rec step (c : config) : config =
       let c' = step {c with code = code'} in
       vs, [Handle (hso, c'.code) @@ e.at]
 
-    | Rethrowing _, _ ->
-      Crash.error e.at "undefined catch label"
-    | Delegating _, _ ->
-      Crash.error e.at "undefined delegate label"
-
-    | Trapping _, _
-    | Throwing _, _
-    | Suspending _, _
-    | Returning _, _
-    | ReturningInvoke _, _
-    | Breaking _, _ ->
-      assert false
-
+    | Suspending (_, _, _), _ -> assert false
   in {c with code = vs', es' @ List.tl es}
 
 
@@ -1290,7 +1270,11 @@ let rec eval (c : config) : value stack =
     | _ -> assert false
     )
 
-  | _ ->
+  | vs, {it = Throwing (a, args); at} :: _ ->
+    let msg = "uncaught exception with args (" ^ string_of_values args ^ ")" in
+    Exception.error at msg
+
+  | vs, es ->
     eval (step c)
 
 
@@ -1432,11 +1416,10 @@ let run_data i data =
   match data.it.dmode.it with
   | Passive -> []
   | Active {index; offset} ->
-    assert (index.it = 0l);
     offset.it @ [
       Const (I32 0l @@ at) @@ at;
       Const (I32 (Int32.of_int (String.length data.it.dinit)) @@ at) @@ at;
-      MemoryInit x @@ at;
+      MemoryInit (index, x) @@ at;
       DataDrop x @@ at
     ]
   | Declarative -> assert false
@@ -1463,6 +1446,7 @@ let init (m : module_) (exts : extern list) : module_inst =
     |> init_list init_tag m.it.tags
     |> init_list init_table m.it.tables
     |> init_list init_memory m.it.memories
+    |> init_list init_tag m.it.tags
     |> init_list init_elem m.it.elems
     |> init_list init_data m.it.datas
     |> init_list init_export m.it.exports

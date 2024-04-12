@@ -65,16 +65,17 @@ let () =
 (* Projections *)
 
 let func_inst_of_extern = function ExternFunc f -> f | _ -> failwith "func_inst_of_extern"
-let table_inst_of_extern = function ExternTable f -> f | _ -> failwith "table_inst_of_extern"
-let memory_inst_of_extern = function ExternMemory f -> f | _ -> failwith "memory_inst_of_extern"
-let global_inst_of_extern = function ExternGlobal f -> f | _ -> failwith "global_inst_of_extern"
+let table_inst_of_extern = function ExternTable t -> t | _ -> failwith "table_inst_of_extern"
+let memory_inst_of_extern = function ExternMemory m -> m | _ -> failwith "memory_inst_of_extern"
+let global_inst_of_extern = function ExternGlobal g -> g | _ -> failwith "global_inst_of_extern"
+let tag_inst_of_extern = function ExternTag t -> t | _ -> failwith "tag_inst_of_extern"
 
 
 (* Auxiliary functions *)
 
 let empty_module_inst =
-  { types = []; funcs = []; tables = []; memories = []; globals = []; tags = [];
-    elems = []; datas = []; exports = [] }
+  { types = []; funcs = []; tables = []; memories = []; globals = [];
+    tags = []; elems = []; datas = []; exports = [] }
 
 let extern_type_of c = function
   | ExternFunc func -> ExternFuncT (Func.type_of func)

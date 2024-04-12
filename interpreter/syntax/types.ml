@@ -17,6 +17,7 @@ type vec_type = V128T
 type heap_type =
   | AnyHT | NoneHT | EqHT | I31HT | StructHT | ArrayHT
   | FuncHT | NoFuncHT
+  | ExnHT | NoExnHT
   | ExternHT | NoExternHT
   | ContHT | NoContHT
   | VarHT of var
@@ -114,16 +115,11 @@ let defaultable = function
 
 (* Filters *)
 
-let funcs (ets : extern_type list) : def_type list =
-  Lib.List.map_filter (function ExternFuncT ft -> Some ft | _ -> None) ets
-let tables (ets : extern_type list) : table_type list =
-  Lib.List.map_filter (function ExternTableT tt -> Some tt | _ -> None) ets
-let memories (ets : extern_type list) : memory_type list =
-  Lib.List.map_filter (function ExternMemoryT mt -> Some mt | _ -> None) ets
-let globals (ets : extern_type list) : global_type list =
-  Lib.List.map_filter (function ExternGlobalT gt -> Some gt | _ -> None) ets
-let tags (ets : extern_type list) : tag_type list =
-  Lib.List.map_filter (function ExternTagT t -> Some t | _ -> None) ets
+let funcs = List.filter_map (function ExternFuncT ft -> Some ft | _ -> None)
+let tables = List.filter_map (function ExternTableT tt -> Some tt | _ -> None)
+let memories = List.filter_map (function ExternMemoryT mt -> Some mt | _ -> None)
+let globals = List.filter_map (function ExternGlobalT gt -> Some gt | _ -> None)
+let tags = List.filter_map (function ExternTagT tt -> Some tt | _ -> None)
 
 
 (* Substitution *)
@@ -148,6 +144,8 @@ let subst_heap_type s = function
   | ArrayHT -> ArrayHT
   | FuncHT -> FuncHT
   | NoFuncHT -> NoFuncHT
+  | ExnHT -> ExnHT
+  | NoExnHT -> NoExnHT
   | ExternHT -> ExternHT
   | NoExternHT -> NoExternHT
   | ContHT -> ContHT
@@ -223,7 +221,6 @@ let subst_extern_type s = function
   | ExternMemoryT mt -> ExternMemoryT (subst_memory_type s mt)
   | ExternGlobalT gt -> ExternGlobalT (subst_global_type s gt)
   | ExternTagT et -> ExternTagT (subst_tag_type s et)
-
 
 let subst_export_type s = function
   | ExportT (et, name) -> ExportT (subst_extern_type s et, name)
@@ -358,6 +355,8 @@ let rec string_of_heap_type = function
   | ArrayHT -> "array"
   | FuncHT -> "func"
   | NoFuncHT -> "nofunc"
+  | ExnHT -> "exn"
+  | NoExnHT -> "noexn"
   | ExternHT -> "extern"
   | NoExternHT -> "noextern"
   | ContHT -> "cont"
@@ -453,7 +452,6 @@ let string_of_extern_type = function
   | ExternMemoryT mt -> "memory " ^ string_of_memory_type mt
   | ExternGlobalT gt -> "global " ^ string_of_global_type gt
   | ExternTagT t -> "tag " ^ string_of_tag_type t
-
 
 let string_of_export_type = function
   | ExportT (et, name) ->

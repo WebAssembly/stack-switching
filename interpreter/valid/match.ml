@@ -21,6 +21,7 @@ let rec top_of_str_type c st =
 and top_of_heap_type c = function
   | AnyHT | NoneHT | EqHT | StructHT | ArrayHT | I31HT -> AnyHT
   | FuncHT | NoFuncHT -> FuncHT
+  | ExnHT | NoExnHT -> ExnHT
   | ExternHT | NoExternHT -> ExternHT
   | ContHT | NoContHT -> ContHT
   | DefHT dt -> top_of_str_type c (expand_def_type dt)
@@ -33,6 +34,7 @@ let rec bot_of_str_type c st =
 and bot_of_heap_type c = function
   | AnyHT | NoneHT | EqHT | StructHT | ArrayHT | I31HT -> NoneHT
   | FuncHT | NoFuncHT -> NoFuncHT
+  | ExnHT | NoExnHT -> NoExnHT
   | ExternHT | NoExternHT -> NoExternHT
   | ContHT | NoContHT -> NoContHT
   | DefHT dt -> bot_of_str_type c (expand_def_type dt)
@@ -63,7 +65,6 @@ let match_vec_type _c t1 t2 =
 
 let rec match_heap_type c t1 t2 =
   match t1, t2 with
-  | AnyHT, AnyHT -> true
   | EqHT, AnyHT -> true
   | StructHT, AnyHT -> true
   | ArrayHT, AnyHT -> true
@@ -71,9 +72,9 @@ let rec match_heap_type c t1 t2 =
   | I31HT, EqHT -> true
   | StructHT, EqHT -> true
   | ArrayHT, EqHT -> true
-  | ExternHT, ExternHT -> true
   | NoneHT, t -> match_heap_type c t AnyHT
   | NoFuncHT, t -> match_heap_type c t FuncHT
+  | NoExnHT, t -> match_heap_type c t ExnHT
   | NoExternHT, t -> match_heap_type c t ExternHT
   | NoContHT, t -> match_heap_type c t ContHT
   | VarHT (StatX x1), _ -> match_heap_type c (DefHT (lookup c x1)) t2
@@ -170,12 +171,11 @@ let match_table_type c (TableT (lim1, t1)) (TableT (lim2, t2)) =
 let match_memory_type c (MemoryT lim1) (MemoryT lim2) =
   match_limits c lim1 lim2
 
-
 let match_extern_type c et1 et2 =
   match et1, et2 with
   | ExternFuncT dt1, ExternFuncT dt2 -> match_def_type c dt1 dt2
   | ExternTableT tt1, ExternTableT tt2 -> match_table_type c tt1 tt2
   | ExternMemoryT mt1, ExternMemoryT mt2 -> match_memory_type c mt1 mt2
   | ExternGlobalT gt1, ExternGlobalT gt2 -> match_global_type c gt1 gt2
-  | ExternTagT et1, ExternTagT et2 -> match_tag_type c et1 et2
+  | ExternTagT tt1, ExternTagT tt2 -> match_tag_type c tt1 tt2
   | _, _ -> false

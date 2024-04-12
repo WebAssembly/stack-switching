@@ -123,8 +123,8 @@
 (assert_suspension (invoke "unhandled-3") "unhandled")
 (assert_return (invoke "handled"))
 
-(assert_exception (invoke "uncaught-1") "unhandled")
-(assert_exception (invoke "uncaught-2") "unhandled")
+(assert_exception (invoke "uncaught-1"))
+(assert_exception (invoke "uncaught-2"))
 
 (assert_trap (invoke "barrier") "barrier")
 

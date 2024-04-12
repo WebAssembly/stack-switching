@@ -59,7 +59,6 @@ let labels s = {empty with labels = s}
 
 let idx' x' = Set.singleton x'
 let idx x = Set.singleton x.it
-let zero = Set.singleton 0l
 let shift s = Set.map (Int32.add (-1l)) (Set.remove 0l s)
 
 let (++) = union
@@ -80,6 +79,7 @@ let heap_type = function
   | AnyHT | NoneHT | EqHT
   | I31HT | StructHT | ArrayHT -> empty
   | FuncHT | NoFuncHT -> empty
+  | ExnHT | NoExnHT -> empty
   | ExternHT | NoExternHT -> empty
   | ContHT | NoContHT -> empty
   | VarHT x -> var_type x
@@ -176,17 +176,13 @@ let rec instr (e : instr) =
      tables (idx x) ++ types (idx y)
   | ContNew x -> types (idx x)
   | ContBind (x, y) -> types (idx x) ++ types (idx y)
-  | TryCatch (bt, es, ct, ca) ->
-    let catch (tag, es) = tags (idx tag) ++ block es in
-    let catch_all = function
-      | None -> empty
-      | Some es -> block es in
-    block es ++ (list catch ct) ++ catch_all ca
-  | TryDelegate (bt, es, x) -> block es ++ tags (idx x)
-  | Throw x | Suspend x -> tags (idx x)
-  | Rethrow x -> labels (idx x)
   | ResumeThrow (x, y, xys) -> types (idx x) ++ tags (idx y) ++ list (fun (x, y) -> tags (idx x) ++ labels (idx y)) xys
   | Resume (x, xys) -> types (idx x) ++ list (fun (x, y) -> tags (idx x) ++ labels (idx y)) xys
+  | Suspend x -> tags (idx x)
+  | Throw x -> tags (idx x)
+  | ThrowRef -> empty
+  | TryTable (bt, cs, es) ->
+    block_type bt ++ list catch cs ++ block es
   | LocalGet x | LocalSet x | LocalTee x -> locals (idx x)
   | GlobalGet x | GlobalSet x -> globals (idx x)
   | TableGet x | TableSet x | TableSize x | TableGrow x | TableFill x ->
@@ -194,20 +190,26 @@ let rec instr (e : instr) =
   | TableCopy (x, y) -> tables (idx x) ++ tables (idx y)
   | TableInit (x, y) -> tables (idx x) ++ elems (idx y)
   | ElemDrop x -> elems (idx x)
-  | Load _ | Store _
-  | VecLoad _ | VecStore _ | VecLoadLane _ | VecStoreLane _
-  | MemorySize | MemoryGrow | MemoryCopy | MemoryFill ->
-    memories zero
+  | Load (x, _) | Store (x, _) | VecLoad (x, _) | VecStore (x, _)
+  | VecLoadLane (x, _, _) | VecStoreLane (x, _, _)
+  | MemorySize x | MemoryGrow x | MemoryFill x ->
+    memories (idx x)
+  | MemoryCopy (x, y) -> memories (idx x) ++ memories (idx y)
+  | MemoryInit (x, y) -> memories (idx x) ++ datas (idx y)
+  | DataDrop x -> datas (idx x)
   | VecConst _ | VecTest _ | VecUnary _ | VecBinary _ | VecCompare _
   | VecConvert _ | VecShift _ | VecBitmask _
   | VecTestBits _ | VecUnaryBits _ | VecBinaryBits _ | VecTernaryBits _
   | VecSplat _ | VecExtract _ | VecReplace _ ->
-    memories zero
-  | MemoryInit x -> memories zero ++ datas (idx x)
-  | DataDrop x -> datas (idx x)
+    empty
 
 and block (es : instr list) =
   let free = list instr es in {free with labels = shift free.labels}
+
+and catch (c : catch) =
+  match c.it with
+  | Catch (x1, x2) | CatchRef (x1, x2) -> tags (idx x1) ++ labels (idx x2)
+  | CatchAll x | CatchAllRef x -> labels (idx x)
 
 let const (c : const) = block c.it
 
