@@ -493,6 +493,13 @@ let run_assertion ass =
     | _ -> Assert.error ass.at "expected runtime error"
     )
 
+  | AssertSuspension (act, re) ->
+    trace ("Asserting suspension...");
+    (match run_action act with
+    | exception Eval.Suspension (_, msg) -> assert_message ass.at "runtime" msg re
+    | _ -> Assert.error ass.at "expected suspension"
+    )
+
   | AssertExhaustion (act, re) ->
     trace ("Asserting exhaustion...");
     (match run_action act with

@@ -81,6 +81,7 @@ let heap_type = function
   | FuncHT | NoFuncHT -> empty
   | ExnHT | NoExnHT -> empty
   | ExternHT | NoExternHT -> empty
+  | ContHT | NoContHT -> empty
   | VarHT x -> var_type x
   | DefHT _ct -> empty  (* assume closed *)
   | BotHT -> empty
@@ -93,6 +94,9 @@ let val_type = function
   | VecT t -> vec_type t
   | RefT t -> ref_type t
   | BotT -> empty
+
+(* let func_type (FuncT (ins, out)) = list val_type ins ++ list val_type out *)
+let cont_type (ContT ht) = heap_type ht
 
 let pack_type t = empty
 
@@ -110,6 +114,7 @@ let str_type = function
   | DefStructT st -> struct_type st
   | DefArrayT at -> array_type at
   | DefFuncT ft -> func_type ft
+  | DefContT ct -> cont_type ct
 
 let sub_type = function
   | SubT (_fin, hts, st) -> list heap_type hts ++ str_type st
@@ -123,14 +128,14 @@ let def_type = function
 let global_type (GlobalT (_mut, t)) = val_type t
 let table_type (TableT (_lim, t)) = ref_type t
 let memory_type (MemoryT (_lim)) = empty
-let tag_type (TagT dt) = def_type dt
+let tag_type (TagT ht) = heap_type ht
 
 let extern_type = function
   | ExternFuncT dt -> def_type dt
   | ExternTableT tt -> table_type tt
   | ExternMemoryT mt -> memory_type mt
   | ExternGlobalT gt -> global_type gt
-  | ExternTagT tt -> tag_type tt
+  | ExternTagT et -> tag_type et
 
 let block_type = function
   | VarBlockType x -> types (idx x)
@@ -158,7 +163,7 @@ let rec instr (e : instr) =
   | ArrayInitElem (x, y) -> types (idx x) ++ elems (idx y)
   | ExternConvert _ -> empty
   | Const _ | Test _ | Compare _ | Unary _ | Binary _ | Convert _ -> empty
-  | Block (bt, es) | Loop (bt, es) -> block_type bt ++ block es
+  | Block (bt, es) | Loop (bt, es) | Barrier (bt, es) -> block_type bt ++ block es
   | If (bt, es1, es2) -> block_type bt ++ block es1 ++ block es2
   | Br x | BrIf x | BrOnNull x | BrOnNonNull x -> labels (idx x)
   | BrOnCast (x, t1, t2) | BrOnCastFail (x, t1, t2) ->
@@ -168,7 +173,12 @@ let rec instr (e : instr) =
   | Call x | ReturnCall x -> funcs (idx x)
   | CallRef x | ReturnCallRef x -> types (idx x)
   | CallIndirect (x, y) | ReturnCallIndirect (x, y) ->
-    tables (idx x) ++ types (idx y)
+     tables (idx x) ++ types (idx y)
+  | ContNew x -> types (idx x)
+  | ContBind (x, y) -> types (idx x) ++ types (idx y)
+  | ResumeThrow (x, y, xys) -> types (idx x) ++ tags (idx y) ++ list (fun (x, y) -> tags (idx x) ++ labels (idx y)) xys
+  | Resume (x, xys) -> types (idx x) ++ list (fun (x, y) -> tags (idx x) ++ labels (idx y)) xys
+  | Suspend x -> tags (idx x)
   | Throw x -> tags (idx x)
   | ThrowRef -> empty
   | TryTable (bt, cs, es) ->
@@ -208,7 +218,7 @@ let func (f : func) =
   {(types (idx f.it.ftype) ++ block f.it.body) with locals = Set.empty}
 let table (t : table) = table_type t.it.ttype ++ const t.it.tinit
 let memory (m : memory) = memory_type m.it.mtype
-let tag (t : tag) = empty
+let tag (e : tag) = tag_type e.it.tagtype
 
 let segment_mode f (m : segment_mode) =
   match m.it with
@@ -237,7 +247,7 @@ let import_desc (d : import_desc) =
   | TableImport tt -> table_type tt
   | MemoryImport mt -> memory_type mt
   | GlobalImport gt -> global_type gt
-  | TagImport x -> types (idx x)
+  | TagImport et -> types (idx et)
 
 let export (e : export) = export_desc e.it.edesc
 let import (i : import) = import_desc i.it.idesc
@@ -249,6 +259,7 @@ let module_ (m : module_) =
   list global m.it.globals ++
   list table m.it.tables ++
   list memory m.it.memories ++
+  list tag m.it.tags ++
   list func m.it.funcs ++
   opt start m.it.start ++
   list elem m.it.elems ++

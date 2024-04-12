@@ -173,6 +173,9 @@ rule token = parse
       | "noextern" -> NOEXTERN
       | "externref" -> EXTERNREF
       | "nullexternref" -> NULLEXTERNREF
+      | "nocont" -> NOCONT
+      | "contref" -> CONTREF
+      | "nullcontref" -> NULLCONTREF
       | "ref" -> REF
       | "null" -> NULL
 
@@ -180,6 +183,7 @@ rule token = parse
       | "struct" -> STRUCT
       | "field" -> FIELD
       | "mut" -> MUT
+      | "cont" -> CONT
       | "sub" -> SUB
       | "final" -> FINAL
       | "rec" -> REC
@@ -215,6 +219,15 @@ rule token = parse
       | "catch_ref" -> CATCH_REF
       | "catch_all" -> CATCH_ALL
       | "catch_all_ref" -> CATCH_ALL_REF
+
+
+      | "cont.new" -> CONT_NEW
+      | "cont.bind" -> CONT_BIND
+      | "suspend" -> SUSPEND
+      | "resume" -> RESUME
+      | "resume_throw" -> RESUME_THROW
+      | "barrier" -> BARRIER
+
 
       | "local.get" -> LOCAL_GET
       | "local.set" -> LOCAL_SET
@@ -323,7 +336,6 @@ rule token = parse
       | "ref.func" -> REF_FUNC
       | "ref.struct" -> REF_STRUCT
       | "ref.array" -> REF_ARRAY
-      | "ref.exn" -> REF_EXN
       | "ref.extern" -> REF_EXTERN
       | "ref.host" -> REF_HOST
 
@@ -771,6 +783,7 @@ rule token = parse
       | "assert_trap" -> ASSERT_TRAP
       | "assert_exception" -> ASSERT_EXCEPTION
       | "assert_exhaustion" -> ASSERT_EXHAUSTION
+      | "assert_suspension" -> ASSERT_SUSPENSION
       | "nan:canonical" -> NAN Script.CanonicalNan
       | "nan:arithmetic" -> NAN Script.ArithmeticNan
       | "input" -> INPUT

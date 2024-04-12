@@ -46,8 +46,8 @@ let type_ (c : context) x = lookup "type" c.types x
 let func (c : context) x = lookup "function" c.funcs x
 let table (c : context) x = lookup "table" c.tables x
 let memory (c : context) x = lookup "memory" c.memories x
-let tag (c : context) x = lookup "tag" c.tags x
 let global (c : context) x = lookup "global" c.globals x
+let tag (c : context) x = lookup "tag" c.tags x
 let elem (c : context) x = lookup "elem segment" c.elems x
 let data (c : context) x = lookup "data segment" c.datas x
 let local (c : context) x = lookup "local" c.locals x
@@ -67,7 +67,12 @@ let init_locals (c : context) xs =
 let func_type (c : context) x =
   match expand_def_type (type_ c x) with
   | DefFuncT ft -> ft
-  | _ -> error x.at ("non-function type " ^ I32.to_string_u x.it)
+  | _ -> error x.at ("non-function type " ^ Int32.to_string x.it)
+
+let cont_type (c : context) x =
+  match expand_def_type (type_ c x) with
+  | DefContT ct -> ct
+  | _ -> error x.at ("non-continuation type " ^ Int32.to_string x.it)
 
 let struct_type (c : context) x =
   match expand_def_type (type_ c x) with
@@ -85,6 +90,30 @@ let refer category (s : Free.Set.t) x =
       ("undeclared " ^ category ^ " reference " ^ I32.to_string_u x.it)
 
 let refer_func (c : context) x = refer "function" c.refs.Free.funcs x
+
+
+(* Conversions *)
+
+let cont_type_of_heap_type (c : context) (ht : heap_type) at : cont_type =
+  match ht with
+  | DefHT dt -> assert false
+  | VarHT (StatX x) -> cont_type c (x @@ at)
+  | _ -> assert false
+
+let func_type_of_heap_type (c : context) (ht : heap_type) at : func_type =
+  match ht with
+  | DefHT dt -> assert false
+  | VarHT (StatX x) -> func_type c (x @@ at)
+  | _ -> assert false
+
+let func_type_of_cont_type (c : context) (ContT ht) at : func_type =
+  func_type_of_heap_type c ht at
+
+let func_type_of_tag_type (c : context) (TagT ht) at : func_type =
+  func_type_of_heap_type c ht at
+
+let heap_type_of_str_type (_c : context) (st : str_type) : heap_type =
+  DefHT (DefT (RecT [SubT (Final, [], st)], Int32.of_int 0))
 
 
 (* Types *)
@@ -108,6 +137,7 @@ let check_heap_type (c : context) (t : heap_type) at =
   match t with
   | AnyHT | NoneHT | EqHT | I31HT | StructHT | ArrayHT
   | FuncHT | NoFuncHT
+  | ContHT | NoContHT
   | ExnHT | NoExnHT
   | ExternHT | NoExternHT -> ()
   | VarHT (StatX x) -> let _dt = type_ c (x @@ at) in ()
@@ -150,6 +180,12 @@ let check_func_type (c : context) (ft : func_type) at =
   check_result_type c ts1 at;
   check_result_type c ts2 at
 
+let check_cont_type (c : context) (ct : cont_type) at =
+  match ct with
+  | ContT (VarHT (StatX x)) ->
+    let _dt = func_type c (x @@ at) in ()
+  | _ -> assert false
+
 let check_table_type (c : context) (tt : table_type) at =
   let TableT (lim, t) = tt in
   check_limits lim 0xffff_ffffl at "table size must be at most 2^32-1";
@@ -160,16 +196,20 @@ let check_memory_type (c : context) (mt : memory_type) at =
   check_limits lim 0x1_0000l at
     "memory size must be at most 65536 pages (4GiB)"
 
+let check_tag_type (c : context) (et : tag_type) at =
+  match et with
+  | TagT ht -> check_heap_type c ht at
+
 let check_global_type (c : context) (gt : global_type) at =
   let GlobalT (_mut, t) = gt in
   check_val_type c t at
-
 
 let check_str_type (c : context) (st : str_type) at =
   match st with
   | DefStructT st -> check_struct_type c st at
   | DefArrayT rt -> check_array_type c rt at
   | DefFuncT ft -> check_func_type c ft at
+  | DefContT ct -> check_cont_type c ct at
 
 let check_sub_type (c : context) (sut : sub_type) at =
   let SubT (_fin, hts, st) = sut in
@@ -383,6 +423,23 @@ let check_memop (c : context) (memop : ('t, 's) memop) ty_size get_sz at =
  * declarative typing rules.
  *)
 
+let check_resume_table (c : context) ts2 (xys : (idx * idx) list) at =
+  List.iter (fun (x1, x2) ->
+    let FuncT (ts3, ts4) = func_type_of_tag_type c (tag c x1) x1.at in
+    let ts' = label c x2 in
+    match Lib.List.last_opt ts' with
+    | Some (RefT (nul', ht)) ->
+      let ct = cont_type_of_heap_type c ht x2.at in
+      let ft' = func_type_of_cont_type c ct x2.at in
+      require (match_func_type c.types (FuncT (ts4, ts2)) ft') x2.at
+        "type mismatch in continuation type";
+      match_stack c (ts3 @ [RefT (nul', ht)]) ts' x2.at
+    | _ ->
+      error at
+        ("type mismatch: instruction requires continuation reference type" ^
+          " but label has " ^ string_of_result_type ts')
+  ) xys
+
 let check_block_type (c : context) (bt : block_type) at : instr_type =
   match bt with
   | ValBlockType None -> InstrT ([], [], [])
@@ -431,10 +488,12 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
     (ts1 @ [NumT I32T]) --> ts2, List.map (fun x -> x @@ e.at) xs
 
   | Br x ->
-    label c x -->... [], []
+    let ts = label c x in
+    ts -->... [], []
 
   | BrIf x ->
-    (label c x @ [NumT I32T]) --> label c x, []
+    let ts = label c x in
+    (ts @ [NumT I32T]) --> ts, []
 
   | BrTable (xs, x) ->
     let n = List.length (label c x) in
@@ -445,18 +504,20 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
 
   | BrOnNull x ->
     let (_nul, ht) = peek_ref 0 s e.at in
-    (label c x @ [RefT (Null, ht)]) --> (label c x @ [RefT (NoNull, ht)]), []
+    let ts = label c x in
+    (ts @ [RefT (Null, ht)]) --> (ts @ [RefT (NoNull, ht)]), []
 
   | BrOnNonNull x ->
     let (_nul, ht) = peek_ref 0 s e.at in
     let t' = RefT (NoNull, ht) in
-    require (label c x <> []) e.at
+    let ts = label c x in
+    require (ts <> []) e.at
       ("type mismatch: instruction requires type " ^ string_of_val_type t' ^
        " but label has " ^ string_of_result_type (label c x));
     let ts0, t1 = Lib.List.split_last (label c x) in
     require (match_val_type c.types t' t1) e.at
       ("type mismatch: instruction requires type " ^ string_of_val_type t' ^
-       " but label has " ^ string_of_result_type (label c x));
+       " but label has " ^ string_of_result_type ts);
     (ts0 @ [RefT (Null, ht)]) --> ts0, []
 
   | BrOnCast (x, rt1, rt2) ->
@@ -536,9 +597,51 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
        " but callee returns " ^ string_of_result_type ts2);
     (ts1 @ [NumT I32T]) -->... [], []
 
+  | ContNew x ->
+    let ct = cont_type c x in
+    let ft = func_type_of_cont_type c ct x.at in
+    [RefT (Null, heap_type_of_str_type c (DefFuncT ft))] -->
+    [RefT (NoNull, DefHT (type_ c x))], []
+
+  | ContBind (x, y) ->
+    let ct = cont_type c x in
+    let FuncT (ts1, ts2) = func_type_of_cont_type c ct x.at in
+    let ct' = cont_type c y in
+    let FuncT (ts1', _) as ft' = func_type_of_cont_type c ct' y.at in
+    require (List.length ts1 >= List.length ts1') x.at
+      "type mismatch in continuation arguments";
+    let ts11, ts12 = Lib.List.split (List.length ts1 - List.length ts1') ts1 in
+    require (match_func_type c.types (FuncT (ts12, ts2)) ft') e.at
+      "type mismatch in continuation types";
+    (ts11 @ [RefT (Null, heap_type_of_str_type c (DefContT ct))]) -->
+      [RefT (NoNull, heap_type_of_str_type c (DefContT ct'))], []
+
+  | Suspend x ->
+    let tag = tag c x in
+    let FuncT (ts1, ts2) = func_type_of_tag_type c tag x.at in
+    ts1 --> ts2, []
+
+  | Resume (x, xys) ->
+    let ct = cont_type c x in
+    let FuncT (ts1, ts2) = func_type_of_cont_type c ct x.at in
+    check_resume_table c ts2 xys e.at;
+    (ts1 @ [RefT (Null, heap_type_of_str_type c (DefContT ct))]) --> ts2, []
+
+  | ResumeThrow (x, y, xys) ->
+    let ct = cont_type c x in
+    let FuncT (ts1, ts2) = func_type_of_cont_type c ct x.at in
+    let tag = tag c y in
+    let FuncT (ts0, _) = func_type_of_tag_type c tag y.at in
+    check_resume_table c ts2 xys e.at;
+    (ts0 @ [RefT (Null, heap_type_of_str_type c (DefContT ct))]) --> ts2, []
+
+  | Barrier (bt, es) ->
+    let InstrT (ts1, ts2, xs) as ft = check_block_type c bt e.at in
+    check_block {c with labels = ts2 :: c.labels} es ft e.at;
+    ts1 --> ts2, List.map (fun x -> x @@ e.at) xs
+
   | Throw x ->
-    let TagT dt = tag c x in
-    let FuncT (ts1, ts2) = as_func_str_type (expand_def_type dt) in
+    let FuncT (ts1, ts2) = func_type_of_tag_type c (tag c x) x.at in
     ts1 -->... [], []
 
   | ThrowRef ->
@@ -933,12 +1036,10 @@ and check_catch (c : context) (cc : catch) (ts : val_type list) at =
   let match_target = match_resulttype "label" "catch handler" in
   match cc.it with
   | Catch (x1, x2) ->
-    let TagT dt = tag c x1 in
-    let FuncT (ts1, ts2) = as_func_str_type (expand_def_type dt) in
+    let FuncT (ts1, ts2) = func_type_of_tag_type c (tag c x1) x1.at in
     match_target c ts1 (label c x2) cc.at
   | CatchRef (x1, x2) ->
-    let TagT dt = tag c x1 in
-    let FuncT (ts1, ts2) = as_func_str_type (expand_def_type dt) in
+    let FuncT (ts1, ts2) = func_type_of_tag_type c (tag c x1) x1.at in
     match_target c (ts1 @ [RefT (Null, ExnHT)]) (label c x2) cc.at
   | CatchAll x ->
     match_target c [] (label c x) cc.at
@@ -1019,11 +1120,6 @@ let check_memory (c : context) (mem : memory) : context =
   check_memory_type c mtype mem.at;
   {c with memories = c.memories @ [mtype]}
 
-let check_tag (c : context) (t : tag) : context =
-  let FuncT (_, ts2) = func_type c t.it.tgtype in
-  require (ts2 = []) t.it.tgtype.at "non-empty tag result type";
-  {c with tags = c.tags @ [TagT (type_ c t.it.tgtype)]}
-
 let check_elem_mode (c : context) (t : ref_type) (mode : segment_mode) =
   match mode.it with
   | Passive -> ()
@@ -1055,6 +1151,12 @@ let check_data (c : context) (seg : data_segment) : context =
   check_data_mode c dmode;
   {c with datas = c.datas @ [()]}
 
+let check_tag (c : context) (tag : tag) : context =
+  let {tagtype} = tag.it in
+  check_tag_type c tagtype tag.at;
+  {c with tags = c.tags @ [tagtype]}
+
+
 
 (* Modules *)
 
@@ -1080,8 +1182,9 @@ let check_import (c : context) (im : import) : context =
     check_memory_type c mt idesc.at;
     {c with memories = c.memories @ [mt]}
   | TagImport x ->
-    let _ = func_type c x in
-    {c with tags = c.tags @ [TagT (type_ c x)]}
+     let tag = (TagT (VarHT (StatX x.it))) in
+     check_tag_type c tag idesc.at;
+     {c with tags = c.tags @ [tag]}
 
 module NameSet = Set.Make(struct type t = Ast.name let compare = compare end)
 
@@ -1108,6 +1211,7 @@ let check_module (m : module_) =
     |> check_list check_type m.it.types
     |> check_list check_import m.it.imports
     |> check_list check_func m.it.funcs
+    |> check_list check_tag m.it.tags
     |> check_list check_table m.it.tables
     |> check_list check_memory m.it.memories
     |> check_list check_global m.it.globals

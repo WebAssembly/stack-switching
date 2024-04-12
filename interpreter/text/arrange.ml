@@ -96,11 +96,15 @@ let array_type (ArrayT ft) =
 let func_type (FuncT (ts1, ts2)) =
   Node ("func", decls "param" ts1 @ decls "result" ts2)
 
+let cont_type (ContT ct) =
+  Node ("cont", [atom heap_type ct])
+
 let str_type st =
   match st with
   | DefStructT st -> struct_type st
   | DefArrayT at -> array_type at
   | DefFuncT ft -> func_type ft
+  | DefContT ct -> cont_type ct
 
 let sub_type = function
   | SubT (Final, [], st) -> str_type st
@@ -516,6 +520,16 @@ let rec instr e =
     | ReturnCallRef x -> "return_call_ref " ^ var x, []
     | ReturnCallIndirect (x, y) ->
       "return_call_indirect " ^ var x, [Node ("type " ^ var y, [])]
+    | ContNew x -> "cont.new " ^ var x, []
+    | ContBind (x, y) -> "cont.bind " ^ var x ^ " " ^ var y, []
+    | Suspend x -> "suspend " ^ var x, []
+    | Resume (x, xys) ->
+      "resume " ^ var x,
+      List.map (fun (x, y) -> Node ("tag " ^ var x ^ " " ^ var y, [])) xys
+    | ResumeThrow (x, y, xys) ->
+      "resume_throw " ^ var x ^ " " ^ var y,
+      List.map (fun (x, y) -> Node ("tag " ^ var x ^ " " ^ var y, [])) xys
+    | Barrier (bt, es) -> "barrier", block_type bt @ list instr es
     | Throw x -> "throw " ^ var x, []
     | ThrowRef -> "throw_ref", []
     | TryTable (bt, cs, es) ->
@@ -635,6 +649,12 @@ let memory off i mem =
   let {mtype = MemoryT lim} = mem.it in
   Node ("memory $" ^ nat (off + i) ^ " " ^ limits nat32 lim, [])
 
+let tag off i tag =
+  let {tagtype = TagT et} = tag.it in
+  Node ("tag $" ^ nat (off + i),
+    [Node ("type", [atom heap_type et])]
+  )
+
 let is_elem_kind = function
   | (NoNull, FuncHT) -> true
   | _ -> false
@@ -676,17 +696,6 @@ let data i seg =
   Node ("data $" ^ nat i, segment_mode "memory" dmode @ break_bytes dinit)
 
 
-(* Tags *)
-
-let tag_with_name name (t : tag) =
-  Node ("tag" ^ name,
-    [Node ("type " ^ var (t.it.tgtype), [])]
-  )
-
-let tag_with_index off i t =
-  tag_with_name (" $" ^ nat (off + i)) t
-
-
 (* Modules *)
 
 let type_ (ns, i) ty =
@@ -720,8 +729,8 @@ let export_desc d =
   | FuncExport x -> Node ("func", [atom var x])
   | TableExport x -> Node ("table", [atom var x])
   | MemoryExport x -> Node ("memory", [atom var x])
-  | TagExport x -> Node ("tag", [atom var x])
   | GlobalExport x -> Node ("global", [atom var x])
+  | TagExport x -> Node ("tag", [atom var x])
 
 let export ex =
   let {name = n; edesc} = ex.it in
@@ -753,7 +762,7 @@ let module_with_var_opt x_opt m =
     imports @
     listi (table !tx) m.it.tables @
     listi (memory !mx) m.it.memories @
-    listi (tag_with_index !tgx) m.it.tags @
+    listi (tag !tgx) m.it.tags @
     listi (global !gx) m.it.globals @
     listi (func_with_index !fx) m.it.funcs @
     list export m.it.exports @
@@ -878,10 +887,12 @@ let assertion mode ass =
     [Node ("assert_trap", [definition mode None def; Atom (string re)])]
   | AssertReturn (act, results) ->
     [Node ("assert_return", action mode act :: List.map (result mode) results)]
-  | AssertTrap (act, re) ->
-    [Node ("assert_trap", [action mode act; Atom (string re)])]
   | AssertException act ->
     [Node ("assert_exception", [action mode act])]
+  | AssertTrap (act, re) ->
+    [Node ("assert_trap", [action mode act; Atom (string re)])]
+  | AssertSuspension (act, re) ->
+    [Node ("assert_suspension", [action mode act; Atom (string re)])]
   | AssertExhaustion (act, re) ->
     [Node ("assert_exhaustion", [action mode act; Atom (string re)])]
 

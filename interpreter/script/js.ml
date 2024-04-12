@@ -131,6 +131,14 @@ function assert_exception(action) {
   throw new Error("exception expected");
 }
 
+function assert_suspension(action) {
+  try { action() } catch (e) {
+    /* TODO: Not clear how to observe form JS */
+    return;
+  }
+  throw new Error("Wasm exception expected");
+}
+
 let StackOverflow;
 try { (function f() { 1 + f() })() } catch (e) { StackOverflow = e.constructor }
 
@@ -593,12 +601,14 @@ let of_assertion mods ass =
   | AssertReturn (act, ress) ->
     of_assertion' mods act "assert_return" (List.map of_result ress)
       (Some (assert_return ress))
-  | AssertTrap (act, _) ->
-    of_assertion' mods act "assert_trap" [] None
-  | AssertExhaustion (act, _) ->
-    of_assertion' mods act "assert_exhaustion" [] None
   | AssertException act ->
     of_assertion' mods act "assert_exception" [] None
+  | AssertTrap (act, _) ->
+    of_assertion' mods act "assert_trap" [] None
+  | AssertSuspension (act, _) ->
+    of_assertion' mods act "assert_suspension" [] None
+  | AssertExhaustion (act, _) ->
+    of_assertion' mods act "assert_exhaustion" [] None
 
 let of_command mods cmd =
   "\n// " ^ Filename.basename cmd.at.left.file ^
