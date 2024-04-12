@@ -147,6 +147,26 @@
       (catch $e0 (i32.const 1))
     )
   )
+
+  (func $throw-void (throw $e0))
+  (func (export "return-call-in-try-catch")
+    (try
+      (do
+        (return_call $throw-void)
+      )
+      (catch $e0)
+    )
+  )
+
+  (table funcref (elem $throw-void))
+  (func (export "return-call-indirect-in-try-catch")
+    (try
+      (do
+        (return_call_indirect (param) (i32.const 0))
+      )
+      (catch $e0)
+    )
+  )
 )
 
 (assert_return (invoke "empty-catch"))
@@ -161,11 +181,11 @@
 
 (assert_return (invoke "catch-complex-1" (i32.const 0)) (i32.const 3))
 (assert_return (invoke "catch-complex-1" (i32.const 1)) (i32.const 4))
-(assert_exception (invoke "catch-complex-1" (i32.const 2)) "unhandled exception")
+(assert_exception (invoke "catch-complex-1" (i32.const 2)))
 
 (assert_return (invoke "catch-complex-2" (i32.const 0)) (i32.const 3))
 (assert_return (invoke "catch-complex-2" (i32.const 1)) (i32.const 4))
-(assert_exception (invoke "catch-complex-2" (i32.const 2)) "unhandled exception")
+(assert_exception (invoke "catch-complex-2" (i32.const 2)))
 
 (assert_return (invoke "throw-catch-param-i32" (i32.const 0)) (i32.const 0))
 (assert_return (invoke "throw-catch-param-i32" (i32.const 1)) (i32.const 1))
@@ -187,6 +207,9 @@
 
 (assert_return (invoke "catchless-try" (i32.const 0)) (i32.const 0))
 (assert_return (invoke "catchless-try" (i32.const 1)) (i32.const 1))
+
+(assert_exception (invoke "return-call-in-try-catch"))
+(assert_exception (invoke "return-call-indirect-in-try-catch"))
 
 (module
   (func $imported-throw (import "test" "throw"))

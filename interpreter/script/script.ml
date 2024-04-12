@@ -46,7 +46,7 @@ and assertion' =
   | AssertUninstantiable of definition * string
   | AssertReturn of action * result list
   | AssertTrap of action * string
-  | AssertException of action * string
+  | AssertException of action
   | AssertSuspension of action * string
   | AssertExhaustion of action * string
 

@@ -127,10 +127,8 @@ function assert_trap(action) {
 }
 
 function assert_exception(action) {
-  try { action() } catch (e) {
-    if (!(e instanceof WebAssembly.RuntimeError)) return;
-  }
-  throw new Error("Wasm exception expected");
+  try { action() } catch (e) { return; }
+  throw new Error("exception expected");
 }
 
 function assert_suspension(action) {
@@ -603,10 +601,10 @@ let of_assertion mods ass =
   | AssertReturn (act, ress) ->
     of_assertion' mods act "assert_return" (List.map of_result ress)
       (Some (assert_return ress))
+  | AssertException act ->
+    of_assertion' mods act "assert_exception" [] None
   | AssertTrap (act, _) ->
     of_assertion' mods act "assert_trap" [] None
-  | AssertException (act, _) ->
-    of_assertion' mods act "assert_exception" [] None
   | AssertSuspension (act, _) ->
     of_assertion' mods act "assert_suspension" [] None
   | AssertExhaustion (act, _) ->

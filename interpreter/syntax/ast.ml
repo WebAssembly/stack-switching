@@ -125,7 +125,7 @@ type storeop = (num_type, pack_size option) memop
 
 type vec_loadop = (vec_type, (pack_size * vec_extension) option) memop
 type vec_storeop = (vec_type, unit) memop
-type vec_laneop = (vec_type, pack_size) memop * int
+type vec_laneop = (vec_type, pack_size) memop
 
 type initop = Explicit | Implicit
 type externop = Internalize | Externalize
@@ -149,13 +149,6 @@ and instr' =
   | Block of block_type * instr list  (* execute in sequence *)
   | Loop of block_type * instr list   (* loop header *)
   | If of block_type * instr list * instr list   (* conditional *)
-  | TryCatch of block_type * instr list * (* try *)
-                (idx * instr list) list * (* catch exception with tag *)
-                instr list option     (* catch_all *)
-  | TryDelegate of block_type * instr list * (* try *)
-                   idx                (* delegate to outer handler *)
-  | Throw of idx                      (* throw exception *)
-  | Rethrow of idx                    (* rethrow exception *)
   | Br of idx                         (* break to n-th surrounding label *)
   | BrIf of idx                       (* conditional break *)
   | BrTable of idx list * idx         (* indexed break *)
@@ -176,6 +169,9 @@ and instr' =
   | Resume of idx * (idx * idx) list  (* resume continuation *)
   | ResumeThrow of idx * idx * (idx * idx) list (* abort continuation *)
   | Barrier of block_type * instr list  (* guard against suspension *)
+  | Throw of idx                      (* throw exception *)
+  | ThrowRef                          (* rethrow exception *)
+  | TryTable of block_type * catch list * instr list  (* handle exceptions *)
   | LocalGet of idx                   (* read local idxiable *)
   | LocalSet of idx                   (* write local idxiable *)
   | LocalTee of idx                   (* write local idxiable and keep value *)
@@ -189,17 +185,17 @@ and instr' =
   | TableCopy of idx * idx            (* copy table range *)
   | TableInit of idx * idx            (* initialize table range from segment *)
   | ElemDrop of idx                   (* drop passive element segment *)
-  | Load of loadop                    (* read memory at address *)
-  | Store of storeop                  (* write memory at address *)
-  | VecLoad of vec_loadop             (* read memory at address *)
-  | VecStore of vec_storeop           (* write memory at address *)
-  | VecLoadLane of vec_laneop         (* read single lane at address *)
-  | VecStoreLane of vec_laneop        (* write single lane to address *)
-  | MemorySize                        (* size of memory *)
-  | MemoryGrow                        (* grow memory *)
-  | MemoryFill                        (* fill memory range with value *)
-  | MemoryCopy                        (* copy memory ranges *)
-  | MemoryInit of idx                 (* initialize memory range from segment *)
+  | Load of idx * loadop              (* read memory at address *)
+  | Store of idx * storeop            (* write memory at address *)
+  | VecLoad of idx * vec_loadop       (* read memory at address *)
+  | VecStore of idx * vec_storeop     (* write memory at address *)
+  | VecLoadLane of idx * vec_laneop * int  (* read single lane at address *)
+  | VecStoreLane of idx * vec_laneop * int (* write single lane to address *)
+  | MemorySize of idx                 (* size of memory *)
+  | MemoryGrow of idx                 (* grow memory *)
+  | MemoryFill of idx                 (* fill memory range with value *)
+  | MemoryCopy of idx * idx           (* copy memory ranges *)
+  | MemoryInit of idx * idx           (* initialize memory range from segment *)
   | DataDrop of idx                   (* drop passive data segment *)
   | Const of num                      (* constant *)
   | Test of testop                    (* numeric test *)
@@ -246,6 +242,13 @@ and instr' =
   | VecSplat of vec_splatop           (* number to vector conversion *)
   | VecExtract of vec_extractop       (* extract lane from vector *)
   | VecReplace of vec_replaceop       (* replace lane in vector *)
+
+and catch = catch' Source.phrase
+and catch' =
+  | Catch of idx * idx
+  | CatchRef of idx * idx
+  | CatchAll of idx
+  | CatchAllRef of idx
 
 
 (* Locals, globals & Functions *)

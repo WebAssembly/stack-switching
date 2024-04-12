@@ -147,6 +147,7 @@ let sized f s =
 open Types
 
 let zero s = expect 0x00 s "zero byte expected"
+let var s = u32 s
 
 let mutability s =
   match byte s with
@@ -180,6 +181,7 @@ let heap_type s =
     (fun s ->
       match s7 s with
       | -0x0b -> NoContHT
+      | -0x0c -> NoExnHT
       | -0x0d -> NoFuncHT
       | -0x0e -> NoExternHT
       | -0x0f -> NoneHT
@@ -190,6 +192,7 @@ let heap_type s =
       | -0x14 -> I31HT
       | -0x15 -> StructHT
       | -0x16 -> ArrayHT
+      | -0x17 -> ExnHT
       | -0x18 -> ContHT
       | _ -> error s pos "malformed heap type"
     )
@@ -199,6 +202,7 @@ let ref_type s =
   let pos = pos s in
   match s7 s with
   | -0x0b -> (Null, NoContHT)
+  | -0x0c -> (Null, NoExnHT)
   | -0x0d -> (Null, NoFuncHT)
   | -0x0e -> (Null, NoExternHT)
   | -0x0f -> (Null, NoneHT)
@@ -209,6 +213,7 @@ let ref_type s =
   | -0x14 -> (Null, I31HT)
   | -0x15 -> (Null, StructHT)
   | -0x16 -> (Null, ArrayHT)
+  | -0x17 -> (Null, ExnHT)
   | -0x18 -> (Null, ContHT)
   | -0x1c -> (NoNull, heap_type s)
   | -0x1d -> (Null, heap_type s)
@@ -312,17 +317,18 @@ let global_type s =
 open Ast
 open Operators
 
-
-let var s = u32 s
-
 let op s = byte s
 let end_ s = expect 0x0b s "END opcode expected"
 
 let memop s =
-  let align = u32 s in
-  require (I32.le_u align 32l) s (pos s - 1) "malformed memop flags";
+  let pos = pos s in
+  let flags = u32 s in
+  require (I32.lt_u flags 0x80l) s pos "malformed memop flags";
+  let has_var = Int32.logand flags 0x40l <> 0l in
+  let x = if has_var then at var s else Source.(0l @@ no_region) in
+  let align = Int32.(to_int (logand flags 0x3fl)) in
   let offset = u32 s in
-  Int32.to_int align, offset
+  x, align, offset
 
 let block_type s =
   either [
@@ -380,32 +386,10 @@ let rec instr s =
     end
 
   | 0x05 -> error s pos "misplaced ELSE opcode"
-
-  | 0x06 ->
-    let bt = block_type s in
-    let es = instr_block s in
-    let ct = catch_list s in
-    let ca =
-      if peek s = Some 0x19 then begin
-        ignore (byte s);
-        Some (instr_block s)
-      end else
-        None
-    in
-    if ct <> [] || ca <> None then begin
-      end_ s;
-      try_catch bt es ct ca
-    end else begin
-      match op s with
-      | 0x0b -> try_catch bt es [] None
-      | 0x18 -> try_delegate bt es (at var s)
-      | b -> illegal s pos b
-    end
-  | 0x07 -> error s pos "misplaced CATCH opcode"
+  | 0x06 | 0x07 as b -> illegal s pos b
   | 0x08 -> throw (at var s)
-  | 0x09 -> rethrow (at var s)
-
-  | 0x0a as b -> illegal s pos b
+  | 0x09 as b -> illegal s pos b
+  | 0x0a -> throw_ref
   | 0x0b -> error s pos "misplaced END opcode"
 
   | 0x0c -> br (at var s)
@@ -439,7 +423,14 @@ let rec instr s =
   | 0x1b -> select None
   | 0x1c -> select (Some (vec val_type s))
 
-  | 0x1d | 0x1e | 0x1f as b -> illegal s pos b
+  | 0x1d | 0x1e as b -> illegal s pos b
+
+  | 0x1f ->
+    let bt = block_type s in
+    let cs = vec (at catch) s in
+    let es = instr_block s in
+    end_ s;
+    try_table bt cs es
 
   | 0x20 -> local_get (at var s)
   | 0x21 -> local_set (at var s)
@@ -451,33 +442,33 @@ let rec instr s =
 
   | 0x27 as b -> illegal s pos b
 
-  | 0x28 -> let a, o = memop s in i32_load a o
-  | 0x29 -> let a, o = memop s in i64_load a o
-  | 0x2a -> let a, o = memop s in f32_load a o
-  | 0x2b -> let a, o = memop s in f64_load a o
-  | 0x2c -> let a, o = memop s in i32_load8_s a o
-  | 0x2d -> let a, o = memop s in i32_load8_u a o
-  | 0x2e -> let a, o = memop s in i32_load16_s a o
-  | 0x2f -> let a, o = memop s in i32_load16_u a o
-  | 0x30 -> let a, o = memop s in i64_load8_s a o
-  | 0x31 -> let a, o = memop s in i64_load8_u a o
-  | 0x32 -> let a, o = memop s in i64_load16_s a o
-  | 0x33 -> let a, o = memop s in i64_load16_u a o
-  | 0x34 -> let a, o = memop s in i64_load32_s a o
-  | 0x35 -> let a, o = memop s in i64_load32_u a o
+  | 0x28 -> let x, a, o = memop s in i32_load x a o
+  | 0x29 -> let x, a, o = memop s in i64_load x a o
+  | 0x2a -> let x, a, o = memop s in f32_load x a o
+  | 0x2b -> let x, a, o = memop s in f64_load x a o
+  | 0x2c -> let x, a, o = memop s in i32_load8_s x a o
+  | 0x2d -> let x, a, o = memop s in i32_load8_u x a o
+  | 0x2e -> let x, a, o = memop s in i32_load16_s x a o
+  | 0x2f -> let x, a, o = memop s in i32_load16_u x a o
+  | 0x30 -> let x, a, o = memop s in i64_load8_s x a o
+  | 0x31 -> let x, a, o = memop s in i64_load8_u x a o
+  | 0x32 -> let x, a, o = memop s in i64_load16_s x a o
+  | 0x33 -> let x, a, o = memop s in i64_load16_u x a o
+  | 0x34 -> let x, a, o = memop s in i64_load32_s x a o
+  | 0x35 -> let x, a, o = memop s in i64_load32_u x a o
 
-  | 0x36 -> let a, o = memop s in i32_store a o
-  | 0x37 -> let a, o = memop s in i64_store a o
-  | 0x38 -> let a, o = memop s in f32_store a o
-  | 0x39 -> let a, o = memop s in f64_store a o
-  | 0x3a -> let a, o = memop s in i32_store8 a o
-  | 0x3b -> let a, o = memop s in i32_store16 a o
-  | 0x3c -> let a, o = memop s in i64_store8 a o
-  | 0x3d -> let a, o = memop s in i64_store16 a o
-  | 0x3e -> let a, o = memop s in i64_store32 a o
+  | 0x36 -> let x, a, o = memop s in i32_store x a o
+  | 0x37 -> let x, a, o = memop s in i64_store x a o
+  | 0x38 -> let x, a, o = memop s in f32_store x a o
+  | 0x39 -> let x, a, o = memop s in f64_store x a o
+  | 0x3a -> let x, a, o = memop s in i32_store8 x a o
+  | 0x3b -> let x, a, o = memop s in i32_store16 x a o
+  | 0x3c -> let x, a, o = memop s in i64_store8 x a o
+  | 0x3d -> let x, a, o = memop s in i64_store16 x a o
+  | 0x3e -> let x, a, o = memop s in i64_store32 x a o
 
-  | 0x3f -> zero s; memory_size
-  | 0x40 -> zero s; memory_grow
+  | 0x3f -> memory_size (at var s)
+  | 0x40 -> memory_grow (at var s)
 
   | 0x41 -> i32_const (at s32 s)
   | 0x42 -> i64_const (at s64 s)
@@ -713,11 +704,15 @@ let rec instr s =
     | 0x07l -> i64_trunc_sat_f64_u
 
     | 0x08l ->
+      let y = at var s in
       let x = at var s in
-      zero s; memory_init x
+      memory_init x y
     | 0x09l -> data_drop (at var s)
-    | 0x0al -> zero s; zero s; memory_copy
-    | 0x0bl -> zero s; memory_fill
+    | 0x0al ->
+      let x = at var s in
+      let y = at var s in
+      memory_copy x y
+    | 0x0bl -> memory_fill (at var s)
 
     | 0x0cl ->
       let y = at var s in
@@ -737,18 +732,18 @@ let rec instr s =
 
   | 0xfd ->
     (match u32 s with
-    | 0x00l -> let a, o = memop s in v128_load a o
-    | 0x01l -> let a, o = memop s in v128_load8x8_s a o
-    | 0x02l -> let a, o = memop s in v128_load8x8_u a o
-    | 0x03l -> let a, o = memop s in v128_load16x4_s a o
-    | 0x04l -> let a, o = memop s in v128_load16x4_u a o
-    | 0x05l -> let a, o = memop s in v128_load32x2_s a o
-    | 0x06l -> let a, o = memop s in v128_load32x2_u a o
-    | 0x07l -> let a, o = memop s in v128_load8_splat a o
-    | 0x08l -> let a, o = memop s in v128_load16_splat a o
-    | 0x09l -> let a, o = memop s in v128_load32_splat a o
-    | 0x0al -> let a, o = memop s in v128_load64_splat a o
-    | 0x0bl -> let a, o = memop s in v128_store a o
+    | 0x00l -> let x, a, o = memop s in v128_load x a o
+    | 0x01l -> let x, a, o = memop s in v128_load8x8_s x a o
+    | 0x02l -> let x, a, o = memop s in v128_load8x8_u x a o
+    | 0x03l -> let x, a, o = memop s in v128_load16x4_s x a o
+    | 0x04l -> let x, a, o = memop s in v128_load16x4_u x a o
+    | 0x05l -> let x, a, o = memop s in v128_load32x2_s x a o
+    | 0x06l -> let x, a, o = memop s in v128_load32x2_u x a o
+    | 0x07l -> let x, a, o = memop s in v128_load8_splat x a o
+    | 0x08l -> let x, a, o = memop s in v128_load16_splat x a o
+    | 0x09l -> let x, a, o = memop s in v128_load32_splat x a o
+    | 0x0al -> let x, a, o = memop s in v128_load64_splat x a o
+    | 0x0bl -> let x, a, o = memop s in v128_store x a o
     | 0x0cl -> v128_const (at v128 s)
     | 0x0dl -> i8x16_shuffle (List.init 16 (fun _ -> byte s))
     | 0x0el -> i8x16_swizzle
@@ -822,39 +817,39 @@ let rec instr s =
     | 0x52l -> v128_bitselect
     | 0x53l -> v128_any_true
     | 0x54l ->
-      let a, o = memop s in
+      let x, a, o = memop s in
       let lane = byte s in
-      v128_load8_lane a o lane
+      v128_load8_lane x a o lane
     | 0x55l ->
-      let a, o = memop s in
+      let x, a, o = memop s in
       let lane = byte s in
-      v128_load16_lane a o lane
+      v128_load16_lane x a o lane
     | 0x56l ->
-      let a, o = memop s in
+      let x, a, o = memop s in
       let lane = byte s in
-      v128_load32_lane a o lane
+      v128_load32_lane x a o lane
     | 0x57l ->
-      let a, o = memop s in
+      let x, a, o = memop s in
       let lane = byte s in
-      v128_load64_lane a o lane
+      v128_load64_lane x a o lane
     | 0x58l ->
-      let a, o = memop s in
+      let x, a, o = memop s in
       let lane = byte s in
-      v128_store8_lane a o lane
+      v128_store8_lane x a o lane
     | 0x59l ->
-      let a, o = memop s in
+      let x, a, o = memop s in
       let lane = byte s in
-      v128_store16_lane a o lane
+      v128_store16_lane x a o lane
     | 0x5al ->
-      let a, o = memop s in
+      let x, a, o = memop s in
       let lane = byte s in
-      v128_store32_lane a o lane
+      v128_store32_lane x a o lane
     | 0x5bl ->
-      let a, o = memop s in
+      let x, a, o = memop s in
       let lane = byte s in
-      v128_store64_lane a o lane
-    | 0x5cl -> let a, o = memop s in v128_load32_zero a o
-    | 0x5dl -> let a, o = memop s in v128_load64_zero a o
+      v128_store64_lane x a o lane
+    | 0x5cl -> let x, a, o = memop s in v128_load32_zero x a o
+    | 0x5dl -> let x, a, o = memop s in v128_load64_zero x a o
     | 0x5el -> f32x4_demote_f64x2_zero
     | 0x5fl -> f64x2_promote_low_f32x4
     | 0x60l -> i8x16_abs
@@ -1020,14 +1015,20 @@ and instr_block' s es =
     let pos = pos s in
     let e' = instr s in
     instr_block' s (Source.(e' @@ region s pos pos) :: es)
-and catch_list s =
-  if peek s = Some 0x07 then begin
-    ignore (byte s);
-    let tag = at var s in
-    let instrs = instr_block s in
-    (tag, instrs) :: catch_list s
-  end else
-    []
+
+and catch s =
+  match byte s with
+  | 0x00 ->
+    let x1 = at var s in
+    let x2 = at var s in
+    Operators.catch x1 x2
+  | 0x01 ->
+    let x1 = at var s in
+    let x2 = at var s in
+    catch_ref x1 x2
+  | 0x02 -> catch_all (at var s)
+  | 0x03 -> catch_all_ref (at var s)
+  | _ -> error s (pos s - 1) "malformed catch clause"
 
 let const s =
   let c = at instr_block s in
@@ -1132,7 +1133,6 @@ let memory s =
 
 let memory_section s =
   section `MemorySection (vec (at memory)) [] s
-
 
 (* Tag section *)
 
@@ -1366,8 +1366,8 @@ let module_ s =
     s (len s) "data count section required";
   let funcs =
     List.map2 (fun t f -> {f.it with ftype = t} @@ f.at) func_types func_bodies
-  in {types; tables; memories; tags; globals; funcs; imports; exports; elems; datas; start}
-
+  in { types; tables; memories; globals; tags; funcs;
+       imports; exports; elems; datas; start }
 
 let decode name bs = at module_ (stream name bs)
 

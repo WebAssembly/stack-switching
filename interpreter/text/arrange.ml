@@ -71,6 +71,7 @@ let ref_type t =
   | (Null, StructHT) -> "structref"
   | (Null, ArrayHT) -> "arrayref"
   | (Null, FuncHT) -> "funcref"
+  | (Null, ExnHT) -> "exnref"
   | t -> string_of_ref_type t
 
 let heap_type t = string_of_heap_type t
@@ -434,38 +435,46 @@ let vec_splatop = vec_shape_oper (V128Op.splatop, V128Op.splatop, V128Op.splatop
 let vec_extractop = vec_shape_oper (V128Op.pextractop, V128Op.extractop, V128Op.extractop)
 let vec_replaceop = vec_shape_oper (V128Op.replaceop, V128Op.replaceop, V128Op.replaceop)
 
-let memop name typ {ty; align; offset; _} sz =
-  typ ty ^ "." ^ name ^
+
+let var x = nat32 x.it
+let num v = string_of_num v.it
+let vec v = string_of_vec v.it
+
+let memop name x typ {ty; align; offset; _} sz =
+  typ ty ^ "." ^ name ^ " " ^ var x ^
   (if offset = 0l then "" else " offset=" ^ nat32 offset) ^
   (if 1 lsl align = sz then "" else " align=" ^ nat (1 lsl align))
 
-let loadop op =
+let loadop x op =
   match op.pack with
-  | None -> memop "load" num_type op (num_size op.ty)
+  | None -> memop "load" x num_type op (num_size op.ty)
   | Some (sz, ext) ->
-    memop ("load" ^ pack_size sz ^ extension ext) num_type op (packed_size sz)
+    memop ("load" ^ pack_size sz ^ extension ext) x num_type op (packed_size sz)
 
-let storeop op =
+let storeop x op =
   match op.pack with
-  | None -> memop "store" num_type op (num_size op.ty)
-  | Some sz -> memop ("store" ^ pack_size sz) num_type op (packed_size sz)
+  | None -> memop "store" x num_type op (num_size op.ty)
+  | Some sz -> memop ("store" ^ pack_size sz) x num_type op (packed_size sz)
 
-let vec_loadop (op : vec_loadop) =
+let vec_loadop x (op : vec_loadop) =
   match op.pack with
-  | None -> memop "load" vec_type op (vec_size op.ty)
+  | None -> memop "load" x vec_type op (vec_size op.ty)
   | Some (sz, ext) ->
-    memop ("load" ^ vec_extension sz ext) vec_type op (packed_size sz)
+    memop ("load" ^ vec_extension sz ext) x vec_type op (packed_size sz)
 
-let vec_storeop op =
-  memop "store" vec_type op (vec_size op.ty)
+let vec_storeop x op =
+  memop "store" x vec_type op (vec_size op.ty)
 
-let vec_laneop instr (op, i) =
-  memop (instr ^ pack_size op.pack ^ "_lane") vec_type op
+let vec_laneop instr x op i =
+  memop (instr ^ pack_size op.pack ^ "_lane") x vec_type op
     (packed_size op.pack) ^ " " ^ nat i
 
 let initop = function
   | Explicit -> ""
   | Implicit -> "_default"
+
+let constop v = string_of_num_type (type_of_num v) ^ ".const"
+let vec_constop v = string_of_vec_type (type_of_vec v) ^ ".const i32x4"
 
 let externop = function
   | Internalize -> "any.convert_extern"
@@ -473,12 +482,6 @@ let externop = function
 
 
 (* Expressions *)
-
-let var x = nat32 x.it
-let num v = string_of_num v.it
-let vec v = string_of_vec v.it
-let constop v = string_of_num_type (type_of_num v) ^ ".const"
-let vec_constop v = string_of_vec_type (type_of_vec v) ^ ".const i32x4"
 
 let block_type = function
   | VarBlockType x -> [Node ("type " ^ var x, [])]
@@ -498,18 +501,6 @@ let rec instr e =
     | If (bt, es1, es2) ->
       "if", block_type bt @
         [Node ("then", list instr es1); Node ("else", list instr es2)]
-    | TryCatch (bt, es, ct, ca) ->
-      let catch (tag, es) = Node ("catch " ^ var tag, list instr es) in
-      let catch_all = match ca with
-        | Some es -> [Node ("catch_all", list instr es)]
-        | None -> [] in
-      let handler = list catch ct @ catch_all in
-      "try", block_type bt @ [Node ("do", list instr es)] @ handler
-    | TryDelegate (bt, es, x) ->
-      let delegate = [Node ("delegate " ^ var x, [])] in
-      "try", block_type bt @ [Node ("do", list instr es)] @ delegate
-    | Throw x -> "throw " ^ var x, []
-    | Rethrow x -> "rethrow " ^ var x, []
     | Br x -> "br " ^ var x, []
     | BrIf x -> "br_if " ^ var x, []
     | BrTable (xs, x) ->
@@ -539,6 +530,10 @@ let rec instr e =
       "resume_throw " ^ var x ^ " " ^ var y,
       List.map (fun (x, y) -> Node ("tag " ^ var x ^ " " ^ var y, [])) xys
     | Barrier (bt, es) -> "barrier", block_type bt @ list instr es
+    | Throw x -> "throw " ^ var x, []
+    | ThrowRef -> "throw_ref", []
+    | TryTable (bt, cs, es) ->
+      "try_table", block_type bt @ list catch cs @ list instr es
     | LocalGet x -> "local.get " ^ var x, []
     | LocalSet x -> "local.set " ^ var x, []
     | LocalTee x -> "local.tee " ^ var x, []
@@ -552,17 +547,17 @@ let rec instr e =
     | TableCopy (x, y) -> "table.copy " ^ var x ^ " " ^ var y, []
     | TableInit (x, y) -> "table.init " ^ var x ^ " " ^ var y, []
     | ElemDrop x -> "elem.drop " ^ var x, []
-    | Load op -> loadop op, []
-    | Store op -> storeop op, []
-    | VecLoad op -> vec_loadop op, []
-    | VecStore op -> vec_storeop op, []
-    | VecLoadLane op -> vec_laneop "load" op, []
-    | VecStoreLane op -> vec_laneop "store" op, []
-    | MemorySize -> "memory.size", []
-    | MemoryGrow -> "memory.grow", []
-    | MemoryFill -> "memory.fill", []
-    | MemoryCopy -> "memory.copy", []
-    | MemoryInit x -> "memory.init " ^ var x, []
+    | Load (x, op) -> loadop x op, []
+    | Store (x, op) -> storeop x op, []
+    | VecLoad (x, op) -> vec_loadop x op, []
+    | VecStore (x, op) -> vec_storeop x op, []
+    | VecLoadLane (x, op, i) -> vec_laneop "load" x op i, []
+    | VecStoreLane (x, op, i) -> vec_laneop "store" x op i, []
+    | MemorySize x -> "memory.size " ^ var x, []
+    | MemoryGrow x -> "memory.grow " ^ var x, []
+    | MemoryFill x -> "memory.fill " ^ var x, []
+    | MemoryCopy (x, y) -> "memory.copy " ^ var x ^ " " ^ var y, []
+    | MemoryInit (x, y) -> "memory.init " ^ var x ^ " " ^ var y, []
     | DataDrop x -> "data.drop " ^ var x, []
     | RefNull t -> "ref.null", [Atom (heap_type t)]
     | RefFunc x -> "ref.func " ^ var x, []
@@ -611,6 +606,13 @@ let rec instr e =
     | VecExtract op -> vec_extractop op, []
     | VecReplace op -> vec_replaceop op, []
   in Node (head, inner)
+
+and catch c =
+  match c.it with
+  | Catch (x1, x2) -> Node ("catch " ^ var x1 ^ " " ^ var x2, [])
+  | CatchRef (x1, x2) -> Node ("catch_ref " ^ var x1 ^ " " ^ var x2, [])
+  | CatchAll x -> Node ("catch_all " ^ var x, [])
+  | CatchAllRef x -> Node ("catch_all_ref " ^ var x, [])
 
 let const head c =
   match c.it with
@@ -703,7 +705,7 @@ let type_ (ns, i) ty =
   | RecT sts ->
     Node ("rec", List.mapi (rec_type i) sts) :: ns, i + List.length sts
 
-let import_desc fx tx mx ex gx d =
+let import_desc fx tx mx tgx gx d =
   match d.it with
   | FuncImport x ->
     incr fx; Node ("func $" ^ nat (!fx - 1), [Node ("type", [atom var x])])
@@ -711,10 +713,10 @@ let import_desc fx tx mx ex gx d =
     incr tx; table 0 (!tx - 1) ({ttype = t; tinit = [] @@ d.at} @@ d.at)
   | MemoryImport t ->
     incr mx; memory 0 (!mx - 1) ({mtype = t} @@ d.at)
-  | TagImport x ->
-    incr ex; Node ("tag $" ^ nat (!ex - 1), [Node ("type", [atom var x])])
   | GlobalImport t ->
     incr gx; Node ("global $" ^ nat (!gx - 1), [global_type t])
+  | TagImport x ->
+    incr tgx; Node ("tag $" ^ nat (!tgx - 1), [Node ("type", [atom var x])])
 
 let import fx tx mx ex gx im =
   let {module_name; item_name; idesc} = im.it in
@@ -752,15 +754,15 @@ let module_with_var_opt x_opt m =
   let fx = ref 0 in
   let tx = ref 0 in
   let mx = ref 0 in
-  let ex = ref 0 in
+  let tgx = ref 0 in
   let gx = ref 0 in
-  let imports = list (import fx tx mx ex gx) m.it.imports in
+  let imports = list (import fx tx mx tgx gx) m.it.imports in
   Node ("module" ^ var_opt x_opt,
     List.rev (fst (List.fold_left type_ ([], 0) m.it.types)) @
     imports @
     listi (table !tx) m.it.tables @
     listi (memory !mx) m.it.memories @
-    listi (tag !ex) m.it.tags @
+    listi (tag !tgx) m.it.tags @
     listi (global !gx) m.it.globals @
     listi (func_with_index !fx) m.it.funcs @
     list export m.it.exports @
@@ -885,10 +887,10 @@ let assertion mode ass =
     [Node ("assert_trap", [definition mode None def; Atom (string re)])]
   | AssertReturn (act, results) ->
     [Node ("assert_return", action mode act :: List.map (result mode) results)]
+  | AssertException act ->
+    [Node ("assert_exception", [action mode act])]
   | AssertTrap (act, re) ->
     [Node ("assert_trap", [action mode act; Atom (string re)])]
-  | AssertException (act, re) ->
-    [Node ("assert_exception", [action mode act; Atom (string re)])]
   | AssertSuspension (act, re) ->
     [Node ("assert_suspension", [action mode act; Atom (string re)])]
   | AssertExhaustion (act, re) ->
