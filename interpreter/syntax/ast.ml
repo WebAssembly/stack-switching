@@ -163,6 +163,12 @@ and instr' =
   | ReturnCall of idx                 (* tail-call function *)
   | ReturnCallRef of idx              (* tail call through reference *)
   | ReturnCallIndirect of idx * idx   (* tail-call function through table *)
+  | ContNew of idx                    (* create continuation *)
+  | ContBind of idx * idx             (* bind continuation arguments *)
+  | Suspend of idx                    (* suspend continuation *)
+  | Resume of idx * (idx * idx) list  (* resume continuation *)
+  | ResumeThrow of idx * idx * (idx * idx) list (* abort continuation *)
+  | Barrier of block_type * instr list  (* guard against suspension *)
   | Throw of idx                      (* throw exception *)
   | ThrowRef                          (* rethrow exception *)
   | TryTable of block_type * catch list * instr list  (* handle exceptions *)
@@ -271,6 +277,15 @@ and func' =
 }
 
 
+(* Tags *)
+
+type tag = tag' Source.phrase
+and tag' =
+{
+  tagtype : tag_type;
+}
+
+
 (* Tables & Memories *)
 
 type table = table' Source.phrase
@@ -285,13 +300,6 @@ and memory' =
 {
   mtype : memory_type;
 }
-
-type tag = tag' Source.phrase
-and tag' =
-{
-  tgtype : idx;
-}
-
 
 type segment_mode = segment_mode' Source.phrase
 and segment_mode' =
@@ -399,6 +407,9 @@ let def_types_of (m : module_) : def_type list =
     dts @ List.map (subst_def_type (subst_of dts)) (roll_def_types x rt)
   ) [] rts
 
+let ht (m : module_) (x : idx) : heap_type =
+  VarHT (StatX x.it)
+
 let import_type_of (m : module_) (im : import) : import_type =
   let {idesc; module_name; item_name} = im.it in
   let dts = def_types_of m in
@@ -408,7 +419,7 @@ let import_type_of (m : module_) (im : import) : import_type =
     | TableImport tt -> ExternTableT tt
     | MemoryImport mt -> ExternMemoryT mt
     | GlobalImport gt -> ExternGlobalT gt
-    | TagImport x -> ExternTagT (TagT (Lib.List32.nth dts x.it))
+    | TagImport et -> ExternTagT (TagT (ht m et))
   in ImportT (subst_extern_type (subst_of dts) et, module_name, item_name)
 
 let export_type_of (m : module_) (ex : export) : export_type =
@@ -432,9 +443,8 @@ let export_type_of (m : module_) (ex : export) : export_type =
       let gts = globals ets @ List.map (fun g -> g.it.gtype) m.it.globals in
       ExternGlobalT (Lib.List32.nth gts x.it)
     | TagExport x ->
-      let tts = tags ets @ List.map (fun t ->
-        TagT (Lib.List32.nth dts t.it.tgtype.it)) m.it.tags in
-      ExternTagT (Lib.List32.nth tts x.it)
+      let tagts = tags ets @ List.map (fun t -> t.it.tagtype) m.it.tags in
+      ExternTagT (Lib.List32.nth tagts x.it)
   in ExportT (subst_extern_type (subst_of dts) et, name)
 
 let module_type_of (m : module_) : module_type =

@@ -98,8 +98,6 @@ struct
   open Types
   open Source
 
-  let var x = u32 x.it
-
   let mutability = function
     | Cons -> byte 0
     | Var -> byte 1
@@ -130,6 +128,8 @@ struct
     | NoExnHT -> s7 (-0x0c)
     | ExternHT -> s7 (-0x11)
     | NoExternHT -> s7 (-0x0e)
+    | ContHT -> s7 (-0x18)
+    | NoContHT -> s7 (-0x0b)
     | VarHT x -> var_type s33 x
     | DefHT _ | BotHT -> assert false
 
@@ -150,6 +150,8 @@ struct
     | (Null, NoExnHT) -> s7 (-0x0c)
     | (Null, ExternHT) -> s7 (-0x11)
     | (Null, NoExternHT) -> s7 (-0x0e)
+    | (Null, ContHT) -> s7 (-0x18)
+    | (Null, NoContHT) -> s7 (-0x0b)
     | (Null, t) -> s7 (-0x1d); heap_type t
     | (NoNull, t) -> s7 (-0x1c); heap_type t
 
@@ -180,10 +182,17 @@ struct
   let func_type = function
     | FuncT (ts1, ts2) -> vec val_type ts1; vec val_type ts2
 
+  let cont_type = function
+    | ContT ht -> heap_type ht
+
   let str_type = function
     | DefStructT st -> s7 (-0x21); struct_type st
     | DefArrayT at -> s7 (-0x22); array_type at
     | DefFuncT ft -> s7 (-0x20); func_type ft
+    | DefContT ct -> s7 (-0x23); cont_type ct
+    (* TODO(dhil): This might need to change again in the future as a
+       different proposal might claim this opcode! GC proposal claimed
+       the previous opcode we were using. *)
 
   let sub_type = function
     | SubT (Final, [], st) -> str_type st
@@ -206,9 +215,8 @@ struct
   let global_type = function
     | GlobalT (mut, t) -> val_type t; mutability mut
 
-  let tag_type x =
-    u32 0x00l; var x
-
+  let tag_type = function
+    | TagT ht -> byte 0x00; heap_type ht
 
   (* Expressions *)
 
@@ -222,6 +230,7 @@ struct
   let end_ () = op 0x0b
 
   let var x = u32 x.it
+  let var_pair (x, y) = var x; var y
 
   let memop x {align; offset; _} =
     let has_var = x.it <> 0l in
@@ -277,6 +286,13 @@ struct
     | ReturnCall x -> op 0x12; var x
     | ReturnCallRef x -> op 0x15; var x
     | ReturnCallIndirect (x, y) -> op 0x13; var y; var x
+
+    | ContNew x -> op 0xe0; var x
+    | ContBind (x, y) -> op 0xe1; var x; var y
+    | Suspend x -> op 0xe2; var x
+    | Resume (x, xls) -> op 0xe3; var x; vec var_pair xls
+    | ResumeThrow (x, y, xls) -> op 0xe4; var x; var y; vec var_pair xls
+    | Barrier (bt, es) -> op 0xe5; block_type bt; list instr es; end_ ()
 
     | Throw x -> op 0x08; var x
     | ThrowRef -> op 0x0a
@@ -925,7 +941,7 @@ struct
     | TableImport t -> byte 0x01; table_type t
     | MemoryImport t -> byte 0x02; memory_type t
     | GlobalImport t -> byte 0x03; global_type t
-    | TagImport t -> byte 0x04; tag_type t
+    | TagImport t -> byte 0x04; var t
 
   let import im =
     let {module_name; item_name; idesc} = im.it in
@@ -966,14 +982,6 @@ struct
     section 5 (vec memory) mems (mems <> [])
 
 
-  (* Tag section *)
-
-  let tag (t : tag) = byte 0x00; var t.it.tgtype
-
-  let tag_section ts =
-    section 13 (vec tag) ts (ts <> [])
-
-
   (* Global section *)
 
   let global g =
@@ -983,6 +991,12 @@ struct
   let global_section gs =
     section 6 (vec global) gs (gs <> [])
 
+  (* Tag section *)
+  let tag tag =
+    tag_type tag.it.tagtype
+
+  let tag_section ts =
+    section 13 (vec tag) ts (ts <> [])
 
   (* Export section *)
 

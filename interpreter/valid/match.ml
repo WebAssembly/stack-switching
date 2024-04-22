@@ -13,6 +13,7 @@ let lookup c x = Lib.List32.nth c x
 let abs_of_str_type _c = function
   | DefStructT _ | DefArrayT _ -> StructHT
   | DefFuncT _ -> FuncHT
+  | DefContT _ -> ContHT
 
 let rec top_of_str_type c st =
   top_of_heap_type c (abs_of_str_type c st)
@@ -22,6 +23,7 @@ and top_of_heap_type c = function
   | FuncHT | NoFuncHT -> FuncHT
   | ExnHT | NoExnHT -> ExnHT
   | ExternHT | NoExternHT -> ExternHT
+  | ContHT | NoContHT -> ContHT
   | DefHT dt -> top_of_str_type c (expand_def_type dt)
   | VarHT (StatX x) -> top_of_str_type c (expand_def_type (lookup c x))
   | VarHT (RecX _) | BotHT -> assert false
@@ -34,6 +36,7 @@ and bot_of_heap_type c = function
   | FuncHT | NoFuncHT -> NoFuncHT
   | ExnHT | NoExnHT -> NoExnHT
   | ExternHT | NoExternHT -> NoExternHT
+  | ContHT | NoContHT -> NoContHT
   | DefHT dt -> bot_of_str_type c (expand_def_type dt)
   | VarHT (StatX x) -> bot_of_str_type c (expand_def_type (lookup c x))
   | VarHT (RecX _) | BotHT -> assert false
@@ -73,6 +76,7 @@ let rec match_heap_type c t1 t2 =
   | NoFuncHT, t -> match_heap_type c t FuncHT
   | NoExnHT, t -> match_heap_type c t ExnHT
   | NoExternHT, t -> match_heap_type c t ExternHT
+  | NoContHT, t -> match_heap_type c t ContHT
   | VarHT (StatX x1), _ -> match_heap_type c (DefHT (lookup c x1)) t2
   | _, VarHT (StatX x2) -> match_heap_type c t1 (DefHT (lookup c x2))
   | DefHT dt1, DefHT dt2 -> match_def_type c dt1 dt2
@@ -85,6 +89,7 @@ let rec match_heap_type c t1 t2 =
     | DefArrayT _, EqHT -> true
     | DefArrayT _, ArrayHT -> true
     | DefFuncT _, FuncHT -> true
+    | DefContT _, ContHT -> true
     | _ -> false
     )
   | BotHT, _ -> true
@@ -106,7 +111,6 @@ and match_val_type c t1 t2 =
 and match_result_type c ts1 ts2 =
   List.length ts1 = List.length ts2 &&
   List.for_all2 (match_val_type c) ts1 ts2
-
 
 and match_pack_type _c t1 t2 =
   t1 = t2
@@ -134,12 +138,15 @@ and match_array_type c (ArrayT ft1) (ArrayT ft2) =
 and match_func_type c (FuncT (ts11, ts12)) (FuncT (ts21, ts22)) =
   match_result_type c ts21 ts11 && match_result_type c ts12 ts22
 
+and match_cont_type c (ContT ht1) (ContT ht2) =
+  match_heap_type c ht1 ht2
 
 and match_str_type c dt1 dt2 =
   match dt1, dt2 with
   | DefStructT st1, DefStructT st2 -> match_struct_type c st1 st2
   | DefArrayT at1, DefArrayT at2 -> match_array_type c at1 at2
   | DefFuncT ft1, DefFuncT ft2 -> match_func_type c ft1 ft2
+  | DefContT ct1, DefContT ct2 -> match_cont_type c ct1 ct2
   | _, _ -> false
 
 and match_def_type c dt1 dt2 =
@@ -155,15 +162,14 @@ let match_global_type c (GlobalT (mut1, t1)) (GlobalT (mut2, t2)) =
   | Cons -> true
   | Var -> match_val_type c t2 t1
 
+let match_tag_type c (TagT ht1) (TagT ht2) =
+  match_heap_type c ht1 ht2
+
 let match_table_type c (TableT (lim1, t1)) (TableT (lim2, t2)) =
   match_limits c lim1 lim2 && match_ref_type c t1 t2 && match_ref_type c t2 t1
 
 let match_memory_type c (MemoryT lim1) (MemoryT lim2) =
   match_limits c lim1 lim2
-
-let match_tag_type c (TagT dt1) (TagT dt2) =
-  match_def_type c dt1 dt2 && match_def_type c dt2 dt1
-
 
 let match_extern_type c et1 et2 =
   match et1, et2 with
