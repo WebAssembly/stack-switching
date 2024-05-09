@@ -86,7 +86,7 @@ The return stack type must be of the form:
 
 where $c is the index of a stack type.
 
->This affects which instructions are legal to perform; the switch.return instruction passes a null stack as the return stack, whereas the regular switch instruction never passes a null stack.
+>This affects which instructions are legal to perform; the stack.switch_retire instruction passes a null stack as the return stack, whereas the regular strack.switch instruction never passes a null stack.
 >
 >This, in turn, permits some potential optimizations in avoiding null checks; for those cases where it is not permitted.
 
@@ -94,7 +94,7 @@ For example, a stack that is expecting a pair of `i32` values and is expected to
 
 ```wasm
 (rec
-  (type $cp 
+  (type $cp
     (stack (param i32) (param i32) (ref $co)))
   (type $co
     (stack (param i32) (ref $cp))))
@@ -146,23 +146,23 @@ Like other bottom types, the nostack type is uninhabited.
 
 ### Life-cycle of a coroutine
 
-A coroutine is started using the `switch.call` instruction. This performs the equivalent of a function call – on a new stack resource. In addition to the arguments normally expected in a function call, an additional argument is provided that is a stack reference to the caller code -- the caller is suspended as a result of the `switch.call` instruction.
+A coroutine is started using the `stack.new_switch` instruction. This performs the equivalent of a function call – on a new stack resource. In addition to the arguments normally expected in a function call, an additional argument is provided that is a stack reference to the caller code -- the caller is suspended as a result of the `stack.new_switch` instruction.
 
-During the normal execution of a coroutine, it is expected that it will switch to other coroutines -- using `switch` instructions. It is only possible for a WebAssembly code to switch to a coroutine if the code has available to it the stack reference of the associated suspended coroutine.
+During the normal execution of a coroutine, it is expected that it will switch to other coroutines -- using `stack.switch` instructions. It is only possible for a WebAssembly code to switch to a coroutine if the code has available to it the stack reference of the associated suspended coroutine.
 
 This direct access aspect implies that higher-level programming language features that rely on dynamic scoping must be realized using other facilities of WebAssembly. For one such approach, we refer the reader to [this proposal](dynamic scoping url).
 
-Eventually, the coroutine will be ready for termination; in which case it signals this by switching to another coroutine -- using the `switch.return` instruction. This instruction is a `switch` instruction but it also results in the switching coroutine to become `moribund`; and the associated computation resources to become available for release.
+Eventually, the coroutine will be ready for termination; in which case it signals this by switching to another coroutine -- using the `stack.switch_retire` instruction. This instruction is a `stack.switch` instruction but it also results in the switching coroutine to become `moribund`; and the associated computation resources to become available for release.
 
 Note that coroutine functions are _not_ permitted to return normally, nor are they permitted to abort by throwing exceptions. Returning from a coroutine, or allowing an exception to be propagated out, results in a trap.
 
->The primary justification for this is that the control flow patterns of switching coroutines do not typically embody a reasonable logical relationship that can be utilized when returning results. For example, a scheduler is responsible for ensuring the execution of one or more coroutines; but, schedulers are not typically interested in the _result_ of the computations of the coroutines they manage. Instead, return results (normal or exceptional) would typically be communicated to another coroutine – using normal switch.return instructions.
+>The primary justification for this is that the control flow patterns of switching coroutines do not typically embody a reasonable logical relationship that can be utilized when returning results. For example, a scheduler is responsible for ensuring the execution of one or more coroutines; but, schedulers are not typically interested in the _result_ of the computations of the coroutines they manage. Instead, return results (normal or exceptional) would typically be communicated to another coroutine – using normal stack.switch_retire instructions.
 
 #### The Life-cycle of a stack reference
 
-Stack references identify coroutines that are in a suspended state. They are created as a coroutine becomes suspended when computation switches to a different coroutine. Stack references are consumed when the corresponding coroutine is switched to -- using a `switch` instruction.
+Stack references identify coroutines that are in a suspended state. They are created as a coroutine becomes suspended when computation switches to a different coroutine. Stack references are consumed when the corresponding coroutine is switched to -- using a `stack.switch` instruction.
 
-Once a stack reference has been used to `switch` to its identified coroutine, it is no longer valid. Any attempt to switch to a stack reference that has already been used will result in a trap. Unfortunately, the design of WebAssembly means that it is not possible to statically validate that any given stack reference is actually valid -- it is the responsibility of the application program to ensure that stack references are used just once.
+Once a stack reference has been used to `stack.switch` to its identified coroutine, it is no longer valid. Any attempt to switch to a stack reference that has already been used will result in a trap. Unfortunately, the design of WebAssembly means that it is not possible to statically validate that any given stack reference is actually valid -- it is the responsibility of the application program to ensure that stack references are used just once.
 
 >It may seem that this can result in a large number of values being created and becoming garbage. However, stack references are implicitly references to the underlying stack resource which is _stable_ across the lifetime of the coroutine itself. Thus, one reasonable implementation strategy is to represent stack references as a pair: the stack resource and a counter. The counter -- which would also be stored in the stack resource -- is incremented every time the coroutine switches and is checked when the coroutine is switched to.
 >
@@ -172,7 +172,7 @@ Once a stack reference has been used to `switch` to its identified coroutine, it
 
 #### Coroutine identity
 
-Coroutines do not have a specific identity in this proposal. Instead, a stack reference denotes the particular state of a suspended coroutine. This token is only created when switching from a coroutine or when a `switch.call` instruction is executed to create a new coroutine.
+Coroutines do not have a specific identity in this proposal. Instead, a stack reference denotes the particular state of a suspended coroutine. This token is only created when switching from a coroutine or when a `stack.new_switch` instruction is executed to create a new coroutine.
 
 >It is not possible for WebAssembly code to discover which coroutine it is running on; indeed the currently active coroutine has no valid stack reference. One consequence of this design is that when a WebAssembly function calls another function from another module (say), that module cannot discover the identity of the coroutine and misuse it. Overall, this is in keeping with a capability-based approach to resource management.
 
@@ -195,12 +195,12 @@ For the purposes of exposition, we assume the following schema for stack types u
 
 I.e., a recursive group of types, with at least two members. In general, there may be more members of this group, representing more complex scenarios; but we restrict ourselves for now to this simple world.
 
-### `switch.call` Create a new coroutine
+### `stack.new_switch` Create a new coroutine
 
-The `switch.call` instruction initiates a new coroutine.
+The `stack.new_switch` instruction initiates a new coroutine.
 
 ```wasm
-switch.call $func $c0: t* -> (ref null $c0) st*
+stack.new_switch $func $c0: t* -> (ref null $c0) st*
 ```
 
 where `$func` is the index of a function of type:
@@ -209,47 +209,47 @@ where `$func` is the index of a function of type:
 (type $func (func (param (ref $c1) t*)))
 ```
 
-The coroutine function has a distinguished first argument – this is a stack reference that identifies the caller coroutine: specifically, the stack reference is of the caller coroutine, in its current state, with a program counter that immediately follows the `switch.call` instruction itself. The remaining arguments are specific to the coroutine function.
+The coroutine function has a distinguished first argument – this is a stack reference that identifies the caller coroutine: specifically, the stack reference is of the caller coroutine, in its current state, with a program counter that immediately follows the `stack.new_switch` instruction itself. The remaining arguments are specific to the coroutine function.
 
->Note that this caller stack reference is guaranteed to be non-null. On the other hand, the stack reference that the caller will receive, immediately following the switch.call instruction may be null.
+>Note that this caller stack reference is guaranteed to be non-null. On the other hand, the stack reference that the caller will receive, immediately following the stack.new_switch instruction may be null.
 
 The function's return type must be empty -- coroutine functions are not permitted to return normally. However, the generated `stack` value allows the callee to 'return' to the caller with appropriate results.
 
-The sequence of types (ref $c0) -> (ref $c1) -> (ref null $c0) approximately mimics a function call – using (ref $c0) – and function return – using (ref $c1). 
+The sequence of types (ref $c0) -> (ref $c1) -> (ref null $c0) approximately mimics a function call – using (ref $c0) – and function return – using (ref $c1).
 
 >Of course, functions don’t typically return themselves (which modeled with the (ref null $c0) in the sequence); but that is one difference between functions and coroutines.
 
-### `switch` Switch between coroutines
+### `stack.switch` Switch between coroutines
 
-The `switch` instruction is used to switch between coroutines. The `switch` instruction is annotated with the type of a stack reference -- the type of any suspended computation it may switch to. The arguments of a `switch` instruction include the stack reference of the switch target and any argument values as indicated by the argument types of the stack reference.
+The `stack.switch` instruction is used to switch between coroutines. The `stack.switch` instruction is annotated with the type of a stack reference -- the type of any suspended computation it may switch to. The arguments of a `stack.switch` instruction include the stack reference of the switch target and any argument values as indicated by the argument types of the stack reference.
 
 ```wasm
-switch $c0: (ref $c0) rt* -> (ref null $c0) st*
+stack.switch $c0: (ref $c0) rt* -> (ref null $c0) st*
 ```
 
-The action of `switch` is to suspend the current coroutine, create a stack reference to the newly suspended coroutine of type `(ref $c1)` and pass the vector of values identified with `rt*` -- together with the newly created stack reference -- to the target coroutine, which must be in `suspended` state. The current coroutine is marked as `suspended` and the target is marked as `active`.
+The action of `stack.switch` is to suspend the current coroutine, create a stack reference to the newly suspended coroutine of type `(ref $c1)` and pass the vector of values identified with `rt*` -- together with the newly created stack reference -- to the target coroutine, which must be in `suspended` state. The current coroutine is marked as `suspended` and the target is marked as `active`.
 
 Computation continues with the target coroutine, and the issuing coroutine will only be resumed when explicitly switched to. This may or may not be directly from the code of the target.
 
 When the issuing computation is resumed, on the stack will be a vector of values corresponding to `st*` together with a potentially null reference to a stack of the same type as was used -- `$c0`.
 
-### `switch.return` Return results from a coroutine
+### `stack.switch_retire` Return results from a coroutine
 
-The `switch.return` instruction is used to simultaneously terminate a coroutine and switch to another coroutine. It is also used to return a result from the coroutine.
+The `stack.switch_retire` instruction is used to simultaneously terminate a coroutine and switch to another coroutine. It is also used to return a result from the coroutine.
 
 ```wasm
-switch.return $c0: (ref $c0) rt* -> unreachable
+stack.switch_retire $c0: (ref $c0) rt* -> unreachable
 ```
 
-As with `switch`, the target receives a vector of values on the stack. It also receives a null stack reference. The null stack reference should be ignored by the target coroutine's code. Again, as with `switch`, the target must be in `suspended` state; and becomes `active` as a result of this instruction.
+As with `stack.switch`, the target receives a vector of values on the stack. It also receives a null stack reference. The null stack reference should be ignored by the target coroutine's code. Again, as with `stack.switch`, the target must be in `suspended` state; and becomes `active` as a result of this instruction.
 
 The returning coroutine is marked as `moribund` by this operation, and its resources may be released after this instruction. Any attempt to continue executing the moribund coroutine will result in a trap.[^moribund]
 
-[^moribund]: In fact, since switch.return returns null as its return stack, the only way that a moribund coroutine can be entered is by reusing a previously used stack reference. This would result in a trap regardless of the state of the target coroutine.
+[^moribund]: In fact, since stack.switch_retire returns null as its return stack, the only way that a moribund coroutine can be entered is by reusing a previously used stack reference. This would result in a trap regardless of the state of the target coroutine.
 
 >Note that this instruction is the principal way by which a coroutine can return a result to another coroutine. The value of the returned result should be encoded in the vector of `rt*` values in such a way that the target coroutine can interpret the result.
 >
->Typically this will include both normal forms of return and exceptional returns: exceptions are not propagated between coroutines; and so the application code should encode exceptional returns using the `switch.return` mechanism.
+>Typically this will include both normal forms of return and exceptional returns: exceptions are not propagated between coroutines; and so the application code should encode exceptional returns using the `stack.switch_retire` mechanism.
 
 ## Examples
 
@@ -299,16 +299,16 @@ In this example, we implement an extremely minimal generator: one which iterates
 ```wasm
 (func $arrayGenerator (param $consumer (ref $genResp))
   (param $from i32) (param $to i32) (param $els i32)
-  
+
   (block $on-cancel
     (loop $l
       (br_if $on-cancel (i32.ge (local.get $from) (local.get $to)))
 
       (block $on-next (ref $genResp) ;; set up for the switch on next
-        (switch (local.get $consumer)
-                (i32.load (i32.add (local.get $els) 
-                             (i32.mul (local.get $from)
-                                      (i32.const 4))))
+        (stack.switch (local.get $consumer)
+                      (i32.load (i32.add (local.get $els)
+                                         (i32.mul (local.get $from)
+                                                  (i32.const 4))))
                 (i32.const #yield))
         (br_table $on-next $on-cancel)
       )
@@ -319,7 +319,7 @@ In this example, we implement an extremely minimal generator: one which iterates
     )
   ) ;; $on-cancel
 
-  (switch.return
+  (stack.switch_retire
     (local.get $consumer)
     (i32.const 0)                     ;; dummy
     (i32.const #end))                 ;; no more results
@@ -328,9 +328,9 @@ In this example, we implement an extremely minimal generator: one which iterates
 
 Whenever the `$arrayGenerator` function yields -- including when it finally finishes -- it returns three values: a new stack reference that allows the consumer to resume the generator, the value being yielded together with a sentinel which encodes whether this is a normal `#yield` or the `#end` marker. Since the sentinel is the second parameter in the response, it is pushed on the value stack last, which means it will be the top of stack when the consumer inspects the result.
 
-When there are no more elements to yield, the `$arrayGenerator` issues the `switch.return` instruction which simultaneously discards the generator's resources and communicates the `#end` sentinel value to the consumer. We also pass a dummy value of zero to comply with type safety requirements.
+When there are no more elements to yield, the `$arrayGenerator` issues the `stack.switch_retire` instruction which simultaneously discards the generator's resources and communicates the `#end` sentinel value to the consumer. We also pass a dummy value of zero to comply with type safety requirements.
 
-Whenever a `switch` instruction is used, it must be followed by instructions that analyse the result of being resumed (switched back to). The top of the value stack contains the _command code_ that the consumer sent to the generator: it is either `#next` or `#cancel` depending on whether the consumer wants another value or wants to cancel the iteration.
+Whenever a `stack.switch` instruction is used, it must be followed by instructions that analyse the result of being resumed (switched back to). The top of the value stack contains the _command code_ that the consumer sent to the generator: it is either `#next` or `#cancel` depending on whether the consumer wants another value or wants to cancel the iteration.
 
 In addition, a newly constructed stack reference of the consumer is also on the value stack. This reference is stored in the `$consumer` local variable, replacing its previous value which is no longer valid.[^lift]
 
@@ -344,7 +344,7 @@ Our example code handles the command code by a `br_table` instruction that eithe
 
 The consumer of a generator/consumer pair is typically represented as a `for` loop in high level languages. However, we need to go 'under the covers' a little in order to realize our example.
 
-In WebAssembly, our `addAllElements` function creates the generator -- using the `switch.call` instruction -- and employs a loop that repeatedly switches to it until the generator reports that there are no more elements. The code takes the form:
+In WebAssembly, our `addAllElements` function creates the generator -- using the `stack.new_switch` instruction -- and employs a loop that repeatedly switches to it until the generator reports that there are no more elements. The code takes the form:
 
 ```wasm
 (func $addAllElements (param $count i32) (param $els i32) (result i32)
@@ -352,7 +352,7 @@ In WebAssembly, our `addAllElements` function creates the generator -- using the
   (local $generator (ref $genCmd))
   (local.set $total (i32.const 0))
 
-  (switch.call $arrayGenerator $genCmd
+  (stack.new_switch $arrayGenerator $genCmd
      (local.get $count)
      (i32.const 0)
      (local.get $els))
@@ -366,7 +366,7 @@ In WebAssembly, our `addAllElements` function creates the generator -- using the
       (i32.add)
       (local.set $total)
       (local.set $generator) ;; update the generator reference
-      (switch $genCmd
+      (stack.switch $genCmd
         (local.get $generator)
         (i32.const #next))
       (br $l)
@@ -383,7 +383,7 @@ Our particular consumer never sends the `#cancel` event to the generator; but ot
 
 The way that our example is written, if the generator sees an event it is not expecting it will interpret it as a `#cancel` event. Similarly, if the generator suspends with anything other than `#yield`, the consumer code will interpret it as the equivalent of `#end`. A more robust implementation would likely raise exceptions in either of these cases.
 
-There is one aspect of this code that is less than perfect: the very first time that the `$arrayGenerator` function is entered -- via the `switch.call` instruction -- there is no verification that the consumer actually wants the first element. Thereafter, when the generator is continued by the consumer, a check is made for whether the consumer is trying to find the `#next` element or trying to `#cancel` the generator. This automatic generation of the first element is not consistent with how many languages use yield-style generators: languages often use an explicit `.next` call on an iterator object to get each element.
+There is one aspect of this code that is less than perfect: the very first time that the `$arrayGenerator` function is entered -- via the `stack.new_switch` instruction -- there is no verification that the consumer actually wants the first element. Thereafter, when the generator is continued by the consumer, a check is made for whether the consumer is trying to find the `#next` element or trying to `#cancel` the generator. This automatic generation of the first element is not consistent with how many languages use yield-style generators: languages often use an explicit `.next` call on an iterator object to get each element.
 
 #### Flattening Communication
 
@@ -417,8 +417,8 @@ A straightforward approach to modeling fiber identity is to capture it with a us
 It is also likely that, in practice, a language runtime would include other language specific information in the same data structure: access to fiber-local variables is an obvious example. However, we will assume a minimal structure that has two fields in it:
 
 ```wasm
-(type $fiber (struct 
-  (field $stack mut (ref null $fiberCont)) 
+(type $fiber (struct
+  (field $stack mut (ref null $fiberCont))
   (field $arena (ref $arena))
 ))
 ```
@@ -471,11 +471,11 @@ The $pause function below is given a reference to the currently running fiber st
   (struct.get $fiber $arena)
   (struct.get $arena $arenaCont)
   (i32.const #pause)
-  (switch $fbr)      ;; Switch to scheduler 
-  (local.set $cmd)   ;; Decode why we are being woken up
+  (stack.switch $fbr) ;; Switch to scheduler
+  (local.set $cmd)    ;; Decode why we are being woken up
   (struct.get $fiber $arena)
   (struct.set $arena $arenaCont) ;; update arena’s stack
-  (local.get $cmd)   ;; return resume or cancel signal
+  (local.get $cmd)    ;; return resume or cancel signal
   (return)
 )
 ```
@@ -488,7 +488,7 @@ As can be seen, most of this code is simply accessing structures and updating th
   (local.get $resumee)    ;; we need it twice
   (struct.get $fiber $stack)
   (i32.const #resume)     ;; we are resuming the fiber
-  (switch $sched)
+  (stack.switch $sched)
   (if                     ;; What did the fiber sent us
     (struct.set $fiber $stack)
   else
@@ -515,7 +515,7 @@ Like stack functions, fiber functions have an extra argument: which is a referen
    (return i32)
   (local $total i32)
 
-  (switch.call $arrayGenerator $genResp
+  (stack.new_switch $arrayGenerator $genResp
     (local.get $els) (local.get $from) (local.get $to))
 
   (block $on-end
@@ -527,7 +527,7 @@ Like stack functions, fiber functions have an extra argument: which is a referen
       (i32.add)
       (local.set $total)
       (local.set $generator)           ;; store the generator reference that came back
-      (switch $genResp
+      (stack.switch $genResp
         (local.get $generator)
         (i32.const 0)                  ;; padding
         (i32.const #next))
@@ -536,7 +536,7 @@ Like stack functions, fiber functions have an extra argument: which is a referen
       (if (br $on-end) (br $l))
     ) ;; fiber loop
   )
-  (switch.return   ;; report total to arena
+  (stack.switch_retire   ;; report total to arena
     (local.get $fiber)
     (struct.get $fiber $arena)
     (local.get $total)
@@ -567,7 +567,7 @@ This arena takes an array of fibers and terminates when the first one ends:
     (loop $for_ix
       (block $on-endGreen (i32)
         (block $on-pauseGreen
-          (switch $fbr
+          (stack.switch $fbr
             (array.get $fibers
               (local.get $fibers) (local.get $ix)) ;; pick up fiber
             (struct.get $fiber $fiberCont)
@@ -589,7 +589,7 @@ This arena takes an array of fibers and terminates when the first one ends:
       (loop $for-jx
         (block $no-cancel
           (br_if $no_cancel
-            (i32.eq 
+            (i32.eq
               (local.get $ix)
               (local.get $jx)))
           (switch $fbr
@@ -602,8 +602,8 @@ This arena takes an array of fibers and terminates when the first one ends:
           drop ;; drop the results from this cancelation
         )
         (local.set $jx
-          (i32.add 
-            (local.get $jx) 
+          (i32.add
+            (local.get $jx)
             (i32.const 1)))
         (br_if $for_jx
           (i32.lt (local.get $jx) (local.get $len)))
@@ -702,7 +702,7 @@ JSPI focuses on the behavior of the whole application: it is targeted at enablin
 
 Internally, the implementation of JSPI requires many if not most of the techniques needed to support coroutines; however, this is largely hidden from the developer using JSPI.
 
-JSPI can be used to implement coroutine language features. However, this carries significant performance penalties as each time an application suspends using JSPI, it will not be re-entered until the brower’s task runner invokes the associated Promise’s then function. This effectively eliminates one of the key benefits of coroutines: of allowing an application to manage and schedule its own computations. 
+JSPI can be used to implement coroutine language features. However, this carries significant performance penalties as each time an application suspends using JSPI, it will not be re-entered until the brower’s task runner invokes the associated Promise’s then function. This effectively eliminates one of the key benefits of coroutines: of allowing an application to manage and schedule its own computations.
 
 A legitimate question remains of whether it is possible to polyfill JSPI in terms of coroutines. It definitely is possible to do so, albeit involving substantial amounts of extra JavaScript and WebAssembly code.
 
@@ -751,7 +751,7 @@ This happens today in the browser, for example. When a `Promise`'s callback revo
 
 This, in turn, implies that application specific actions need to be taken when any exception is bubbling out of a coroutine. In general, we expect a great deal of variability in how results are transmitted from coroutines, and, as a result, choose not to specify any automatic propagation mechanism.
 
-So, in this proposal, results do _not_ propagate out of a coroutine. Instead, the application uses the `switch.return` instruction to simultaneously terminate and send a final result to a coroutine that can take responsibility for the result. In the case of exceptions, one pattern that may apply is for the coroutine function to catch exceptions not handled by the application logic. This would then result in a message to another coroutine; which may rethrow the exception in that coroutine. The key here is that this routing logic is application or language specific: it is not mandated by the engine.
+So, in this proposal, results do _not_ propagate out of a coroutine. Instead, the application uses the `stack.switch_retire` instruction to simultaneously terminate and send a final result to a coroutine that can take responsibility for the result. In the case of exceptions, one pattern that may apply is for the coroutine function to catch exceptions not handled by the application logic. This would then result in a message to another coroutine; which may rethrow the exception in that coroutine. The key here is that this routing logic is application or language specific: it is not mandated by the engine.
 
 ### What about structured concurrency?
 
@@ -797,11 +797,10 @@ Implementing this proposal in a production engine raises some issues: how are st
 
 #### Growing stacks
 
-When a new coroutine is established, using the `switch.call` instruction, the engine must also allocate memory to allow the stack frames of functions to be stored. Normally, we expect the `switch.call` instruction to result in a new stack allocation and for subsequence function calls to be executed on this new stack memory. This allows for a rapid switch between coroutines since we can switch simply by ensuring that the `SP` register of the processor points to the new target.
+When a new coroutine is established, using the `stack.new_switch` instruction, the engine must also allocate memory to allow the stack frames of functions to be stored. Normally, we expect the `stack.new_switch` instruction to result in a new stack allocation and for subsequence function calls to be executed on this new stack memory. This allows for a rapid switch between coroutines since we can switch simply by ensuring that the `SP` register of the processor points to the new target.
 
 The engine also has to decide how much memory to allocate, and there also needs to be a strategy for dealing with the case when that memory is exhausted. The primary issue here is to determine how much memory to allocate for the newly created stack. It is not feasible in many cases to allocate a large block for each coroutine: if an application uses large numbers of coroutines then this can result in a lot of wasted memory. In addition, it is quite likely that most coroutines will have very small memory requirements; and only a few needing larger memories.
 
 However, given the capability for switching between coroutines, it is quite conceivable to allow stacks to be automatically grown when their stack memory is exhausted. This could be by creating a new larger memory and copying an existing stack resource into it; or it could be by allowing execution stacks to be segmented.
 
 Which approach is taken depends on the larger requirements of the WebAssembly engine itself.
-
