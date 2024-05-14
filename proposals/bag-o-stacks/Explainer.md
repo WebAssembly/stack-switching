@@ -114,35 +114,23 @@ In order for a switch between coroutines to be valid, the type of the target sta
 
 Given this, we can statically verify that WebAssembly programs that switch between coroutines are guaranteed to observe type safety during the switch.
 
-#### Subtype relations between `stack` types
+#### Subtyping
 
-Like function types, two stack types
+Like function types, stack types are contravariant in their parameters.
 
-```wasm
-(stack (param P1*) (ref $c1))
+```pseudo
+C |- stack t_1* rt_1 <: stack t_2* rt_2
+-- C |- t_2* rt_2 <: t_1* rt_1
 ```
 
-and
+`stack t_1 rt_1` is a subtype of `stack t_2* rt_2` iff:
+ - `t_2* rt_2` is a subtype of `t_1* rt_1`.
 
-```wasm
-(stack (param P2*) (ref $c2))
+The top type for stack references is `stack` and the bottom type is `nostack`. Like other bottom types, the nostack type is uninhabited.
+
+```pseudo
+absheaptype ::= ... | stack | nostack
 ```
-
-are in a subtype relationship if the `P1*` vector is a vector subtype of `P2*` and the type referenced in `$c2` is a subtype of $c1. I.e., covariant in the result types but contravariant in the parameter types. This is directly analogous to function subtyping.
-
-The top type for stack references is simply:
-
-```wasm
-stack
-```
-
-and the bottom type is `nostack` which results in a new extension to the heap type hierarchy:
-
-```wasm
-heaptype ::= ... | stack | nostack
-```
-
-Like other bottom types, the nostack type is uninhabited.
 
 ### Life-cycle of a coroutine
 
