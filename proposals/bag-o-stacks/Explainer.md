@@ -205,19 +205,17 @@ If its stack reference operand is null or detached, `switch` traps. Otherwise, `
 ### `stack.new_switch` Create and switch to a new stack
 
 ```pseudo
-  C |- stack.new_switch x_1 y : t_1* t_2* -> t_3* rt
-  -- expand(C.TYPES[x_1]) = stack t_1* (ref null? x_2)
-  -- expand(C.FUNCS[y]) = func t_1* t_2* (ref null? x_2) -> []
-  -- expand(C.TYPES[x_2]) = stack t_3* rt
+  C |- stack.new_switch x : t_1* -> t_2* rt
+  -- expand(C.FUNCS[x]) = func t_1* (ref null? x') -> []
+  -- expand(C.TYPES[x']) = stack t_2* rt
 ```
 
-`stack.new_switch` takes two immmediates: a type index `x_1` and a function index `y`. It is valid with type `t_1* t_2* -> t_3* rt` iff:
+`stack.new_switch` takes one immmediate: a function index `x`. It is valid with type `t_1* -> t_2* rt` iff:
 
- - The expansion of the type at index `x_1` is a stack type with parameters `t_1* (ref null? x_2)`.
- - The expansion of the type of the function at index `y` is a function type `t_1* t_2* (ref null? x_2) -> []`
- - The expansion of the type at index `x_2` is a stack type with parameters `t_3* rt`
+ - The expansion of the type of the function at index `x` is a function type `t_1* (ref null? x') -> []`.
+ - The expansion of the type at index `x'` is a stack type `t_2* rt`.
 
-`stack.new_switch x_1 y` both allocates a new stack and switches to it. It is equivalent to `(stack.new x_1 y) (switch x_1)`, but engines should be able to implement it more efficiently because it calls the function immediately without having to stage any arguments anywhere.
+`stack.new_switch x` both allocates a new stack and switches to it. It is equivalent to `(stack.new y x) (switch y)`, where `y` is the index of some stack type `t* (ref null? x')`, where `t*` is a prefix of `t_1*`. Engines should be able to implement the combined instruction more efficiently because it calls the function immediately and can store the arguments directly in the normal argument registers. Since the parameter types, including the return stack reference, are entirely determined by the function index immediate, there is no need to provide a type for the allocated stack.
 
 ### `switch_retire` Switch to a stack and retire the old stack
 
