@@ -180,76 +180,80 @@ In the rest of this document we introduce the key instructions, give some worked
 
 ## Instructions
 
-We introduce instructions for creating, switching between them and terminating coroutines.
+We introduce instructions for creating, switching between, and retiring stacks.
 
-For the purposes of exposition, we assume the following schema for stack types used in the following instruction definitions:
+### `stack.new` Create a new stack
 
-
-```wasm
-(rec
-  (type $c0
-    (stack (param rt*) (ref $c1)))
-  (type $c1
-    (stack (param st*) (ref $c0))))
+```pseudo
+  C |- stack.new x y : t_1* -> (ref x)
+  -- expand(C.TYPES[x]) = stack t_2* rt
+  -- expand(C.FUNCS[y]) = func t_1* t_2* rt -> []
 ```
 
-I.e., a recursive group of types, with at least two members. In general, there may be more members of this group, representing more complex scenarios; but we restrict ourselves for now to this simple world.
+`stack.new` takes two immediates: a type index `x` and a function index `y`. It is valid with type `t_1* -> (ref x)` iff:
 
-### `stack.new_switch` Create a new coroutine
+ - The expansion of the type at index `x` is a stack type with parameters `t_2* rt`.
+ - The expansion of the type of the function at index `y` is a function type `t_1* t_2* rt -> []`.
 
-The `stack.new_switch` instruction initiates a new coroutine.
+Let `f` be the function at index `y`. `stack.new` takes a prefix of the arguments necessary to call `f` and allocates a new suspended stack that expects to receive the remaining arguments, determined by the type of the allocated stack. Once the allocated stack is switched to, it will continue on to call `f` with the arguments provided to `stack.new`, the arguments provided to the instruction that performed the switch, and a reference to the previous active stack or a null value if the previous active stack has been retired.
 
-```wasm
-stack.new_switch $func $c0: t* -> (ref null $c0) st*
+### `switch` Switch to a stack
+
+```pseudo
+  C |- switch x : t_1* (ref null x) -> t_2* rt
+  -- expand(C.TYPES[x]) = stack t_1* (ref null? y)
+  -- expand(C.TYPES[y]) = stack t_2* rt
 ```
 
-where `$func` is the index of a function of type:
+`switch` takes one immediate: a type index `x`. It is valid with type `t_1* (ref null x) -> t_2* rt` iff:
 
-```wasm
-(type $func (func (param (ref $c1) t*)))
+ - The expansion of the type at index `x` is a stack type with parameters `t_1* (ref null? y)`.
+ - The expansion of the type at index `y` is a stack type with parameters `t_2* rt`.
+
+If its stack reference operand is null or detached, `switch` traps. Otherwise, `switch` switches to the stack denoted by its stack reference operand, popping and sending the expected values `t_1*` along with a reference of type `(ref y)` denoting the prior active stack. The parameters of the stack type at index `y` determine what types will be received when the prior active stack is switched back to.
+
+> TODO: Describe checking whether a switch is allowed and trapping if it is not.
+
+### `stack.new_switch` Create and switch to a new stack
+
+```pseudo
+  C |- stack.new_switch x_1 y : t_1* -> t_2* rt
+  -- expand(C.TYPES[x_1]) = stack t_1* (ref null? x_2)
+  -- expand(C.FUNCS[y]) = func t_1* (ref null? x_2) -> []
+  -- expand(C.TYPES[x_2]) = stack t_2* rt
 ```
 
-The coroutine function has a distinguished first argument – this is a stack reference that identifies the caller coroutine: specifically, the stack reference is of the caller coroutine, in its current state, with a program counter that immediately follows the `stack.new_switch` instruction itself. The remaining arguments are specific to the coroutine function.
+`stack.new_switch` takes two immmediates: a type index `x_1` and a function index `y`. It is valid with type `t_1* -> t_2* rt` iff:
 
->Note that this caller stack reference is guaranteed to be non-null. On the other hand, the stack reference that the caller will receive, immediately following the stack.new_switch instruction may be null.
+ - The expansion of the type at index `x_1` is a stack type with parameters `t_1* (ref null? x_2)`.
+ - The expansion of the type of the function at index `y` is a function type `t_1* (ref null? x_2) -> []`
+ - The expansion of the type at index `x_2` is a stack type with parameters `t_2* rt`
 
-The function's return type must be empty -- coroutine functions are not permitted to return normally. However, the generated `stack` value allows the callee to 'return' to the caller with appropriate results.
+`stack.new_switch x_1 y` both allocates a new stack and switches to it. It is equivalent to `(stack.new x y) (switch x)`, but engines should be able to implement it more efficiently because it calls the function immediately without having to stage the arguments anywhere.
 
-The sequence of types (ref $c0) -> (ref $c1) -> (ref null $c0) approximately mimics a function call – using (ref $c0) – and function return – using (ref $c1).
+> TODO: Consider having `stack.new` take a suffix of the function arguments (except for the return stack reference) rather than a prefix, which would allow us to generalize the validation here to allow the stack type parameters to be a suffix of the function type parameters, while still maintaing the equivalence to `(stack.new x y) (switch x)`. This change may also have performance benefits because the arguments provided at switch time would be able to go in the initial argument registers no matter how many total arguments there are.
 
->Of course, functions don’t typically return themselves (which modeled with the (ref null $c0) in the sequence); but that is one difference between functions and coroutines.
+### `switch_retire` Switch to a stack and retire the old stack
 
-### `switch` Switch between coroutines
-
-The `switch` instruction is used to switch between coroutines. The `switch` instruction is annotated with the type of a stack reference -- the type of any suspended computation it may switch to. The arguments of a `switch` instruction include the stack reference of the switch target and any argument values as indicated by the argument types of the stack reference.
-
-```wasm
-switch $c0: (ref $c0) rt* -> (ref null $c0) st*
+```pseudo
+  C |- switch_retire x : t_1* (ref null x) -> t_2*
+  -- expand(C.TYPES[x]) = stack t_1* (ref null y)
 ```
 
-The action of `switch` is to suspend the current coroutine, create a stack reference to the newly suspended coroutine of type `(ref $c1)` and pass the vector of values identified with `rt*` -- together with the newly created stack reference -- to the target coroutine, which must be in `suspended` state. The current coroutine is marked as `suspended` and the target is marked as `active`.
+`switch_retire` takes one immediate: a type index `x`. It is valid with type `t_1* (ref null x) -> t_2*` iff:
 
-Computation continues with the target coroutine, and the issuing coroutine will only be resumed when explicitly switched to. This may or may not be directly from the code of the target.
+ - The expansion of the type at index `x` is a stack type with parameters `t_1* (ref null y)`.
 
-When the issuing computation is resumed, on the stack will be a vector of values corresponding to `st*` together with a potentially null reference to a stack of the same type as was used -- `$c0`.
+`switch_retire` is very much like `switch`, except that it requires the target stack to be expecting a nullable stack reference and that instead of sending a reference to the previous active stack, it sends a null reference. This makes the previous active stack unreachable and potentially allows the engine to reclaim its resources eagerly. Since the previous active stack can never be resumed and the instructions following the `switch_retire` can never be executed, this instruction is valid with any result type.
 
-### `switch_retire` Return results from a coroutine
+### Other instructions
 
-The `switch_retire` instruction is used to simultaneously terminate a coroutine and switch to another coroutine. It is also used to return a result from the coroutine.
+We may choose to add other instructions to the proposal to round out the instruction set or if there is specific demand for them. Potential additions include:
 
-```wasm
-switch_retire $c0: (ref $c0) rt* -> unreachable
-```
-
-As with `switch`, the target receives a vector of values on the stack. It also receives a null stack reference. The null stack reference should be ignored by the target coroutine's code. Again, as with `switch`, the target must be in `suspended` state; and becomes `active` as a result of this instruction.
-
-The returning coroutine is marked as `moribund` by this operation, and its resources may be released after this instruction. Any attempt to continue executing the moribund coroutine will result in a trap.[^moribund]
-
-[^moribund]: In fact, since switch_retire returns null as its return stack, the only way that a moribund coroutine can be entered is by reusing a previously used stack reference. This would result in a trap regardless of the state of the target coroutine.
-
->Note that this instruction is the principal way by which a coroutine can return a result to another coroutine. The value of the returned result should be encoded in the vector of `rt*` values in such a way that the target coroutine can interpret the result.
->
->Typically this will include both normal forms of return and exceptional returns: exceptions are not propagated between coroutines; and so the application code should encode exceptional returns using the `switch_retire` mechanism.
+ - `stack.new_ref` and `stack.new_switch_ref`: variants of `stack.new` and `stack.new_switch` that take function reference operands instead of function index immediates. The latter instructions can be specified in terms of the `*_ref` variants, but the `*_ref` variants would be less efficient in real implementations.
+ - `switch_throw`: Switch to a stack and throw an exception rather than sending the expected values.
+ - `return_switch`: Combines a `return_call` with a stack switch.
+ - `return_switch_throw`: Combines both of the above.
 
 ## Examples
 
