@@ -175,15 +175,15 @@ We introduce instructions for creating, switching between, and retiring stacks.
 ```pseudo
   C |- stack.new x y : t_1* -> (ref x)
   -- expand(C.TYPES[x]) = stack t_2* rt
-  -- expand(C.FUNCS[y]) = func t_1* t_2* rt -> []
+  -- expand(C.FUNCS[y]) = func t_2* t_1* rt -> []
 ```
 
 `stack.new` takes two immediates: a type index `x` and a function index `y`. It is valid with type `t_1* -> (ref x)` iff:
 
  - The expansion of the type at index `x` is a stack type with parameters `t_2* rt`.
- - The expansion of the type of the function at index `y` is a function type `t_1* t_2* rt -> []`.
+ - The expansion of the type of the function at index `y` is a function type `t_2* t_1* rt -> []`.
 
-Let `f` be the function at index `y`. `stack.new` takes a prefix of the arguments necessary to call `f` and allocates a new suspended stack that expects to receive the remaining arguments, determined by the type of the allocated stack. Once the allocated stack is switched to, it will continue on to call `f` with the arguments provided to `stack.new`, the arguments provided to the instruction that performed the switch, and a reference to the previous active stack or a null value if the previous active stack has been retired.
+Let `f` be the function at index `y`. `stack.new` takes a suffix of the arguments necessary to call `f` (besides the return stack argument) and allocates a new suspended stack that expects to receive the remaining arguments, determined by the type of the allocated stack. Once the allocated stack is switched to, it will continue on to call `f` with the arguments provided to the instruction that performed the switch, the arguments provided to `stack.new`, and a reference to the previous active stack or a null value if the previous active stack has been retired.
 
 ### `switch` Switch to a stack
 
@@ -205,21 +205,17 @@ If its stack reference operand is null or detached, `switch` traps. Otherwise, `
 ### `stack.new_switch` Create and switch to a new stack
 
 ```pseudo
-  C |- stack.new_switch x_1 y : t_1* -> t_2* rt
-  -- expand(C.TYPES[x_1]) = stack t_1* (ref null? x_2)
-  -- expand(C.FUNCS[y]) = func t_1* (ref null? x_2) -> []
-  -- expand(C.TYPES[x_2]) = stack t_2* rt
+  C |- stack.new_switch x : t_1* -> t_2* rt
+  -- expand(C.FUNCS[x]) = func t_1* (ref null? x') -> []
+  -- expand(C.TYPES[x']) = stack t_2* rt
 ```
 
-`stack.new_switch` takes two immmediates: a type index `x_1` and a function index `y`. It is valid with type `t_1* -> t_2* rt` iff:
+`stack.new_switch` takes one immmediate: a function index `x`. It is valid with type `t_1* -> t_2* rt` iff:
 
- - The expansion of the type at index `x_1` is a stack type with parameters `t_1* (ref null? x_2)`.
- - The expansion of the type of the function at index `y` is a function type `t_1* (ref null? x_2) -> []`
- - The expansion of the type at index `x_2` is a stack type with parameters `t_2* rt`
+ - The expansion of the type of the function at index `x` is a function type `t_1* (ref null? x') -> []`.
+ - The expansion of the type at index `x'` is a stack type `t_2* rt`.
 
-`stack.new_switch x_1 y` both allocates a new stack and switches to it. It is equivalent to `(stack.new x y) (switch x)`, but engines should be able to implement it more efficiently because it calls the function immediately without having to stage the arguments anywhere.
-
-> TODO: Consider having `stack.new` take a suffix of the function arguments (except for the return stack reference) rather than a prefix, which would allow us to generalize the validation here to allow the stack type parameters to be a suffix of the function type parameters, while still maintaing the equivalence to `(stack.new x y) (switch x)`. This change may also have performance benefits because the arguments provided at switch time would be able to go in the initial argument registers no matter how many total arguments there are.
+`stack.new_switch x` both allocates a new stack and switches to it. It is equivalent to `(stack.new y x) (switch y)`, where `y` is the index of some stack type `t* (ref null? x')`, where `t*` is a prefix of `t_1*`. Engines should be able to implement the combined instruction more efficiently because it calls the function immediately and can store the arguments directly in the normal argument registers. Since the parameter types, including the return stack reference, are entirely determined by the function index immediate, there is no need to provide a type for the allocated stack.
 
 ### `switch_retire` Switch to a stack and retire the old stack
 
