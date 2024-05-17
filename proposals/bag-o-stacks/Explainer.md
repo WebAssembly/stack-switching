@@ -1,4 +1,4 @@
-# Stack Switching Coroutines
+# Bag-o-Stacks Stack Switching
 
 ## Motivation
 
@@ -14,7 +14,7 @@ Informally, the approach outlined in this proposal is aligned with the 'bag of s
 
 There are two main reasons for adopting this style:
 
-* Requiring the engine to maintain parent/child relationships implies, in many instances, proving properties that are potentially onerous and do not significantly enhance the safety of the application. For example, in this design, the engine does not have to search when switching computations: it is a requirement of the language provider to ensure that the target is always directly known when switching between coroutines. Similarly, when suspending a computation, the engine does not need to dynamically verify that the subject of suspension is legitimate.[^types]
+* Requiring the engine to maintain parent/child relationships implies, in many instances, proving properties that are potentially onerous and do not significantly enhance the safety of the application. For example, in this design, the engine does not have to search when switching computations: it is a requirement of the language provider to ensure that the target is always directly known when switching between stacks. Similarly, when suspending a computation, the engine does not need to dynamically verify that the subject of suspension is legitimate.[^types]
 
 [^types]: However, type safety is guaranteed: a switch to another computation requires a reference to that computation; and that reference is statically verified for type safety.
 
@@ -24,73 +24,41 @@ At the same time, it should be noted, this style is significantly lower level th
 
 ## Terminology
 
-Selecting an appropriate terminology to model 'computations that can manage themselves' is challenging. Most terms are either slightly off the mark or are so over-used as to become meaningless. (The term computation is an example of the latter.) In this proposal we standardize certain nomenclature to aid readability:
+The language used in this design matches its low-level nature: it deals directly with execution stacks without trying to abstract them into less concrete concepts like "computations" or "coroutines."
 
-* Coroutine. A coroutine is a _computation_ that is under the active management of the application itself. This means that the coroutine can be started, paused[^selfPause] and stopped; however, it does not mean that the coroutine is running in parallel: true parallel or multi-threaded execution is beyond the scope of this design.
+* Stack. An execution stack onto which new frames are pushed during function calls and from which frames are popped during returns.
 
-[^selfPause]: Technically, a coroutine can be started, but must pause or stop itself: it is not possible for an 'outsider' to stop a coroutine.
+* Active stack. The stack whose instructions are currently being executed and where frames are being pushed and popped. Each thread has no more than one active stack.
 
-* Coroutine function. A coroutine function is a _function_ that denotes what the overall computation of a coroutine is. When a coroutine is started, the coroutine function is entered, and when the coroutine function terminates the coroutine is no longer available for execution.
+* Suspended stack. Any stack besides the non-active stack. Instructions on a suspended stack will not be executed until it becomes the active stack.
 
-* Event. An event is an _occurrance_ that is of interest to some observer.
+* Main stack. The stack on which the embedder initially executed WebAssembly.
 
-* Event description. An event description is a _data value_ (or collection of data values) that the application deems is important to describe the event.
+* Detached stack reference. A stack reference whose stack has been switched to. Such a reference cannot be used to switch to the stack again, even if the stack becomes suspended.
 
-* Stack. A stack is a _resource_ that may be used within the implementation of an engine to support some of the features of WebAssembly. Stacks are used to represent the active frames of a computation (including coroutines), some of the local variables used and so on. We often use the term _switching stacks_ to imply switching between coroutines.
+### Stack types
 
-* Stack switch. A stack switch is an _event_ that is associated with the transfer of active execution from one coroutine to another. Stack switch events are typically also associated with event descriptions that encode the reason for the switch.
-
-## Stacks, Coroutines and Stack references
-
-Executing coroutines require internal resources that enable the execution system to keep track of their execution. These resources include the memory needed to represent local variables, arguments and function calls as well as the execution status of the coroutine. I.e., machines need a _stack resource_ to hold the state of execution. In this proposal, we do not expose stacks as first class entities; however, we do model suspended computations with a _stack reference_.
-
-### The coroutine abstraction
-
-Computations have an extent in time and space: they are initiated, instructions are executed and have a termination.  A _coroutine_ is a computation that is potentially addressable directly by the application itself. A coroutine is analogous to a function call, with the additional potential for being _suspended_, _resumed_ and for suspended coroutines[^susponly] to be referenced as the value of an expression.
-
-[^susponly]: We do not allow the actively executing coroutine to be explicitly referenced.
-
-#### The state of a coroutine
-
-In addition to storage for variables and function calls, particularly when describing the operations that can be applied to coroutines, it is useful to talk about the coroutine's execution status:
-
-* The `suspended` state implies that the coroutine has suspended execution. It may be resumed; but until then, the coroutine will not be executing any instructions.
-
-* The `active` state implies that the coroutine is currently executing; and that it is _the_ currently active coroutine. There is always exactly one active coroutine in a single threaded WebAssembly application.
-
-* The `moribund` state implies that the coroutine has terminated execution and cannot perform any additional computation -- attempting to resume a moribund computation will result in an execution trap. Any stack resources previously associated with the moribund coroutine may have been released.
-
-The status of a coroutine is not directly inspectable by WebAssembly instructions.
-
-Only the `active` coroutine may be suspended, and only coroutines that are in the `suspended` state may be resumed. Attempting to resume a `moribund` coroutine will result in a trap.
-
-We should note here that terms such as _resuming_ or _suspending_ are meant somewhat informally. The only operation that this proposal supports is _switching_ between coroutines: suspending and resuming are simply informal names of usage patterns of switching.
-
-### Stack references
-
-A stack is a first class value denoting a coroutine in a _suspended_ state. Associated with stacks is the `stack` type:
+A suspended stack is characterized by a heap type that describes what types of values the stack receives when it is switched to and becomes active.
 
 ```wasm
-(type $c (stack <params> <rt>))
+(type $s (stack (param t* rt)))
 ```
 
-where `<params>` are the types of values to be sent to the suspended computation as part of _waking it up_.
+The parameters `t*` are the types of values sent from the previous active stack to a stack of type `$s` when it is switched to. They are very similar to function parameters, which are supplied by the caller and received by the callee.
 
-The <rt> parameter is somewhat special: it is also a reference to a stack type; specifically it should be the stack type of the currently executing coroutine. This is the type of the stack that is needed to switch back to the current coroutine.
+The `rt` parameter is the "return stack reference." It is also received by a stack of type `$s` when it becomes active, but it is not sent by the previous active stack; instead, it is a reference to the now-suspended previous active stack that is created during the switch. This reference allows the program to switch back to the previous active stack again at some point in the future.
 
 The return stack type must be of the form:
 
 ```wasm
-(ref null? $c)
+(ref null? $s')
 ```
 
-where $c is the index of a stack type.
+where `$s'` is (the index of) a stack heap type type.
 
->This affects which instructions are legal to perform; the switch_retire instruction passes a null stack as the return stack, whereas the regular switch instruction never passes a null stack.
->
->This, in turn, permits some potential optimizations in avoiding null checks; for those cases where it is not permitted.
+>This affects which instructions are legal to perform; the switch_retire instruction passes a null stack as the return stack, whereas the regular switch instruction never passes a null return stack.
 
-For example, a stack that is expecting a pair of `i32` values and is expected to signal back a single `i32` would have the type signature $cp from the definition:
+For example, a stack that is expecting a pair of `i32` values and is expected to send back a single `i32` would have the type signature $cp from the definition:
 
 ```wasm
 (rec
@@ -100,19 +68,7 @@ For example, a stack that is expecting a pair of `i32` values and is expected to
     (stack (param i32) (ref $cp))))
 ```
 
-All stack references participate in such recursively defined groups of types. The reason is straightforward: when switching from one coroutine to another, the default expectation is that the computation will eventually switch back. In general, the collection of messages between coroutines forms a closed conversation governed by a particular use case.
-
-This is in recognition that, in many cases, the communication patterns between coroutines is _asymmetric_: one coroutine expects event descriptions that fit one type and its partner coroutines expect a different form of event description.
-
-Stack references are single use: when used to switch to a coroutine the stack reference becomes invalid afterwards -- the engine is expected to trap if a stack reference is used twice.
-
-Stack references are created in two circumstances: when a coroutine is created and when a coroutine is switched from. Stack references are also consumed in two ways: when used to switch to a coroutine, the target stack reference is used, and when a coroutine finally completes no new stack reference for the returning coroutine is created (i.e., null is sent as the return stack).
-
-#### Type safety in switching
-
-In order for a switch between coroutines to be valid, the type of the target stack reference must be consistent with the current state of the stack -- the value stack on the originating coroutine must be populated with the appropriate list of values corresponding to the parameters of the stack reference being used; in addition, the target coroutine must be _expecting_ the same set of values. These values are transferred during the switch. Both of these conditions can be verified at code validation time.
-
-Given this, we can statically verify that WebAssembly programs that switch between coroutines are guaranteed to observe type safety during the switch.
+All stack types participate in such recursively defined groups of types. The reason is straightforward: when switching from one stack to another, the default expectation is that the previous stack will at some point become active again. In general, the collection of value types sent between stacks forms a closed conversation governed by a particular use case.
 
 #### Subtyping
 
@@ -132,39 +88,21 @@ The top type for stack references is `stack` and the bottom type is `nostack`. L
 absheaptype ::= ... | stack | nostack
 ```
 
-### Life-cycle of a coroutine
+### Life-cycle of a stack
 
-A coroutine is started using the `stack.new_switch` instruction. This performs the equivalent of a function call – on a new stack resource. In addition to the arguments normally expected in a function call, an additional argument is provided that is a stack reference to the caller code -- the caller is suspended as a result of the `stack.new_switch` instruction.
+A stack is allocated using the `stack.new` instruction, which also associates it with an initial function to run on the stack. Stacks are allocated in the suspended state. Later, the stack may be switched to and becomes active using the `switch` or `switch_retire` instructions. The allocation and initial switch may happen in a single `stack.new_switch` instruction. Whenever a stack is switched to, all extant references to it become detached, meaning that attempts to use them as switch targets will trap. This means it is impossible for a stack to switch to itself and it is impossible to switch to a stack using a reference produced before the last time the stack was switched away from and became suspended.
 
-During the normal execution of a coroutine, it is expected that it will switch to other coroutines -- using `switch` instructions. It is only possible for a WebAssembly code to switch to a coroutine if the code has available to it the stack reference of the associated suspended coroutine.
+A stack may be switched to and from many times throughout its life. Each time it is switched away from, a new reference to it is created as the return stack reference for the switches. In general, the return stack reference may have a different type every time the stack is switched away from; a stack is not restricted to sending or receving just a single sequence of value types every time it participates in a switch.
 
-This direct access aspect implies that higher-level programming language features that rely on dynamic scoping must be realized using other facilities of WebAssembly. For one such approach, we refer the reader to [this proposal](dynamic scoping url).
+If it ever becomes the case that there are no non-detached references to a suspended stack, then it is impossible for the program to ever switch back to that stack and its resources can be reclaimed. This can happen if the return stack reference is dropped or if the `switch_retire` instruction is used; it produces a null value instead of a return stack reference.
 
-Eventually, the coroutine will be ready for termination; in which case it signals this by switching to another coroutine -- using the `switch_retire` instruction. This instruction is a `switch` instruction but it also results in the switching coroutine to become `moribund`; and the associated computation resources to become available for release.
+If a trap, exception, or return would ever pop the last frame off a stack, control switches to the main stack and a trap is generated. This also makes it impossible for the stack to be switched back to, since there cannot possibly be non-detached references to the stack.
 
-Note that coroutine functions are _not_ permitted to return normally, nor are they permitted to abort by throwing exceptions. Returning from a coroutine, or allowing an exception to be propagated out, results in a trap.
+#### Implementing detachment
 
->The primary justification for this is that the control flow patterns of switching coroutines do not typically embody a reasonable logical relationship that can be utilized when returning results. For example, a scheduler is responsible for ensuring the execution of one or more coroutines; but, schedulers are not typically interested in the _result_ of the computations of the coroutines they manage. Instead, return results (normal or exceptional) would typically be communicated to another coroutine – using normal switch_retire instructions.
+It may seem inefficient for all extant references to a stack to become detached when a stack is switched to. Indeed, if this required updating the value of the detached references, it could become arbitrarily slow. There are at ways to implement detachment that do not require updating any reference values, however.
 
-#### The Life-cycle of a stack reference
-
-Stack references identify coroutines that are in a suspended state. They are created as a coroutine becomes suspended when computation switches to a different coroutine. Stack references are consumed when the corresponding coroutine is switched to -- using a `switch` instruction.
-
-Once a stack reference has been used to `switch` to its identified coroutine, it is no longer valid. Any attempt to switch to a stack reference that has already been used will result in a trap. Unfortunately, the design of WebAssembly means that it is not possible to statically validate that any given stack reference is actually valid -- it is the responsibility of the application program to ensure that stack references are used just once.
-
->It may seem that this can result in a large number of values being created and becoming garbage. However, stack references are implicitly references to the underlying stack resource which is _stable_ across the lifetime of the coroutine itself. Thus, one reasonable implementation strategy is to represent stack references as a pair: the stack resource and a counter. The counter -- which would also be stored in the stack resource -- is incremented every time the coroutine switches and is checked when the coroutine is switched to.
->
-> Since the stack reference pair is never unpacked by WebAssembly code, it can be stored as a fat value in the value stack, in local variables, globals and in tables.[^shared]
-
-[^shared]: This implementation strategy becomes more complex when threading is taken into account, and the possibility of shared stack references arise.
-
-#### Coroutine identity
-
-Coroutines do not have a specific identity in this proposal. Instead, a stack reference denotes the particular state of a suspended coroutine. This token is only created when switching from a coroutine or when a `stack.new_switch` instruction is executed to create a new coroutine.
-
->It is not possible for WebAssembly code to discover which coroutine it is running on; indeed the currently active coroutine has no valid stack reference. One consequence of this design is that when a WebAssembly function calls another function from another module (say), that module cannot discover the identity of the coroutine and misuse it. Overall, this is in keeping with a capability-based approach to resource management.
-
-In the rest of this document we introduce the key instructions, give some worked examples and answer some of the frequently asked questions.
+One way is to make the stack references "fat pointers" that contain both a pointer to the stack and a sequence number. The stack itself would also contain a sequence number that is incremented every time the stack is switched to and becomes active. Whenever a stack reference is created, its sequence number is the same as the underlying stack's sequence number. A stack reference is considered detached whenever its sequence number is different from the underlying stack's sequence number; i.e. whenever the stack has been switched to since the reference was created.
 
 ## Instructions
 
