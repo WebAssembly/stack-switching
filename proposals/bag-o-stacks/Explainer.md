@@ -278,46 +278,52 @@ where $genCmd has a single i32 which contains the command to the generator, and 
 In this example, we implement an extremely minimal generator: one which iterates over the elements of an `i32` array. The array is assumed to lie in linear memory, and we pass to the generator function the address of the base of the array, where to start the iteration and the number of elements in it:
 
 ```wasm
-(func $arrayGenerator (param $consumer (ref $genResp))
-  (param $from i32) (param $to i32) (param $els i32)
+(rec
+  ;; generic types for any generator of i32s
+  (type $toConsumer (stack (param $val i32) (param (ref null $toGenerator))))
+  (type $toGenerator (stack (param (ref $toConsumer))))
+)
 
-  (block $on-cancel
+;; types to initialize the array generator specifically
+(type $finishInit (stack (param (ref $toGenerator))))
+(type $initArrayGen (stack (param $from i32) (param $to i32) (param $els i32) (param (ref $finishInit))))
+
+(func $arrayGenerator (param $from i32) (param $to i32) (param $els i32) (param $finishInit (ref $finishInit))
+  (local $toConsumer (ref $toConsumer))
+
+  ;; switch back to the consumer now that $from, $to, and $els have been initialized.
+  (switch $finishInitArrayGen (local.get $finishInit))
+  (local.set $toConsumer)
+
+  (block $on-end
     (loop $l
-      (br_if $on-cancel (i32.ge (local.get $from) (local.get $to)))
+      (br_if $on-end (i32.ge (local.get $from) (local.get $to)))
 
-      (block $on-next (ref $genResp) ;; set up for the switch on next
-        (switch (local.get $consumer)
-                (i32.load (i32.add (local.get $els)
-                          (i32.mul (local.get $from)
-                                   (i32.const 4))))
-                (i32.const #yield))
-        (br_table $on-next $on-cancel)
-      )
-      (drop)                           ;; drop the dummy padding
-      (local.set $consumer)            ;; remember the consumer
+      (switch $toConsumer             ;; load and yield a value to the consumer
+        (i32.load (i32.add (local.get $els)
+                           (i32.mul (local.get $from)
+                                    (i32.const 4))))
+        (i32.const 0)                 ;; not end
+        (local.get $toConsumer))
+      (local.set $toConsumer)         ;; remember the consumer
+
+      ;; continue to the next element
       (local.set $from (i32.add (local.get $from) (i32.const 1)))
       (br $l)
     )
-  ) ;; $on-cancel
+  ) ;; $on-end
 
   (switch_retire
     (local.get $consumer)
-    (i32.const 0)                     ;; dummy
-    (i32.const #end))                 ;; no more results
+    (i32.const 0))                    ;; dummy value
 )
 ```
 
-Whenever the `$arrayGenerator` function yields -- including when it finally finishes -- it returns three values: a new stack reference that allows the consumer to resume the generator, the value being yielded together with a sentinel which encodes whether this is a normal `#yield` or the `#end` marker. Since the sentinel is the second parameter in the response, it is pushed on the value stack last, which means it will be the top of stack when the consumer inspects the result.
+Whenever the `$arrayGenerator` function yields after its initialization -- including when it finally finishes -- it returns three values: a new stack reference that allows the consumer to resume the generator, the value being yielded together with a sentinel which encodes whether this is a normal yield or the end of the generated elements.
 
-When there are no more elements to yield, the `$arrayGenerator` issues the `switch_retire` instruction which simultaneously discards the generator's resources and communicates the `#end` sentinel value to the consumer. We also pass a dummy value of zero to comply with type safety requirements.
+When there are no more elements to yield, the `$arrayGenerator` issues the `switch_retire` instruction which simultaneously discards the generator's resources and communicates the end to the consumer by sending a null return stack reference. We also pass a dummy value of zero to comply with type safety requirements.
 
-Whenever a `switch` instruction is used, it must be followed by instructions that analyse the result of being resumed (switched back to). The top of the value stack contains the _command code_ that the consumer sent to the generator: it is either `#next` or `#cancel` depending on whether the consumer wants another value or wants to cancel the iteration.
-
-In addition, a newly constructed stack reference of the consumer is also on the value stack. This reference is stored in the `$consumer` local variable, replacing its previous value which is no longer valid.[^lift]
-
-[^lift]: We could shorten our code by lifting the handling of the `$consumer` reference out of the loop. We don't in this example because such a loop lifting is not always possible.
-
-Our example code handles the command code by a `br_table` instruction that either continues to the next block or arranges to exit the entire function.
+Whenever a `switch` instruction is used, it must be followed by instructions that store the return stack reference and use any sent values. In this example, the return stack reference is stored in the `$toConsumer` local variable, replacing its previous value which is no longer valid.
 
 >There is one aspect of building a generator that is not addressed by our code so far: how to start it. We will look at this in more detail as we look at the consumer side of yield-style generators next.
 
@@ -328,44 +334,69 @@ The consumer of a generator/consumer pair is typically represented as a `for` lo
 In WebAssembly, our `addAllElements` function creates the generator -- using the `stack.new` and `switch` instructions -- and employs a loop that repeatedly switches to it until the generator reports that there are no more elements. The code takes the form:
 
 ```wasm
-(func $addAllElements (param $count i32) (param $els i32) (result i32)
-  (local $total i32)
-  (local $generator (ref $genCmd))
-  (local.set $total (i32.const 0))
+(func $addAllElements (param $from i32) (param $to i32) (param $els i32) (result i32)
+  (local $total i32) ;; initialized to 0
+  (local $toGenerator (ref $toGenerator))
 
-  (switch $genCmd
-    (local.get $count)
-    (i32.const 0)
+  ;; create the generator stack and switch to it with the initialization parameters.
+  (switch $initArrayGen
+    (local.get $from)
+    (local.get $to)
     (local.get $els)
-    (stack.new $genCmd $arrayGenerator))
+    (stack.new $initArrayGen $arrayGenerator))
+  (local.set $toGenerator)
 
   (block $on-end
     (loop $l
-      (block $on-yield (result i32 (ref null $genCmd)) ;; from the generator
-        (br_table $on-yield $on-end)  ;; dispatch on sentinel
-      ) ;; the stack contains the generator and the yielded value
-      (local.get $total)  ;; next entry to add is already on the stack
+      (switch $toGenerator (local.get $toGenerator))
+      (br_on_null $on-end)     ;; check whether we have ended
+
+      (local.set $toGenertor)  ;; remember the new generator reference
+
+      ;; add the yielded value to the total
+      (local.get $total)
       (i32.add)
       (local.set $total)
-      (local.set $generator) ;; update the generator reference
-      (switch $genCmd
-        (local.get $generator)
-        (i32.const #next))
       (br $l)
     )
-  ) ;; ending the iteration
+  ) ;; $on-end
   (local.get $total)
-  (return)
 )
 ```
 
-The loop uses a `br_table` instruction to demultiplex on the result coming back from the generator, the two cases it is looking for are `#next` and `#end`. If an `#end` is sent, then the whole loop is terminated; otherwise, the `#yield`ed value is added to the running total.
+The loop uses a `br_on_null` instruction to determine when the generator has signaled the end by retiring and producing a null stack reference.
 
-Our particular consumer never sends the `#cancel` event to the generator; but other situations may call for it.
+#### Simplifying initialization with `stack.bind`
 
-The way that our example is written, if the generator sees an event it is not expecting it will interpret it as a `#cancel` event. Similarly, if the generator suspends with anything other than `#yield`, the consumer code will interpret it as the equivalent of `#end`. A more robust implementation would likely raise exceptions in either of these cases.
+Initializing the generator in this example required two stack switches and two additional stack types just to move the initialization values into the generator stack. This initialization can be simplified using the `stack.bind` instruction:
 
-There is one aspect of this code that is less than perfect: the very first time that the `$arrayGenerator` function is entered -- via the `switch` instruction immediately following `stack.new` -- there is no verification that the consumer actually wants the first element. Thereafter, when the generator is continued by the consumer, a check is made for whether the consumer is trying to find the `#next` element or trying to `#cancel` the generator. This automatic generation of the first element is not consistent with how many languages use yield-style generators: languages often use an explicit `.next` call on an iterator object to get each element.
+```wasm
+
+;; no separate stack type necessary for finishing initialization.
+(type $initArrayGen (stack (param $from i32) (param $to i32) (param $els i32) (param (ref $toConsumer))))
+
+(func $arrayGenerator (param $from i32) (param $to i32) (param $els i32) (param $toConsumer (ref $toConsumer))
+
+  ;; no switch necessary to finish initialization.
+
+  (block $on-end ...
+)
+
+(func $addAllElements (param $from i32) (param $to i32) (param $els i32) (result i32)
+  (local $total i32) ;; initialized to 0
+  (local $toGenerator (ref $toGenerator))
+
+  ;; create the generator stack and partially apply the initialization parameters.
+  (stack.bind $initArrayGen $toGenerator
+    (local.get $from)
+    (local.get $to)
+    (local.get $els)
+    (stack.new $initArrayGen $arrayGenerator))
+  (local.set $toGenerator)
+
+  (block $on-end ...
+)
+```
 
 #### Flattening Communication
 
