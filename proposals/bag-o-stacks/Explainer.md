@@ -134,9 +134,9 @@ absheaptype ::= ... | stack | nostack
 
 ### Life-cycle of a coroutine
 
-A coroutine is started using the `stack.new_switch` instruction. This performs the equivalent of a function call – on a new stack resource. In addition to the arguments normally expected in a function call, an additional argument is provided that is a stack reference to the caller code -- the caller is suspended as a result of the `stack.new_switch` instruction.
+A coroutine is allocated in the suspended state using the `stack.new` instruction. The initial `switch` to the newly allocated coroutine performs the equivalent of a function call on the new stack resource. In addition to the arguments provided to the `switch`, an additional argument is provided that is a stack reference to the caller code -- the caller is suspended as a result of the `switch` instruction.
 
-During the normal execution of a coroutine, it is expected that it will switch to other coroutines -- using `switch` instructions. It is only possible for a WebAssembly code to switch to a coroutine if the code has available to it the stack reference of the associated suspended coroutine.
+During the normal execution of a coroutine, it is expected that it will switch to other coroutines using further `switch` instructions. It is only possible for a WebAssembly code to switch to a coroutine if the code has available to it the stack reference of the associated suspended coroutine.
 
 This direct access aspect implies that higher-level programming language features that rely on dynamic scoping must be realized using other facilities of WebAssembly. For one such approach, we refer the reader to [this proposal](dynamic scoping url).
 
@@ -160,7 +160,7 @@ Once a stack reference has been used to `switch` to its identified coroutine, it
 
 #### Coroutine identity
 
-Coroutines do not have a specific identity in this proposal. Instead, a stack reference denotes the particular state of a suspended coroutine. This token is only created when switching from a coroutine or when a `stack.new_switch` instruction is executed to create a new coroutine.
+Coroutines do not have a specific identity in this proposal. Instead, a stack reference denotes the particular state of a suspended coroutine. This token is only created when switching from a coroutine or when a `stack.new` instruction is executed to create a new coroutine.
 
 >It is not possible for WebAssembly code to discover which coroutine it is running on; indeed the currently active coroutine has no valid stack reference. One consequence of this design is that when a WebAssembly function calls another function from another module (say), that module cannot discover the identity of the coroutine and misuse it. Overall, this is in keeping with a capability-based approach to resource management.
 
@@ -173,17 +173,17 @@ We introduce instructions for creating, switching between, and retiring stacks.
 ### `stack.new` Create a new stack
 
 ```pseudo
-  C |- stack.new x y : t_1* -> (ref x)
-  -- expand(C.TYPES[x]) = stack t_2* rt
-  -- expand(C.FUNCS[y]) = func t_1* t_2* rt -> []
+  C |- stack.new x y : [] -> (ref x)
+  -- expand(C.TYPES[x]) = stack t* rt
+  -- expand(C.FUNCS[y]) = func t* rt -> []
 ```
 
-`stack.new` takes two immediates: a type index `x` and a function index `y`. It is valid with type `t_1* -> (ref x)` iff:
+`stack.new` takes two immediates: a type index `x` and a function index `y`. It is valid with type `[] -> (ref x)` iff:
 
- - The expansion of the type at index `x` is a stack type with parameters `t_2* rt`.
- - The expansion of the type of the function at index `y` is a function type `t_1* t_2* rt -> []`.
+ - The expansion of the type at index `x` is a stack type with parameters `t* rt`.
+ - The expansion of the type of the function at index `y` is a function type `t* rt -> []`.
 
-Let `f` be the function at index `y`. `stack.new` takes a prefix of the arguments necessary to call `f` and allocates a new suspended stack that expects to receive the remaining arguments, determined by the type of the allocated stack. Once the allocated stack is switched to, it will continue on to call `f` with the arguments provided to `stack.new`, the arguments provided to the instruction that performed the switch, and a reference to the previous active stack or a null value if the previous active stack has been retired.
+Let `f` be the function at index `y`. `stack.new` allocates a new suspended stack that expects to receive the arguments for `f`. Once the allocated stack is switched to, it will continue on to call `f` with the provided arguments and a reference to the previous active stack, or a null value if the previous active stack has been retired.
 
 ### `switch` Switch to a stack
 
@@ -202,25 +202,6 @@ If its stack reference operand is null or detached, `switch` traps. Otherwise, `
 
 > TODO: Describe checking whether a switch is allowed and trapping if it is not.
 
-### `stack.new_switch` Create and switch to a new stack
-
-```pseudo
-  C |- stack.new_switch x_1 y : t_1* -> t_2* rt
-  -- expand(C.TYPES[x_1]) = stack t_1* (ref null? x_2)
-  -- expand(C.FUNCS[y]) = func t_1* (ref null? x_2) -> []
-  -- expand(C.TYPES[x_2]) = stack t_2* rt
-```
-
-`stack.new_switch` takes two immmediates: a type index `x_1` and a function index `y`. It is valid with type `t_1* -> t_2* rt` iff:
-
- - The expansion of the type at index `x_1` is a stack type with parameters `t_1* (ref null? x_2)`.
- - The expansion of the type of the function at index `y` is a function type `t_1* (ref null? x_2) -> []`
- - The expansion of the type at index `x_2` is a stack type with parameters `t_2* rt`
-
-`stack.new_switch x_1 y` both allocates a new stack and switches to it. It is equivalent to `(stack.new x y) (switch x)`, but engines should be able to implement it more efficiently because it calls the function immediately without having to stage the arguments anywhere.
-
-> TODO: Consider having `stack.new` take a suffix of the function arguments (except for the return stack reference) rather than a prefix, which would allow us to generalize the validation here to allow the stack type parameters to be a suffix of the function type parameters, while still maintaing the equivalence to `(stack.new x y) (switch x)`. This change may also have performance benefits because the arguments provided at switch time would be able to go in the initial argument registers no matter how many total arguments there are.
-
 ### `switch_retire` Switch to a stack and retire the old stack
 
 ```pseudo
@@ -234,14 +215,22 @@ If its stack reference operand is null or detached, `switch` traps. Otherwise, `
 
 `switch_retire` is very much like `switch`, except that it requires the target stack to be expecting a nullable stack reference and that instead of sending a reference to the previous active stack, it sends a null reference. This makes the previous active stack unreachable and potentially allows the engine to reclaim its resources eagerly. Since the previous active stack can never be resumed and the instructions following the `switch_retire` can never be executed, this instruction is valid with any result type.
 
-### Other instructions
+### `stack.bind` Partial application of stack arguments
 
-We may choose to add other instructions to the proposal to round out the instruction set or if there is specific demand for them. Potential additions include:
+```pseudo
+  C |- stack.bind x y : t_1* (ref null x) -> (ref y)
+  -- expand(C.TYPES[x]) = stack t_1* t_2* rt
+  -- epxand(C.TYPES[y]) = stack t_2* rt
+```
 
- - `stack.new_ref` and `stack.new_switch_ref`: variants of `stack.new` and `stack.new_switch` that take function reference operands instead of function index immediates. The latter instructions can be specified in terms of the `*_ref` variants, but the `*_ref` variants would be less efficient in real implementations.
- - `switch_throw`: Switch to a stack and throw an exception rather than sending the expected values.
- - `return_switch`: Combines a `return_call` with a stack switch.
- - `return_switch_throw`: Combines both of the above.
+`stack.bind` takes two immediates: type indices `x` and `y`. It is valid with type `t_1* (ref null x) -> (ref y)` iff:
+
+ - The expansion of the type at index `x` is a stack type with parameters `t_1* t_2* rt`.
+ - The expansion of the type at index `y` is a stack type with parameters `t_2* rt`.
+
+ `stack.bind` takes a prefix of the arguments expected by a stack of type `x` as well as a reference to such a stack. It binds the provided arguments to the stack and returns a new stack reference to the same underlying stack, now expecting only the remaining, unbound arguments. Detaches all outstanding references to the stack.
+
+> Note: `stack.bind` is implementable in userspace either by bundling the bound values with the continuation or by introducing intermediate stack types that allow the values to be bound incrementally over the course of multiple switches to the target stack.
 
 ## Examples
 
@@ -289,46 +278,52 @@ where $genCmd has a single i32 which contains the command to the generator, and 
 In this example, we implement an extremely minimal generator: one which iterates over the elements of an `i32` array. The array is assumed to lie in linear memory, and we pass to the generator function the address of the base of the array, where to start the iteration and the number of elements in it:
 
 ```wasm
-(func $arrayGenerator (param $consumer (ref $genResp))
-  (param $from i32) (param $to i32) (param $els i32)
+(rec
+  ;; generic types for any generator of i32s
+  (type $toConsumer (stack (param $val i32) (param (ref null $toGenerator))))
+  (type $toGenerator (stack (param (ref $toConsumer))))
+)
 
-  (block $on-cancel
+;; types to initialize the array generator specifically
+(type $finishInit (stack (param (ref $toGenerator))))
+(type $initArrayGen (stack (param $from i32) (param $to i32) (param $els i32) (param (ref $finishInit))))
+
+(func $arrayGenerator (param $from i32) (param $to i32) (param $els i32) (param $finishInit (ref $finishInit))
+  (local $toConsumer (ref $toConsumer))
+
+  ;; switch back to the consumer now that $from, $to, and $els have been initialized.
+  (switch $finishInitArrayGen (local.get $finishInit))
+  (local.set $toConsumer)
+
+  (block $on-end
     (loop $l
-      (br_if $on-cancel (i32.ge (local.get $from) (local.get $to)))
+      (br_if $on-end (i32.ge (local.get $from) (local.get $to)))
 
-      (block $on-next (ref $genResp) ;; set up for the switch on next
-        (switch (local.get $consumer)
-                (i32.load (i32.add (local.get $els)
-                          (i32.mul (local.get $from)
-                                   (i32.const 4))))
-                (i32.const #yield))
-        (br_table $on-next $on-cancel)
-      )
-      (drop)                           ;; drop the dummy padding
-      (local.set $consumer)            ;; remember the consumer
+      (switch $toConsumer             ;; load and yield a value to the consumer
+        (i32.load (i32.add (local.get $els)
+                           (i32.mul (local.get $from)
+                                    (i32.const 4))))
+        (i32.const 0)                 ;; not end
+        (local.get $toConsumer))
+      (local.set $toConsumer)         ;; remember the consumer
+
+      ;; continue to the next element
       (local.set $from (i32.add (local.get $from) (i32.const 1)))
       (br $l)
     )
-  ) ;; $on-cancel
+  ) ;; $on-end
 
   (switch_retire
-    (local.get $consumer)
-    (i32.const 0)                     ;; dummy
-    (i32.const #end))                 ;; no more results
+    (i32.const 0)                     ;; dummy value
+    (local.get $consumer))
 )
 ```
 
-Whenever the `$arrayGenerator` function yields -- including when it finally finishes -- it returns three values: a new stack reference that allows the consumer to resume the generator, the value being yielded together with a sentinel which encodes whether this is a normal `#yield` or the `#end` marker. Since the sentinel is the second parameter in the response, it is pushed on the value stack last, which means it will be the top of stack when the consumer inspects the result.
+Whenever the `$arrayGenerator` function yields after its initialization -- including when it finally finishes -- it returns three values: a new stack reference that allows the consumer to resume the generator, the value being yielded together with a sentinel which encodes whether this is a normal yield or the end of the generated elements.
 
-When there are no more elements to yield, the `$arrayGenerator` issues the `switch_retire` instruction which simultaneously discards the generator's resources and communicates the `#end` sentinel value to the consumer. We also pass a dummy value of zero to comply with type safety requirements.
+When there are no more elements to yield, the `$arrayGenerator` issues the `switch_retire` instruction which simultaneously discards the generator's resources and communicates the end to the consumer by sending a null return stack reference. We also pass a dummy value of zero to comply with type safety requirements.
 
-Whenever a `switch` instruction is used, it must be followed by instructions that analyse the result of being resumed (switched back to). The top of the value stack contains the _command code_ that the consumer sent to the generator: it is either `#next` or `#cancel` depending on whether the consumer wants another value or wants to cancel the iteration.
-
-In addition, a newly constructed stack reference of the consumer is also on the value stack. This reference is stored in the `$consumer` local variable, replacing its previous value which is no longer valid.[^lift]
-
-[^lift]: We could shorten our code by lifting the handling of the `$consumer` reference out of the loop. We don't in this example because such a loop lifting is not always possible.
-
-Our example code handles the command code by a `br_table` instruction that either continues to the next block or arranges to exit the entire function.
+Whenever a `switch` instruction is used, it must be followed by instructions that store the return stack reference and use any sent values. In this example, the return stack reference is stored in the `$toConsumer` local variable, replacing its previous value which is no longer valid.
 
 >There is one aspect of building a generator that is not addressed by our code so far: how to start it. We will look at this in more detail as we look at the consumer side of yield-style generators next.
 
@@ -336,46 +331,72 @@ Our example code handles the command code by a `br_table` instruction that eithe
 
 The consumer of a generator/consumer pair is typically represented as a `for` loop in high level languages. However, we need to go 'under the covers' a little in order to realize our example.
 
-In WebAssembly, our `addAllElements` function creates the generator -- using the `stack.new_switch` instruction -- and employs a loop that repeatedly switches to it until the generator reports that there are no more elements. The code takes the form:
+In WebAssembly, our `addAllElements` function creates the generator -- using the `stack.new` and `switch` instructions -- and employs a loop that repeatedly switches to it until the generator reports that there are no more elements. The code takes the form:
 
 ```wasm
-(func $addAllElements (param $count i32) (param $els i32) (result i32)
-  (local $total i32)
-  (local $generator (ref $genCmd))
-  (local.set $total (i32.const 0))
+(func $addAllElements (param $from i32) (param $to i32) (param $els i32) (result i32)
+  (local $total i32) ;; initialized to 0
+  (local $toGenerator (ref $toGenerator))
 
-  (stack.new_switch $arrayGenerator $genCmd
-     (local.get $count)
-     (i32.const 0)
-     (local.get $els))
+  ;; create the generator stack and switch to it with the initialization parameters.
+  (switch $initArrayGen
+    (local.get $from)
+    (local.get $to)
+    (local.get $els)
+    (stack.new $initArrayGen $arrayGenerator))
+  (local.set $toGenerator)
 
   (block $on-end
     (loop $l
-      (block $on-yield (i32 (ref null $genCmd)) ;; from the generator
-        (br_table $on-yield $on-end)  ;; dispatch on sentinel
-      ) ;; the stack contains the generator and the yielded value
-      (local.get $total)  ;; next entry to add is already on the stack
+      (switch $toGenerator (local.get $toGenerator))
+      (br_on_null $on-end)     ;; check whether we have ended
+
+      (local.set $toGenerator)  ;; remember the new generator reference
+
+      ;; add the yielded value to the total
+      (local.get $total)
       (i32.add)
       (local.set $total)
-      (local.set $generator) ;; update the generator reference
-      (switch $genCmd
-        (local.get $generator)
-        (i32.const #next))
       (br $l)
     )
-  ) ;; ending the iteration
+  ) ;; $on-end
   (local.get $total)
-  (return)
 )
 ```
 
-The loop uses a `br_table` instruction to demultiplex on the result coming back from the generator, the two cases it is looking for are `#next` and `#end`. If an `#end` is sent, then the whole loop is terminated; otherwise, the `#yield`ed value is added to the running total.
+The loop uses a `br_on_null` instruction to determine when the generator has signaled the end by retiring and producing a null stack reference.
 
-Our particular consumer never sends the `#cancel` event to the generator; but other situations may call for it.
+#### Simplifying initialization with `stack.bind`
 
-The way that our example is written, if the generator sees an event it is not expecting it will interpret it as a `#cancel` event. Similarly, if the generator suspends with anything other than `#yield`, the consumer code will interpret it as the equivalent of `#end`. A more robust implementation would likely raise exceptions in either of these cases.
+Initializing the generator in this example required two stack switches and two additional stack types just to move the initialization values into the generator stack. This initialization can be simplified using the `stack.bind` instruction:
 
-There is one aspect of this code that is less than perfect: the very first time that the `$arrayGenerator` function is entered -- via the `stack.new_switch` instruction -- there is no verification that the consumer actually wants the first element. Thereafter, when the generator is continued by the consumer, a check is made for whether the consumer is trying to find the `#next` element or trying to `#cancel` the generator. This automatic generation of the first element is not consistent with how many languages use yield-style generators: languages often use an explicit `.next` call on an iterator object to get each element.
+```wasm
+
+;; no separate stack type necessary for finishing initialization.
+(type $initArrayGen (stack (param $from i32) (param $to i32) (param $els i32) (param (ref $toConsumer))))
+
+(func $arrayGenerator (param $from i32) (param $to i32) (param $els i32) (param $toConsumer (ref $toConsumer))
+
+  ;; no switch necessary to finish initialization.
+
+  (block $on-end ...
+)
+
+(func $addAllElements (param $from i32) (param $to i32) (param $els i32) (result i32)
+  (local $total i32) ;; initialized to 0
+  (local $toGenerator (ref $toGenerator))
+
+  ;; create the generator stack and partially apply the initialization parameters.
+  (stack.bind $initArrayGen $toGenerator
+    (local.get $from)
+    (local.get $to)
+    (local.get $els)
+    (stack.new $initArrayGen $arrayGenerator))
+  (local.set $toGenerator)
+
+  (block $on-end ...
+)
+```
 
 #### Flattening Communication
 
@@ -507,8 +528,11 @@ Like stack functions, fiber functions have an extra argument: which is a referen
    (return i32)
   (local $total i32)
 
-  (stack.new_switch $arrayGenerator $genResp
-    (local.get $els) (local.get $from) (local.get $to))
+  (switch $genResp
+    (local.get $els)
+    (local.get $from)
+    (local.get $to)
+    (stack.new $genResp $arrayGenerator))
 
   (block $on-end
     (loop $l
@@ -698,6 +722,15 @@ JSPI can be used to implement coroutine language features. However, this carries
 
 A legitimate question remains of whether it is possible to polyfill JSPI in terms of coroutines. It definitely is possible to do so, albeit involving substantial amounts of extra JavaScript and WebAssembly code.
 
+### What other instructions might we want to include in this proposal?
+
+We may choose to add other instructions to the proposal to round out the instruction set or if there is specific demand for them. Potential additions include:
+
+ - `stack.new_ref`: a variant of `stack.new` that takes a function reference operand instead of a function index immediate. The latter instructions can be specified in terms of the `*_ref` variants, but the `*_ref` variants would be less efficient in real implementations.
+ - `switch_throw`: Switch to a stack and throw an exception rather than sending the expected values. This can instead be accomplished by sending a sentinel value that informs the recipient that it should throw an exception itself, but `switch_throw` would be more direct.
+ - `return_switch`: Combines a `return_call` with a stack switch. Returns out of the current frame, switches to another stack, and calls into a new function once control returns to the original stack. This may end up being useful in combination with shared-everything threads, where creating shareable stack references would require careful management of the kinds of frames on the stack.
+ - `return_switch_throw`: Combines both of the above.
+
 ### Why are we using 'lexical scoping' rather than 'dynamic scoping'
 
 A key property of this design is that, in order for a WebAssembly program to switch between coroutines, the target of the switch is explicitly identified. This so-called lexical scoping approach is in contrast with a dynamic approach -- commonly used for exception handling -- where the engine is expected to search the current evaluation context to decide where to suspend to (say).
@@ -789,7 +822,7 @@ Implementing this proposal in a production engine raises some issues: how are st
 
 #### Growing stacks
 
-When a new coroutine is established, using the `stack.new_switch` instruction, the engine must also allocate memory to allow the stack frames of functions to be stored. Normally, we expect the `stack.new_switch` instruction to result in a new stack allocation and for subsequence function calls to be executed on this new stack memory. This allows for a rapid switch between coroutines since we can switch simply by ensuring that the `SP` register of the processor points to the new target.
+When a new coroutine is established, using the `stack.new` instruction, the engine must also allocate memory to allow the stack frames of functions to be stored. Normally, we expect the `stack.new` instruction to result in a new stack allocation and for subsequence function calls to be executed on this new stack memory. This allows for a rapid switch between coroutines since we can switch simply by ensuring that the `SP` register of the processor points to the new target.
 
 The engine also has to decide how much memory to allocate, and there also needs to be a strategy for dealing with the case when that memory is exhausted. The primary issue here is to determine how much memory to allocate for the newly created stack. It is not feasible in many cases to allocate a large block for each coroutine: if an application uses large numbers of coroutines then this can result in a lot of wasted memory. In addition, it is quite likely that most coroutines will have very small memory requirements; and only a few needing larger memories.
 
