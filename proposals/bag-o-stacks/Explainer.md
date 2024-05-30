@@ -314,8 +314,8 @@ In this example, we implement an extremely minimal generator: one which iterates
   ) ;; $on-end
 
   (switch_retire
-    (local.get $consumer)
-    (i32.const 0))                    ;; dummy value
+    (i32.const 0)                     ;; dummy value
+    (local.get $consumer))
 )
 ```
 
@@ -351,7 +351,7 @@ In WebAssembly, our `addAllElements` function creates the generator -- using the
       (switch $toGenerator (local.get $toGenerator))
       (br_on_null $on-end)     ;; check whether we have ended
 
-      (local.set $toGenertor)  ;; remember the new generator reference
+      (local.set $toGenerator)  ;; remember the new generator reference
 
       ;; add the yielded value to the total
       (local.get $total)
