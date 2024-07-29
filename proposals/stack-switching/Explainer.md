@@ -62,8 +62,8 @@ We add two new continuation heap types and their subtyping hierachy:
         - and `te2* = []`
 
 - `resume_throw <typeidx> <exnidx> (on <tagidx> <labelidx>|switch)*`
-- Execute a given continuation, but force it to immediately handle the annotated exception.
-- Used to abort a continuation.
+  - Execute a given continuation, but force it to immediately handle the annotated exception.
+  - Used to abort a continuation.
   - `resume_throw $ct $e (on $t H)* : [te* (ref null? $ct)] -> [t2*]`
     - iff `C.types[$ct] = cont $ft`
     - and `C.types[$ft] = [t1*] -> [t2*]`
