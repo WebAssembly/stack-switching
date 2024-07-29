@@ -11,7 +11,7 @@ TODO
 
 This proposal is based on the [function references proposal](https://github.com/WebAssembly/function-references) and [exception handling proposal](https://github.com/WebAssembly/exception-handling).
 
-`cont <typeidx>` is a new form of defined type
+`cont <typeidx>` is a new form of composite type
 - `(cont $ft) ok` iff `$ft ok` and `$ft = [t1*] -> [t2*]`
 
 We add two new continuation heap types and their subtyping hierachy:
@@ -58,11 +58,12 @@ We add two new continuation heap types and their subtyping hierachy:
         - and `(C.types[$ct'] = cont $ft')*`
         - and `([te2*] -> [t2*] <: C.types[$ft'])*`
       - or `H = switch`
-        - and `te1* <: t2*`
         - and `te2* = []`
+        - and `te1* <: t2*`
+
 
 - `resume_throw <typeidx> <exnidx> (on <tagidx> <labelidx>|switch)*`
-  - Execute a given continuation, but force it to immediately handle the annotated exception.
+  - Execute a given continuation, but force it to immediately throw the annotated exception.
   - Used to abort a continuation.
   - `resume_throw $ct $e (on $t H)* : [te* (ref null? $ct)] -> [t2*]`
     - iff `C.types[$ct] = cont $ft`
@@ -78,8 +79,8 @@ We add two new continuation heap types and their subtyping hierachy:
         - and `(C.types[$ct'] = cont $ft')*`
         - and `([te2*] -> [t2*] <: C.types[$ft'])*`
       - or `H = switch`
-        - and `te1* <: t2*`
         - and `te2* = []`
+        - and `te1* <: t2*`
 
 - `switch <typeidx> <tagidx>`
 - Switch to executing a given continuation directly, suspending the current execution.
