@@ -58,9 +58,8 @@ We add two new continuation heap types and their subtyping hierachy:
         - and `(C.types[$ct'] = cont $ft')*`
         - and `([te2*] -> [t2*] <: C.types[$ft'])*`
       - or `H = switch`
-        - and `te2* = []`
-        - and `te1* <: t2*`
-
+        - and `te1* = []`
+        - and `te2* <: t2*`
 
 - `resume_throw <typeidx> <exnidx> (on <tagidx> <labelidx>|switch)*`
   - Execute a given continuation, but force it to immediately throw the annotated exception.
@@ -87,7 +86,7 @@ We add two new continuation heap types and their subtyping hierachy:
   - The suspension and switch are performed from the perspective of a parent `switch` handler, determined by the annotated tag.
   - `switch $ct1 $e : t1* (ref null $ct1) -> t2*`
     - iff `C.tags[$e] : tag $ft`
-    - and `C.types[$ft] : [t*] -> []`
+    - and `C.types[$ft] : [] -> [t*]`
     - and `C.types[$ct1] = cont $ft1`
     - and `C.types[$ft1] = [t1* (ref null? $ct2)] -> [te1*]`
     - and `te1* <: t*`
