@@ -93,7 +93,6 @@ We add two new continuation heap types and their subtyping hierachy:
     - and `te1* <: t*`
     - and `C.types[$ct2] = cont $ft2`
     - and `C.types[$ft2] = [t2*] -> [te2*]`
-    - and `te2* <: t*`
 
 ### Binary format
 The binary format is modified as follows:
