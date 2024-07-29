@@ -2,9 +2,12 @@
 TODO
 
 ## Table of contents
-TODO
 
-## Specification Changes
+1. [Specification changes](#specification-changes)
+   1. [Instructions](#instructions)
+   2. [Binary format](#binary-format)
+
+## Specification changes
 
 This proposal is based on the [function references proposal](https://github.com/WebAssembly/function-references) and [exception handling proposal](https://github.com/WebAssembly/exception-handling).
 
@@ -91,17 +94,34 @@ We add two new continuation heap types and their subtyping hierachy:
     - and `C.types[$ft2] = [t2*] -> [te2*]`
     - and `te2* <: t*`
 
-## Binary encoding
+### Binary format
 The binary format is modified as follows:
 
-```
-types  ::= TODO
+#### Composite types
 
-instr ::= ...
-        | 0xTODO  =>  cont.new
-        | 0xTODO  =>  cont.bind
-        | 0xTODO  =>  suspend
-        | 0xTODO  =>  resume
-        | 0xTODO  =>  resume_throw
-        | 0xTODO  =>  switch
-```
+| Opcode | Type            | Parameters | Note |
+| ------ | --------------- | ---------- |------|
+| -0x20  | `func t1* t2*`  | `t1* : vec(valtype)` `t2* : vec(valtype)` | from Wasm 1.0 |
+| -0x23  | `cont $ft`      | `$ft : typeidx` | new |
+
+#### Heap Types
+
+The opcode for heap types is encoded as an `s33`.
+
+| Opcode | Type            | Parameters | Note |
+| ------ | --------------- | ---------- | ---- |
+| i >= 0 | i               |            | from function-references |
+| -0x0b  | `nocont`        |            | new  |
+| -0x18  | `cont`          |            | new  |
+
+### Instructions
+
+| Opcode | Instruction              | Immediates |
+| ------ | ------------------------ | ---------- |
+| 0xe0   | `cont.new $ct`           | `$ct : u32` |
+| 0xe1   | `cont.bind $ct $ct'`     | `$ct : u32`, `$ct' : u32` |
+| 0xe2   | `suspend $t`             | `$t : u32` |
+| 0xe3   | `resume $ct (on $t $h)*` | `$ct : u32`, `($t : u32 and $h : u32)*` |
+| 0xe4   | `resume_throw $ct $e (on $t $h)` | `$ct : u32`, `$e : u32`, `($t : u32 and $h : u32)*` |
+| 0xTODO | `switch`                 | TODO |
+
