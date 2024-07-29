@@ -17,14 +17,14 @@ TODO
     - iff `C.types[$ct] = cont $ft`
     - and `C.types[$ft] = [t1*] -> [t2*]`
 
-- `cont.bind <typeidx>`
+- `cont.bind <typeidx> <typeidx>`
   - Partially apply a continuation.
-  - `cont.bind $ct : [t3* (ref null? $ct')] -> [(ref $ct)]`
-    - iff `C.types[$ct] = cont $ft`
-    - and `C.types[$ft] = [t1*] -> [t2*]`
-    - and `C.types[$ct'] = cont $ft'`
-    - and `C.types[$ft'] = [t1'* t3*] -> [t2'*]`
-    - and `[t1'*] -> [t2'*] <: [t1*] -> [t2*]`
+  - `cont.bind $ct $ct' : [t3* (ref null? $ct)] -> [(ref $ct')]`
+    - iff `C.types[$ct'] = cont $ft'`
+    - and `C.types[$ft'] = [t1'*] -> [t2'*]`
+    - and `C.types[$ct] = cont $ft`
+    - and `C.types[$ft] = [t1* t3*] -> [t2*]`
+    - and `[t1*] -> [t2*] <: [t1'*] -> [t2'*]`
   - note - currently binding from right as discussed in https://github.com/WebAssembly/stack-switching/pull/53
 
 - `suspend <tagidx>`
