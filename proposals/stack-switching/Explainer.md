@@ -6,8 +6,15 @@ TODO
 
 ## Specification Changes
 
+This proposal is based on the [function references proposal](https://github.com/WebAssembly/function-references) and [exception handling proposal](https://github.com/WebAssembly/exception-handling).
+
 `cont <typeidx>` is a new form of defined type
 - `(cont $ft) ok` iff `$ft ok` and `$ft = [t1*] -> [t2*]`
+
+We add two new continuation heap types and their subtyping hierachy:
+- `heaptypes ::= ... | cont | nocont`
+- `nocont ok` and `cont ok` always
+- `nocont` is the bottom type of continuation types, whereas `cont` is the top type, i.e. `nocont <: cont`
 
 ### Instructions
 
