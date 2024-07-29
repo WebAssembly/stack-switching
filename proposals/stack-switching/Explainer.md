@@ -4,7 +4,12 @@ TODO
 ## Table of contents
 TODO
 
-## Instructions
+## Specification Changes
+
+`cont <typeidx>` is a new form of defined type
+- `(cont $ft) ok` iff `$ft ok` and `$ft = [t1*] -> [t2*]`
+
+### Instructions
 
 - `cont.new <typeidx>`
   - Create a new continuation from a given typed funcref.
@@ -69,4 +74,16 @@ TODO
     - and `te2* <: t*`
 
 ## Binary encoding
-TODO
+The binary format is modified as follows:
+
+```
+types  ::= TODO
+
+instr ::= ...
+        | 0xTODO  =>  cont.new
+        | 0xTODO  =>  cont.bind
+        | 0xTODO  =>  suspend
+        | 0xTODO  =>  resume
+        | 0xTODO  =>  resume_throw
+        | 0xTODO  =>  switch
+```
