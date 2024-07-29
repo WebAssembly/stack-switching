@@ -36,7 +36,7 @@ TODO
 - `resume <typeidx> (on <tagidx> <labelidx>|switch)*`
   - Execute a given continuation.
     - If the executed continuation suspends with a tagged signal `$t`, the corresponding handler `(tag $t H)` is executed.
-  - `resume $ct (tag $t H)* : [t1* (ref null? $ct)] -> [t2*]`
+  - `resume $ct (on $t H)* : [t1* (ref null? $ct)] -> [t2*]`
     - iff `C.types[$ct] = cont $ft`
     - and `C.types[$ft] = [t1*] -> [t2*]`
     - and for each `(tag $t H)`:
@@ -51,14 +51,25 @@ TODO
         - and `te1* <: t2*`
         - and `te2* = []`
 
-- `resume_throw <typeidx> <exnidx>`
+- `resume_throw <typeidx> <exnidx> (on <tagidx> <labelidx>|switch)*`
 - Execute a given continuation, but force it to immediately handle the annotated exception.
 - Used to abort a continuation.
-  - resume_throw $ct $e : `[te* (ref null? $ct)] -> [t2*]`
+  - resume_throw $ct $e (on $t H)* : `[te* (ref null? $ct)] -> [t2*]`
     - iff `C.types[$ct] = cont $ft`
     - and `C.types[$ft] = [t1*] -> [t2*]`
     - and `C.tags[$e] : tag $ft1`
     - and `C.types[$ft1] : [te*] -> []`
+    - and for each `(tag $t H)`:
+      - `C.tags[$t] : tag $ft`
+      - and `C.types[$ft] : [te1*] -> [te2*]`
+      - and either `H = $l`
+        - and `C.labels[$l] = [te1'* (ref null? $ct')])*` 
+        - and `([te1*] <: [te1'*])*`
+        - and `(C.types[$ct'] = cont $ft')*`
+        - and `([te2*] -> [t2*] <: C.types[$ft'])*`
+      - or `H = switch`
+        - and `te1* <: t2*`
+        - and `te2* = []`
 
 - `switch <typeidx> <tagidx>`
 - Switch to executing a given continuation directly, suspending the current execution.
