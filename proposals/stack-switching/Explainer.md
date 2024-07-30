@@ -83,7 +83,7 @@ TODO(dhil): Change dispatch list syntax to `(on ...)`.
     (local $n i32) ;; current value
     (local $s i32) ;; accumulator
     (local $k (ref $ct)) ;; the continuation of the generator
-    ;; allocate the initial continuation, viz execution stack, to run the generator `nats`
+    ;; allocate the initial continuation, viz. execution stack, to run the generator `nats`
     (local.set $k (cont.new $ct (ref.func $nats)))
     (loop $consume-next
       (block $on_yield (result i32 (ref $ct))
