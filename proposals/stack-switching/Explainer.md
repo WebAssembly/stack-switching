@@ -22,6 +22,8 @@ We add two new continuation heap types and their subtyping hierachy:
 
 ### Instructions
 
+The new instructions and their validation rules are as follows.
+
 - `cont.new <typeidx>`
   - Create a new continuation from a given typed funcref.
   - `cont.new $ct : [(ref null? $ft)] -> [(ref $ct)]`
@@ -96,7 +98,8 @@ We add two new continuation heap types and their subtyping hierachy:
     - and `te2* <: t*`
 
 ### Binary format
-The binary format is modified as follows:
+
+We extend the binary format of composite types, heap types, and instructions.
 
 #### Composite types
 
@@ -124,5 +127,5 @@ The opcode for heap types is encoded as an `s33`.
 | 0xe2   | `suspend $t`             | `$t : u32` |
 | 0xe3   | `resume $ct (on $t $h)*` | `$ct : u32`, `($t : u32 and $h : u32)*` |
 | 0xe4   | `resume_throw $ct $e (on $t $h)` | `$ct : u32`, `$e : u32`, `($t : u32 and $h : u32)*` |
-| 0xTODO | `switch`                 | TODO |
+| 0xe5   | `switch $ct $e`          | `$ct : u32`, `$e : u32` |
 
