@@ -29,11 +29,13 @@ In this section we give a series of examples illustrating possible encodings of 
 ### Yield-style generators
 
 ```c
+// Producer: a stream of naturals
 void nats() {
   int32_t i = 0;
   for (;; i++) Yield(i); // supposed control name for yielding control with payload `i` to the surrounding context
 }
 
+// Consumer: sums up some slice of the `nats` stream
 int32_t sumUp(int32_t upto) {
   int32_t n = 0, // current value
           s = 0; // accumulator
@@ -43,12 +45,14 @@ int32_t sumUp(int32_t upto) {
          n = i;  // save the current value
          s += n; // update the accumulator
          continue;
-       default:
+       default: // `nats` returned
           return s;
     }
   }
   return s;
 }
+
+sumUp(10); // returns 55
 ```
 
 TODO(dhil): Change dispatch list syntax to `(on ...)`.
@@ -58,13 +62,14 @@ TODO(dhil): Change dispatch list syntax to `(on ...)`.
   (type $ct (cont $ft)) ;; cont [] -> []
 
   ;; Control name declaration
-  (tag $gen (param i32)) ;; i32 -> []
+  (tag $yield (param i32)) ;; i32 -> []
 
-  ;; The producer: a stream of naturals.
+  ;; Producer: a stream of naturals
   (func $nats
     (local $i i32) ;; zero-initialised local
     (loop $produce-next
-      (suspend $gen (local.get $i))
+      (suspend $yield (local.get $i)) ;; yield control with payload `i` to the surrounding context
+      ;; compute the next natural
       (local.set $i
         (i32.add (local.get $i)
                  (i32.const 1)))
@@ -73,21 +78,26 @@ TODO(dhil): Change dispatch list syntax to `(on ...)`.
   )
   (elem declare func $nats)
 
-  ;; The consumer: sums up the numbers in a given stream slice.
+  ;; Consumer: sums up some slice of the `nats` stream
   (func (export "sumUp") (param $upto i32) (result i32)
     (local $n i32) ;; current value
     (local $s i32) ;; accumulator
     (local $k (ref $ct)) ;; the continuation of the generator
+    ;; allocate the initial continuation, viz execution stack, to run the generator `nats`
     (local.set $k (cont.new $ct (ref.func $nats)))
     (loop $consume-next
-      (block $on_gen (result i32 (ref $ct))
-        (resume $ct (tag $gen $on_gen) (local.get $k))
+      (block $on_yield (result i32 (ref $ct))
+        ;; continue the generator
+        (resume $ct (tag $yield $on_yield) (local.get $k))
+        ;; control flows here if `$k` returns normally
         (return (local.get $s))
-      ) ;; stack: [i32 (ref $ct)]
+      ) ;; control flows here if `$k` suspends with `$yield`; stack: [i32 (ref $ct)]
       (local.set $k) ;; save the next continuation
       (local.set $n) ;; save the current value
+      ;; update the accumulator
       (local.set $s (i32.add (local.get $s)
                              (local.get $n)))
+      ;; decide whether to do another loop iteration
       (br_if $consume-next
              (i32.lt_u (local.get $n) (local.get $upto)))
     )
