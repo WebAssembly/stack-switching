@@ -32,7 +32,7 @@ In this section we give a series of examples illustrating possible encodings of 
 // Producer: a stream of naturals
 void nats() {
   int32_t i = 0;
-  for (;; i++) Yield(i); // supposed control name for yielding control with payload `i` to the surrounding context
+  for (;; i++) yield i; // supposed control name for yielding control with payload `i` to the surrounding context
 }
 
 // Consumer: sums up some slice of the `nats` stream
@@ -41,7 +41,7 @@ int32_t sumUp(int32_t upto) {
           s = 0; // accumulator
   while (n < upto) {
     switch (nats()) {
-       case Yield(int32_t i): // pattern matching on the control name
+       case yield(int32_t i): // pattern matching on the control name
          n = i;  // save the current value
          s += n; // update the accumulator
          continue;
