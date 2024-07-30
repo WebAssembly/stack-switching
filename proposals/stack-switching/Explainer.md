@@ -28,7 +28,55 @@ In this section we give a series of examples illustrating possible encodings of 
 
 ### Yield-style generators
 
-TODO
+TODO(dhil): Change dispatch list syntax to `(on ...)`.
+```wast
+(module $generator
+  (type $ft (func)) ;; [] -> []
+  (type $ct (cont $ft)) ;; cont [] -> []
+
+  ;; Control tag declaration
+  (tag $gen (param i32)) ;; i32 -> []
+
+  ;; The producer: a stream of naturals.
+  (func $nats
+    (local $i i32) ;; zero-initialised local
+    (loop $produce-next
+      (suspend $gen (local.get $i))
+      (local.set $i
+        (i32.add (local.get $i)
+                 (i32.const 1)))
+      (br $produce-next) ;; continue to produce the next natural number
+    )
+  )
+  (elem declare func $nats)
+
+  ;; The consumer: sums up the numbers in a given stream slice.
+  (func $sum (param $upto i32) (result i32)
+    (local $n i32) ;; current value
+    (local $s i32) ;; accumulator
+    (local $k (ref $ct)) ;; the continuation of the generator
+    (local.set $k (cont.new $ct (ref.func $nats)))
+    (loop $consume-next
+      (block $on_gen (result i32 (ref $ct))
+        (resume $ct (tag $gen $on_gen) (local.get $k))
+        (return (local.get $s))
+      ) ;; stack: [i32 (ref $ct)]
+      (local.set $k) ;; save the next continuation
+      (local.set $n) ;; save the current value
+      (local.set $s (i32.add (local.get $s)
+                             (local.get $n)))
+      (br_if $consume-next
+             (i32.lt_u (local.get $n) (local.get $upto)))
+    )
+    (local.get $s)
+  )
+
+  (func (export "main")
+    (call $print
+       (call $sum (i32.const 10))))
+)
+(assert_return (invoke "main") (i32.const 55))
+```
 
 ### Coroutines
 
