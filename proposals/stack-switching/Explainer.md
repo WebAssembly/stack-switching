@@ -1,5 +1,6 @@
 # Stack switching
-TODO
+
+This proposal adds typed stack switching to WebAssembly, enabling a single WebAssembly instance to manage multiple execution stacks concurrently. The primary use-case for stack switching is to add direct support for modular compilation of advanced non-local control flow idioms, e.g. coroutines, async/await, yield-style generators, lightweight threads, and so forth. This document outlines the new instructions and validation rules to facilitate stack switching.
 
 ## Table of contents
 
