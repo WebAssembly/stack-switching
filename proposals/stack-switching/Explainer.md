@@ -74,7 +74,7 @@ TODO(dhil): Change dispatch list syntax to `(on ...)`.
   (elem declare func $nats)
 
   ;; The consumer: sums up the numbers in a given stream slice.
-  (func $sum (param $upto i32) (result i32)
+  (func (export "sumUp") (param $upto i32) (result i32)
     (local $n i32) ;; current value
     (local $s i32) ;; accumulator
     (local $k (ref $ct)) ;; the continuation of the generator
@@ -93,12 +93,8 @@ TODO(dhil): Change dispatch list syntax to `(on ...)`.
     )
     (local.get $s)
   )
-
-  (func (export "main")
-    (call $print
-       (call $sum (i32.const 10))))
 )
-(assert_return (invoke "main") (i32.const 55))
+(assert_return (invoke "sumUp" (i32.const 10)) (i32.const 55))
 ```
 
 ### Coroutines
