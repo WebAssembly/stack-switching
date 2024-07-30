@@ -28,13 +28,36 @@ In this section we give a series of examples illustrating possible encodings of 
 
 ### Yield-style generators
 
+```c
+void nats() {
+  int32_t i = 0;
+  for (;; i++) Yield(i); // supposed control name for yielding control with payload `i` to the surrounding context
+}
+
+int32_t sumUp(int32_t upto) {
+  int32_t n = 0, // current value
+          s = 0; // accumulator
+  while (n < upto) {
+    switch (nats()) {
+       case Yield(int32_t i): // pattern matching on the control name
+         n = i;  // save the current value
+         s += n; // update the accumulator
+         continue;
+       default:
+          return s;
+    }
+  }
+  return s;
+}
+```
+
 TODO(dhil): Change dispatch list syntax to `(on ...)`.
 ```wast
 (module $generator
   (type $ft (func)) ;; [] -> []
   (type $ct (cont $ft)) ;; cont [] -> []
 
-  ;; Control tag declaration
+  ;; Control name declaration
   (tag $gen (param i32)) ;; i32 -> []
 
   ;; The producer: a stream of naturals.
