@@ -158,21 +158,25 @@ We add two new continuation heap types and their subtyping hierachy:
 
 ### Instructions
 
-The new instructions and their validation rules are as follows.
+The new instructions and their validation rules are as follows. To simplify the presentation, we write `C.types[$ct] = cont [t1*] -> [t2*]` where we really mean this:
+
+```
+C.types[$ct] = cont $ft
+C.types[$ft] = [t1*] -> [t2*]
+```
+
+This abbreviation will be formalized with an auxiliary function in the spec.
 
 - `cont.new <typeidx>`
   - Create a new continuation from a given typed funcref.
   - `cont.new $ct : [(ref null? $ft)] -> [(ref $ct)]`
-    - iff `C.types[$ct] = cont $ft`
-    - and `C.types[$ft] = [t1*] -> [t2*]`
+    - iff `C.types[$ct] = cont [t1*] -> [t2*]`
 
 - `cont.bind <typeidx> <typeidx>`
   - Partially apply a continuation.
   - `cont.bind $ct $ct' : [t3* (ref null? $ct)] -> [(ref $ct')]`
-    - iff `C.types[$ct'] = cont $ft'`
-    - and `C.types[$ft'] = [t1'*] -> [t2'*]`
-    - and `C.types[$ct] = cont $ft`
-    - and `C.types[$ft] = [t1* t3*] -> [t2*]`
+    - iff `C.types[$ct'] = cont [t1'*] -> [t2'*]`
+    - and `C.types[$ct] = cont [t1* t3*] -> [t2*]`
     - and `[t1*] -> [t2*] <: [t1'*] -> [t2'*]`
   - note - currently binding from right as discussed in https://github.com/WebAssembly/stack-switching/pull/53
 
@@ -186,13 +190,12 @@ The new instructions and their validation rules are as follows.
   - Execute a given continuation.
     - If the executed continuation suspends with a tagged signal `$t`, the corresponding handler `(tag $t H)` is executed.
   - `resume $ct (on $t H)* : [t1* (ref null? $ct)] -> [t2*]`
-    - iff `C.types[$ct] = cont $ft`
-    - and `C.types[$ft] = [t1*] -> [t2*]`
+    - iff `C.types[$ct] = cont [t1*] -> [t2*]`
     - and for each `(tag $t H)`:
       - `C.tags[$t] : tag $ft`
       - and `C.types[$ft] : [te1*] -> [te2*]`
       - and either `H = $l`
-        - and `C.labels[$l] = [te1'* (ref null? $ct')])*` 
+        - and `C.labels[$l] = [te1'* (ref null? $ct')])*`
         - and `([te1*] <: [te1'*])*`
         - and `(C.types[$ct'] = cont $ft')*`
         - and `([te2*] -> [t2*] <: C.types[$ft'])*`
@@ -204,15 +207,14 @@ The new instructions and their validation rules are as follows.
   - Execute a given continuation, but force it to immediately throw the annotated exception.
   - Used to abort a continuation.
   - `resume_throw $ct $e (on $t H)* : [te* (ref null? $ct)] -> [t2*]`
-    - iff `C.types[$ct] = cont $ft`
-    - and `C.types[$ft] = [t1*] -> [t2*]`
+    - iff `C.types[$ct] = cont [t1*] -> [t2*]`
     - and `C.tags[$e] : tag $ft1`
     - and `C.types[$ft1] : [te*] -> []`
     - and for each `(tag $t H)`:
       - `C.tags[$t] : tag $ft`
       - and `C.types[$ft] : [te1*] -> [te2*]`
       - and either `H = $l`
-        - and `C.labels[$l] = [te1'* (ref null? $ct')])*` 
+        - and `C.labels[$l] = [te1'* (ref null? $ct')])*`
         - and `([te1*] <: [te1'*])*`
         - and `(C.types[$ct'] = cont $ft')*`
         - and `([te2*] -> [t2*] <: C.types[$ft'])*`
@@ -226,11 +228,9 @@ The new instructions and their validation rules are as follows.
   - `switch $ct1 $e : t1* (ref null $ct1) -> t2*`
     - iff `C.tags[$e] : tag $ft`
     - and `C.types[$ft] : [] -> [t*]`
-    - and `C.types[$ct1] = cont $ft1`
-    - and `C.types[$ft1] = [t1* (ref null? $ct2)] -> [te1*]`
+    - and `C.types[$ct1] = cont [t1* (ref null? $ct2)] -> [te1*]`
     - and `te1* <: t*`
-    - and `C.types[$ct2] = cont $ft2`
-    - and `C.types[$ft2] = [t2*] -> [te2*]`
+    - and `C.types[$ct2] = cont [t2*] -> [te2*]`
     - and `te2* <: t*`
 
 ### Binary format
@@ -264,4 +264,3 @@ The opcode for heap types is encoded as an `s33`.
 | 0xe3   | `resume $ct (on $t $h)*` | `$ct : u32`, `($t : u32 and $h : u32)*` |
 | 0xe4   | `resume_throw $ct $e (on $t $h)` | `$ct : u32`, `$e : u32`, `($t : u32 and $h : u32)*` |
 | 0xe5   | `switch $ct $e`          | `$ct : u32`, `$e : u32` |
-
