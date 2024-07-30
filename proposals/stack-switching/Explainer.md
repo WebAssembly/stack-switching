@@ -4,16 +4,75 @@ This proposal adds typed stack switching to WebAssembly, enabling a single WebAs
 
 ## Table of contents
 
+1. [Motivation](#motivation)
+1. [Examples](#examples)
+   1. [Yield-style generators](#yield-style-generators)
+   1. [Coroutines](#coroutines)
+   1. [Modular composition](#modular-composition)
+   1. [Lightweight threads](#lightweight-threads)
+1. [Design considerations](#design-considerations)
+   1. [Asymmetric and symmetric switching](#asymmetric-and-symmetric-switching)
+   1. [Linear usage of continuations](#linear-usage-of-continuations)
 1. [Specification changes](#specification-changes)
+   1. [Types](#types)
    1. [Instructions](#instructions)
-   2. [Binary format](#binary-format)
+   1. [Binary format](#binary-format)
+
+## Motivation
+
+TODO
+
+## Examples
+
+In this section we give a series of examples illustrating possible encodings of common non-local control flow idioms.
+
+### Yield-style generators
+
+TODO
+
+### Coroutines
+
+TODO
+
+### Modular composition
+
+TODO
+
+### Lightweight threads
+
+TODO
+
+#### Asymmetric variation
+
+TODO
+
+#### Symmetric variation
+
+TODO
+
+
+## Design considerations
+
+TODO
+
+### Asymmetric and symmetric switching
+
+TODO
+
+### Linear usage of continuations
+
+TODO
 
 ## Specification changes
 
 This proposal is based on the [function references proposal](https://github.com/WebAssembly/function-references) and [exception handling proposal](https://github.com/WebAssembly/exception-handling).
 
-`cont <typeidx>` is a new form of composite type
-- `(cont $ft) ok` iff `$ft ok` and `$ft = [t1*] -> [t2*]`
+### Types
+
+We extend the structure of composite types and heap types as follows.
+
+- `cont <typeidx>` is a new form of composite type
+  - `(cont $ft) ok` iff `$ft ok` and `$ft = [t1*] -> [t2*]`
 
 We add two new continuation heap types and their subtyping hierachy:
 - `heaptypes ::= ... | cont | nocont`
