@@ -140,8 +140,8 @@ The new instructions and their validation rules are as follows.
         - and `(C.types[$ct'] = cont $ft')*`
         - and `([te2*] -> [t2*] <: C.types[$ft'])*`
       - or `H = switch`
-        - and `te2* = []`
-        - and `te1* <: t2*`
+        - and `te1* = []`
+        - and `te2* <: t2*`
 
 - `switch <typeidx> <tagidx>`
 - Switch to executing a given continuation directly, suspending the current execution.
