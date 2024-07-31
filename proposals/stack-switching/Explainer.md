@@ -188,7 +188,7 @@ This abbreviation will be formalized with an auxiliary function in the spec.
 
 - `resume <typeidx> (on <tagidx> <labelidx>|switch)*`
   - Execute a given continuation.
-    - If the executed continuation suspends with a tagged signal `$t`, the corresponding handler `(tag $t H)` is executed.
+    - If the executed continuation suspends with a tagged signal `$t`, the corresponding handler `(on $t H)` is executed.
   - `resume $ct (on $t H)* : [t1* (ref null? $ct)] -> [t2*]`
     - iff `C.types[$ct] ~~ cont [t1*] -> [t2*]`
     - and for each `(tag $t H)`:
@@ -224,7 +224,7 @@ This abbreviation will be formalized with an auxiliary function in the spec.
 
 - `switch <typeidx> <tagidx>`
 - Switch to executing a given continuation directly, suspending the current execution.
-  - The suspension and switch are performed from the perspective of a parent `switch` handler, determined by the annotated tag.
+  - The suspension and switch are performed from the perspective of a parent `(on $e switch)` handler, determined by the annotated tag.
   - `switch $ct1 $e : t1* (ref null $ct1) -> t2*`
     - iff `C.tags[$e] = tag $ft`
     - and `C.types[$ft] ~~ [] -> [t*]`
@@ -232,6 +232,10 @@ This abbreviation will be formalized with an auxiliary function in the spec.
     - and `te1* <: t*`
     - and `C.types[$ct2] ~~ cont [t2*] -> [te2*]`
     - and `te2* <: t*`
+   
+### Execution
+
+The same tag may be used simultaneously by `throw`, `suspend`, `switch`, and their associated handlers. When searching for a handler for an event, only handlers for the matching kind of event are considered, e.g. only `(on $e $l)` handlers can handle `suspend` events and only `(on $e switch)` handlers can handle `switch` events. The handler search continues past handlers for the wrong kind of event, even if they use the correct tag.
 
 ### Binary format
 
