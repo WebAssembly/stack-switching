@@ -162,10 +162,10 @@ The new instructions and their validation rules are as follows. To simplify the 
 
 ```
 C.types[$ct] ~~ cont $ft
-C.types[$ft] ~~ [t1*] -> [t2*]
+C.types[$ft] ~~ func [t1*] -> [t2*]
 ```
 
-This abbreviation will be formalized with an auxiliary function in the spec.
+This abbreviation will be formalized with an auxiliary function or other means in the spec.
 
 - `cont.new <typeidx>`
   - Create a new continuation from a given typed funcref.
@@ -184,7 +184,7 @@ This abbreviation will be formalized with an auxiliary function in the spec.
   - Send a tagged signal to suspend the current computation.
   - `suspend $t : [t1*] -> [t2*]`
     - iff `C.tags[$t] = tag $ft`
-    - and `C.types[$ft] ~~ [t1*] -> [t2*]`
+    - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
 
 - `resume <typeidx> (on <tagidx> <labelidx>|switch)*`
   - Execute a given continuation.
@@ -193,7 +193,7 @@ This abbreviation will be formalized with an auxiliary function in the spec.
     - iff `C.types[$ct] ~~ cont [t1*] -> [t2*]`
     - and for each `(tag $t H)`:
       - `C.tags[$t] = tag $ft`
-      - and `C.types[$ft] ~~ [te1*] -> [te2*]`
+      - and `C.types[$ft] ~~ func [te1*] -> [te2*]`
       - and either `H = $l`
         - and `C.labels[$l] = [te1'* (ref null? $ct')])*`
         - and `([te1*] <: [te1'*])*`
@@ -209,10 +209,10 @@ This abbreviation will be formalized with an auxiliary function in the spec.
   - `resume_throw $ct $e (on $t H)* : [te* (ref null? $ct)] -> [t2*]`
     - iff `C.types[$ct] ~~ cont [t1*] -> [t2*]`
     - and `C.tags[$e] : tag $ft1`
-    - and `C.types[$ft1] ~~ [te*] -> []`
+    - and `C.types[$ft1] ~~ func [te*] -> []`
     - and for each `(tag $t H)`:
       - `C.tags[$t] : tag $ft`
-      - and `C.types[$ft] ~~ [te1*] -> [te2*]`
+      - and `C.types[$ft] ~~ func [te1*] -> [te2*]`
       - and either `H = $l`
         - and `C.labels[$l] = [te1'* (ref null? $ct')])*`
         - and `([te1*] <: [te1'*])*`
@@ -227,12 +227,12 @@ This abbreviation will be formalized with an auxiliary function in the spec.
   - The suspension and switch are performed from the perspective of a parent `(on $e switch)` handler, determined by the annotated tag.
   - `switch $ct1 $e : t1* (ref null $ct1) -> t2*`
     - iff `C.tags[$e] = tag $ft`
-    - and `C.types[$ft] ~~ [] -> [t*]`
+    - and `C.types[$ft] ~~ func [] -> [t*]`
     - and `C.types[$ct1] ~~ cont [t1* (ref null? $ct2)] -> [te1*]`
     - and `te1* <: t*`
     - and `C.types[$ct2] ~~ cont [t2*] -> [te2*]`
     - and `te2* <: t*`
-   
+
 ### Execution
 
 The same tag may be used simultaneously by `throw`, `suspend`, `switch`, and their associated handlers. When searching for a handler for an event, only handlers for the matching kind of event are considered, e.g. only `(on $e $l)` handlers can handle `suspend` events and only `(on $e switch)` handlers can handle `switch` events. The handler search continues past handlers for the wrong kind of event, even if they use the correct tag.
