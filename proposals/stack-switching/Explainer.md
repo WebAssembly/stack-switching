@@ -158,7 +158,13 @@ We add two new continuation heap types and their subtyping hierachy:
 
 ### Instructions
 
-The new instructions and their validation rules are as follows. To simplify the presentation, we write `C.types[$ct] ~~ cont [t1*] -> [t2*]` where we really mean this:
+The new instructions and their validation rules are as follows. To simplify the presentation, we write this:
+
+```
+C.types[$ct] ~~ cont [t1*] -> [t2*]
+```
+
+where we really mean this:
 
 ```
 C.types[$ct] ~~ cont $ft
@@ -180,57 +186,52 @@ This abbreviation will be formalized with an auxiliary function or other means i
     - and `[t1*] -> [t2*] <: [t1'*] -> [t2'*]`
   - note - currently binding from right as discussed in https://github.com/WebAssembly/stack-switching/pull/53
 
+- `resume <typeidx> hdl*`
+  - Execute a given continuation.
+    - If the executed continuation suspends with a tagged signal `$t`, the corresponding handler `(on $t H)` is executed.
+  - `resume $ct hdl* : [t1* (ref null? $ct)] -> [t2*]`
+    - iff `C.types[$ct] ~~ cont [t1*] -> [t2*]`
+    - and `(hdl : t2*)*`
+
+- `resume_throw <typeidx> <exnidx> hdl*`
+  - Execute a given continuation, but force it to immediately throw the annotated exception.
+  - Used to abort a continuation.
+  - `resume_throw $ct $e hdl* : [te* (ref null? $ct)] -> [t2*]`
+    - iff `C.types[$ct] ~~ cont [t1*] -> [t2*]`
+    - and `C.tags[$e] : tag $ft`
+    - and `C.types[$ft] ~~ func [te*] -> []`
+    - and `(hdl : t2*)*`
+
+- `hdl = (on <tagidx> <labelidx>) | (on <tagidx> switch)`
+  - Handlers attached to `resume` and `resume_throw`, handling events for `suspend` and `switch`, respectively.
+  - `(on $e $l) : t*`
+    - iff `C.tags[$e] = tag $ft`
+    - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
+    - and `C.labels[$l] = [t1'* (ref null? $ct)]`
+    - and `t1* <: t1'*`
+    - and `C.types[$ct] ~~ cont [t2'*] -> [t'*]`
+    - and `[t2*] -> [t*] <: [t2'*] -> [t'*]`
+  - `(on $e switch) : t*`
+    - iff `C.tags[$e] = tag $ft`
+    - and `C.types[$ft] ~~ func [] -> [t*']`
+    - and `t* <: t*'`
+
 - `suspend <tagidx>`
   - Send a tagged signal to suspend the current computation.
   - `suspend $t : [t1*] -> [t2*]`
     - iff `C.tags[$t] = tag $ft`
     - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
 
-- `resume <typeidx> (on <tagidx> <labelidx>|switch)*`
-  - Execute a given continuation.
-    - If the executed continuation suspends with a tagged signal `$t`, the corresponding handler `(on $t H)` is executed.
-  - `resume $ct (on $t H)* : [t1* (ref null? $ct)] -> [t2*]`
-    - iff `C.types[$ct] ~~ cont [t1*] -> [t2*]`
-    - and for each `(tag $t H)`:
-      - `C.tags[$t] = tag $ft`
-      - and `C.types[$ft] ~~ func [te1*] -> [te2*]`
-      - and either `H = $l`
-        - and `C.labels[$l] = [te1'* (ref null? $ct')])*`
-        - and `([te1*] <: [te1'*])*`
-        - and `(C.types[$ct'] ~~ cont $ft')*`
-        - and `([te2*] -> [t2*] <: C.types[$ft'])*`
-      - or `H = switch`
-        - and `te1* = []`
-        - and `te2* <: t2*`
-
-- `resume_throw <typeidx> <exnidx> (on <tagidx> <labelidx>|switch)*`
-  - Execute a given continuation, but force it to immediately throw the annotated exception.
-  - Used to abort a continuation.
-  - `resume_throw $ct $e (on $t H)* : [te* (ref null? $ct)] -> [t2*]`
-    - iff `C.types[$ct] ~~ cont [t1*] -> [t2*]`
-    - and `C.tags[$e] : tag $ft1`
-    - and `C.types[$ft1] ~~ func [te*] -> []`
-    - and for each `(tag $t H)`:
-      - `C.tags[$t] : tag $ft`
-      - and `C.types[$ft] ~~ func [te1*] -> [te2*]`
-      - and either `H = $l`
-        - and `C.labels[$l] = [te1'* (ref null? $ct')])*`
-        - and `([te1*] <: [te1'*])*`
-        - and `(C.types[$ct'] ~~ cont $ft')*`
-        - and `([te2*] -> [t2*] <: C.types[$ft'])*`
-      - or `H = switch`
-        - and `te1* = []`
-        - and `te2* <: t2*`
-
 - `switch <typeidx> <tagidx>`
 - Switch to executing a given continuation directly, suspending the current execution.
   - The suspension and switch are performed from the perspective of a parent `(on $e switch)` handler, determined by the annotated tag.
-  - `switch $ct1 $e : t1* (ref null $ct1) -> t2*`
+  - `switch $ct1 $e : [t1* (ref null $ct1)] -> [t2*]`
     - iff `C.tags[$e] = tag $ft`
     - and `C.types[$ft] ~~ func [] -> [t*]`
     - and `C.types[$ct1] ~~ cont [t1* (ref null? $ct2)] -> [te1*]`
     - and `te1* <: t*`
     - and `C.types[$ct2] ~~ cont [t2*] -> [te2*]`
+    - and `t* <: te2*`
 
 ### Execution
 
