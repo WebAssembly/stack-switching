@@ -637,7 +637,12 @@ let func f =
   func_with_name "" f
 
 
-(* Tables & memories *)
+(* Tags, tables, memories *)
+
+let tag off i tag =
+  Node ("tag $" ^ nat (off + i),
+    [Node ("type " ^ var (tag.it.tgtype), [])]
+  )
 
 let table off i tab =
   let {ttype = TableT (lim, t); tinit} = tab.it in
@@ -648,12 +653,6 @@ let table off i tab =
 let memory off i mem =
   let {mtype = MemoryT lim} = mem.it in
   Node ("memory $" ^ nat (off + i) ^ " " ^ limits nat32 lim, [])
-
-let tag off i tag =
-  let {tagtype = TagT et} = tag.it in
-  Node ("tag $" ^ nat (off + i),
-    [Node ("type", [atom heap_type et])]
-  )
 
 let is_elem_kind = function
   | (NoNull, FuncHT) -> true
@@ -743,33 +742,39 @@ let global off i g =
 let start s =
   Node ("start " ^ var s.it.sfunc, [])
 
+let custom m mnode (module S : Custom.Section) =
+  S.Handler.arrange m mnode S.it
 
-(* Modules *)
 
 let var_opt = function
   | None -> ""
-  | Some x -> " " ^ x.it
+  | Some x when
+    String.for_all (fun c -> Lib.Char.is_alphanum_ascii c || c = '_') x.it ->
+    " $" ^ x.it
+  | Some x -> " $" ^ name (Utf8.decode x.it)
 
-let module_with_var_opt x_opt m =
+let module_with_var_opt x_opt (m, cs) =
   let fx = ref 0 in
   let tx = ref 0 in
   let mx = ref 0 in
   let tgx = ref 0 in
   let gx = ref 0 in
   let imports = list (import fx tx mx tgx gx) m.it.imports in
-  Node ("module" ^ var_opt x_opt,
+  let ret = Node ("module" ^ var_opt x_opt,
     List.rev (fst (List.fold_left type_ ([], 0) m.it.types)) @
     imports @
     listi (table !tx) m.it.tables @
     listi (memory !mx) m.it.memories @
     listi (tag !tgx) m.it.tags @
     listi (global !gx) m.it.globals @
-    listi (func_with_index !fx) m.it.funcs @
     list export m.it.exports @
     opt start m.it.start @
     listi elem m.it.elems @
+    listi (func_with_index !fx) m.it.funcs @
     listi data m.it.datas
-  )
+  ) in
+  List.fold_left (custom m) ret cs
+
 
 let binary_module_with_var_opt x_opt bs =
   Node ("module" ^ var_opt x_opt ^ " binary", break_bytes bs)
@@ -777,7 +782,8 @@ let binary_module_with_var_opt x_opt bs =
 let quoted_module_with_var_opt x_opt s =
   Node ("module" ^ var_opt x_opt ^ " quote", break_string s)
 
-let module_ = module_with_var_opt None
+let module_with_custom = module_with_var_opt None
+let module_ m = module_with_custom (m, [])
 
 
 (* Scripts *)
@@ -803,22 +809,25 @@ let definition mode x_opt def =
     | `Textual ->
       let rec unquote def =
         match def.it with
-        | Textual m -> m
-        | Encoded (_, bs) -> Decode.decode "" bs
-        | Quoted (_, s) -> unquote (snd (Parse.Module.parse_string s))
+        | Textual (m, cs) -> m, cs
+        | Encoded (name, bs) -> Decode.decode_with_custom name bs.it
+        | Quoted (_, s) ->
+          unquote (snd (Parse.Module.parse_string ~offset:s.at s.it))
       in module_with_var_opt x_opt (unquote def)
     | `Binary ->
       let rec unquote def =
         match def.it with
-        | Textual m -> Encode.encode m
-        | Encoded (_, bs) -> Encode.encode (Decode.decode "" bs)
-        | Quoted (_, s) -> unquote (snd (Parse.Module.parse_string s))
+        | Textual (m, cs) -> Encode.encode_with_custom (m, cs)
+        | Encoded (name, bs) ->
+          Encode.encode_with_custom (Decode.decode_with_custom name bs.it)
+        | Quoted (_, s) ->
+          unquote (snd (Parse.Module.parse_string ~offset:s.at s.it))
       in binary_module_with_var_opt x_opt (unquote def)
     | `Original ->
       match def.it with
-      | Textual m -> module_with_var_opt x_opt m
-      | Encoded (_, bs) -> binary_module_with_var_opt x_opt bs
-      | Quoted (_, s) -> quoted_module_with_var_opt x_opt s
+      | Textual (m, cs) -> module_with_var_opt x_opt (m, cs)
+      | Encoded (_, bs) -> binary_module_with_var_opt x_opt bs.it
+      | Quoted (_, s) -> quoted_module_with_var_opt x_opt s.it
   with Parse.Syntax _ ->
     quoted_module_with_var_opt x_opt "<invalid module>"
 
@@ -879,8 +888,16 @@ let assertion mode ass =
     | _ ->
       [Node ("assert_malformed", [definition `Original None def; Atom (string re)])]
     )
+  | AssertMalformedCustom (def, re) ->
+    (match mode, def.it with
+    | `Binary, Quoted _ -> []
+    | _ ->
+      [Node ("assert_malformed_custom", [definition `Original None def; Atom (string re)])]
+    )
   | AssertInvalid (def, re) ->
     [Node ("assert_invalid", [definition mode None def; Atom (string re)])]
+  | AssertInvalidCustom (def, re) ->
+    [Node ("assert_invalid_custom", [definition mode None def; Atom (string re)])]
   | AssertUnlinkable (def, re) ->
     [Node ("assert_unlinkable", [definition mode None def; Atom (string re)])]
   | AssertUninstantiable (def, re) ->

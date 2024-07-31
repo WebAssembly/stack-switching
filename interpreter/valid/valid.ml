@@ -109,8 +109,10 @@ let func_type_of_heap_type (c : context) (ht : heap_type) at : func_type =
 let func_type_of_cont_type (c : context) (ContT ht) at : func_type =
   func_type_of_heap_type c ht at
 
-let func_type_of_tag_type (c : context) (TagT ht) at : func_type =
-  func_type_of_heap_type c ht at
+let func_type_of_tag_type (c : context) (TagT dt) at : func_type =
+  match expand_def_type dt with
+  | DefFuncT ft -> ft
+  | _ -> error at "non-function type"
 
 let heap_type_of_str_type (_c : context) (st : str_type) : heap_type =
   DefHT (DefT (RecT [SubT (Final, [], st)], Int32.of_int 0))
@@ -198,7 +200,7 @@ let check_memory_type (c : context) (mt : memory_type) at =
 
 let check_tag_type (c : context) (et : tag_type) at =
   match et with
-  | TagT ht -> check_heap_type c ht at
+  | TagT dt -> check_func_type c (as_func_str_type (expand_def_type dt)) at
 
 let check_global_type (c : context) (gt : global_type) at =
   let GlobalT (_mut, t) = gt in
@@ -1039,12 +1041,13 @@ and check_catch (c : context) (cc : catch) (ts : val_type list) at =
     let FuncT (ts1, ts2) = func_type_of_tag_type c (tag c x1) x1.at in
     match_target c ts1 (label c x2) cc.at
   | CatchRef (x1, x2) ->
-    let FuncT (ts1, ts2) = func_type_of_tag_type c (tag c x1) x1.at in
-    match_target c (ts1 @ [RefT (Null, ExnHT)]) (label c x2) cc.at
+    let TagT dt = tag c x1 in
+    let FuncT (ts1, ts2) = as_func_str_type (expand_def_type dt) in
+    match_target c (ts1 @ [RefT (NoNull, ExnHT)]) (label c x2) cc.at
   | CatchAll x ->
     match_target c [] (label c x) cc.at
   | CatchAllRef x ->
-    match_target c [RefT (Null, ExnHT)] (label c x) cc.at
+    match_target c [RefT (NoNull, ExnHT)] (label c x) cc.at
 
 
 (* Functions & Constants *)
@@ -1152,9 +1155,8 @@ let check_data (c : context) (seg : data_segment) : context =
   {c with datas = c.datas @ [()]}
 
 let check_tag (c : context) (tag : tag) : context =
-  let {tagtype} = tag.it in
-  check_tag_type c tagtype tag.at;
-  {c with tags = c.tags @ [tagtype]}
+  check_tag_type c (TagT (type_ c tag.it.tgtype)) tag.at;
+  {c with tags = c.tags @ [TagT (type_ c tag.it.tgtype)]}
 
 
 
@@ -1182,9 +1184,8 @@ let check_import (c : context) (im : import) : context =
     check_memory_type c mt idesc.at;
     {c with memories = c.memories @ [mt]}
   | TagImport x ->
-     let tag = (TagT (VarHT (StatX x.it))) in
-     check_tag_type c tag idesc.at;
-     {c with tags = c.tags @ [tag]}
+    let _ = func_type c x in
+    {c with tags = c.tags @ [TagT (type_ c x)]}
 
 module NameSet = Set.Make(struct type t = Ast.name let compare = compare end)
 
@@ -1222,3 +1223,7 @@ let check_module (m : module_) =
   List.iter (check_func_body c) m.it.funcs;
   Option.iter (check_start c) m.it.start;
   ignore (List.fold_left (check_export c) NameSet.empty m.it.exports)
+
+let check_module_with_custom ((m : module_), (cs : Custom.section list)) =
+  check_module m;
+  List.iter (fun (module S : Custom.Section) -> S.Handler.check m S.it) cs
