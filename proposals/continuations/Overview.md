@@ -31,23 +31,23 @@ Based on [typed reference proposal](https://github.com/WebAssembly/function-refe
   - `suspend $t : [t1*] -> [t2*]`
     - iff `tag $t : [t1*] -> [t2*]`
 
-* `resume <typeidx> (tag <tagidx> <labelidx>)*` resumes a continuation
-  - `resume $ct (tag $t $l)* : [t1* (ref null? $ct)] -> [t2*]`
+* `resume <typeidx> (on <tagidx> <labelidx>)*` resumes a continuation
+  - `resume $ct (on $t $l)* : [t1* (ref null? $ct)] -> [t2*]`
     - iff `$ct = cont $ft`
     - and `$ft = [t1*] -> [t2*]`
-    - and `(tag $t : [te1*] -> [te2*])*`
+    - and `(on $t : [te1*] -> [te2*])*`
     - and `(label $l : [te1'* (ref null? $ct')])*`
     - and `([te1*] <: [te1'*])*`
     - and `($ct' = cont $ft')*`
     - and `$ft' = [t1'*] -> [t2'*]`
     - and `([te2*] -> [t2*] <: [t1'*] -> [t2'*])*`
 
-* `resume_throw <typeidx> <tagidx> (tag <tagidx> <labelidx>)` aborts a continuation
-  - `resume_throw $ct $e (tag $t $l): [te* (ref null? $ct)] -> [t2*]`
-    - iff `(tag $e : [te*] -> [])`
+* `resume_throw <typeidx> <tagidx> (on <tagidx> <labelidx>)` aborts a continuation
+  - `resume_throw $ct $e (on $t $l): [te* (ref null? $ct)] -> [t2*]`
+    - iff `(on $e : [te*] -> [])`
     - and `$ct = cont $ft`
     - and `$ft = [t1*] -> [t2*]`
-    - and `(tag $t : [te1*] -> [te2*])*`
+    - and `(on $t : [te1*] -> [te2*])*`
     - and `(label $l : [te1'* (ref null? $ct')])*`
     - and `([te1*] <: [te1'*])*`
     - and `($ct' = cont $ft')*`
@@ -131,22 +131,22 @@ H^ea ::=
   - and `S' = S with conts[ca] = epsilon with conts += (E : |t1'*|)`
   - and `E = E'[v^n _]`
 
-* `S; F; (ref.null t) (resume $ct (tag $e $l)*)  -->  S; F; trap`
+* `S; F; (ref.null t) (resume $ct (on $e $l)*)  -->  S; F; trap`
 
-* `S; F; (ref.cont ca) (resume $ct (tag $e $l)*)  -->  S; F; trap`
+* `S; F; (ref.cont ca) (resume $ct (on $e $l)*)  -->  S; F; trap`
   - iff `S.conts[ca] = epsilon`
 
-* `S; F; v^n (ref.cont ca) (resume $ct (tag $t $l)*)  -->  S'; F; handle{(ea $l)*} E[v^n] end`
+* `S; F; v^n (ref.cont ca) (resume $ct (on $t $l)*)  -->  S'; F; handle{(ea $l)*} E[v^n] end`
   - iff `S.conts[ca] = (E : n)`
   - and `(ea = F.tags[$t])*`
   - and `S' = S with conts[ca] = epsilon`
 
-* `S; F; (ref.null t) (resume_throw $ct $e (tag $t $l)*)  -->  S; F; trap`
+* `S; F; (ref.null t) (resume_throw $ct $e (on $t $l)*)  -->  S; F; trap`
 
-* `S; F; (ref.cont ca) (resume_throw $ct $e (tag $t $l)*)  -->  S; F; trap`
+* `S; F; (ref.cont ca) (resume_throw $ct $e (on $t $l)*)  -->  S; F; trap`
   - iff `S.conts[ca] = epsilon`
 
-* `S; F; v^m (ref.cont ca) (resume_throw $ct $e (tag $t $l)*)  -->  S'; F; handle{(ea $l)*} E[v^m (throw $e)] end`
+* `S; F; v^m (ref.cont ca) (resume_throw $ct $e (on $t $l)*)  -->  S'; F; handle{(ea $l)*} E[v^m (throw $e)] end`
   - iff `S.conts[ca] = (E : n)`
   - and `(ea = F.tags[$t])*`
   - and `S.tags[F.tags[$e]].type = [t1^m] -> [t2*]`

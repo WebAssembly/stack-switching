@@ -525,10 +525,10 @@ let rec instr e =
     | Suspend x -> "suspend " ^ var x, []
     | Resume (x, xys) ->
       "resume " ^ var x,
-      List.map (fun (x, y) -> Node ("tag " ^ var x ^ " " ^ var y, [])) xys
+      List.map (fun (x, y) -> Node ("on " ^ var x ^ " " ^ var y, [])) xys
     | ResumeThrow (x, y, xys) ->
       "resume_throw " ^ var x ^ " " ^ var y,
-      List.map (fun (x, y) -> Node ("tag " ^ var x ^ " " ^ var y, [])) xys
+      List.map (fun (x, y) -> Node ("on " ^ var x ^ " " ^ var y, [])) xys
     | Barrier (bt, es) -> "barrier", block_type bt @ list instr es
     | Throw x -> "throw " ^ var x, []
     | ThrowRef -> "throw_ref", []

@@ -338,7 +338,7 @@ let parse_annots (m : module_) : Custom.section list =
 %token VEC_SHUFFLE
 %token<int -> Ast.instr'> VEC_EXTRACT VEC_REPLACE
 %token FUNC START TYPE PARAM RESULT LOCAL GLOBAL CONT
-%token TABLE ELEM MEMORY TAG DATA DECLARE OFFSET ITEM IMPORT EXPORT
+%token TABLE ELEM MEMORY ON TAG DATA DECLARE OFFSET ITEM IMPORT EXPORT
 %token MODULE BIN QUOTE
 %token SCRIPT REGISTER INVOKE GET
 %token ASSERT_MALFORMED ASSERT_INVALID ASSERT_UNLINKABLE
@@ -782,7 +782,7 @@ resume_instr_instr :
       let hs, es = $4 c in resume_throw x tag hs @@ loc1, es }
 
 resume_instr_handler_instr :
-  | LPAR TAG var var RPAR resume_instr_handler_instr
+  | LPAR ON var var RPAR resume_instr_handler_instr
     { fun c -> let hs, es = $6 c in ($3 c tag, $4 c label) :: hs, es }
   | instr1
     { fun c -> [], $1 c }
@@ -940,7 +940,7 @@ call_expr_results :
     { fun c -> [], $1 c }
 
 resume_expr_handler :
-  | LPAR TAG var var RPAR resume_expr_handler
+  | LPAR ON var var RPAR resume_expr_handler
     { fun c -> let hs, es = $6 c in ($3 c tag, $4 c label) :: hs, es }
   | expr_list
     { fun c -> [], $1 c }

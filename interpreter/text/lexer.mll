@@ -769,6 +769,7 @@ rule token = parse
       | "data" -> DATA
       | "declare" -> DECLARE
       | "offset" -> OFFSET
+      | "on" -> ON
       | "item" -> ITEM
       | "import" -> IMPORT
       | "export" -> EXPORT
