@@ -638,3 +638,19 @@
   (i32.const 0) (i32.const 1) (i32.const 2) (i32.const 3)
   (i32.const 4) (i32.const 5) (i32.const 6)
 )
+
+;; Subtyping
+(module
+  (type $ft1 (func (param i32)))
+  (type $ct1 (sub (cont $ft1)))
+
+  (type $ft0 (func))
+  (type $ct0 (sub (cont $ft0)))
+
+  (func $test (param $x (ref $ct1))
+    (i32.const 123)
+    (local.get $x)
+    (cont.bind $ct1 $ct0)
+    (drop)
+  )
+)
