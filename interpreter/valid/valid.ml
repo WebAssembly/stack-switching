@@ -112,9 +112,6 @@ let func_type_of_cont_type (c : context) (ContT ht) at : func_type =
 let func_type_of_tag_type (c : context) (TagT ht) at : func_type =
   func_type_of_heap_type c ht at
 
-let heap_type_of_str_type (_c : context) (st : str_type) : heap_type =
-  DefHT (DefT (RecT [SubT (Final, [], st)], Int32.of_int 0))
-
 
 (* Types *)
 
@@ -598,9 +595,8 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
     (ts1 @ [NumT I32T]) -->... [], []
 
   | ContNew x ->
-    let ct = cont_type c x in
-    let ft = func_type_of_cont_type c ct x.at in
-    [RefT (Null, heap_type_of_str_type c (DefFuncT ft))] -->
+    let (ContT ft) = cont_type c x in
+    [RefT (Null, ft)] -->
     [RefT (NoNull, DefHT (type_ c x))], []
 
   | ContBind (x, y) ->
@@ -613,8 +609,8 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
     let ts11, ts12 = Lib.List.split (List.length ts1 - List.length ts1') ts1 in
     require (match_func_type c.types (FuncT (ts12, ts2)) ft') e.at
       "type mismatch in continuation types";
-    (ts11 @ [RefT (Null, heap_type_of_str_type c (DefContT ct))]) -->
-      [RefT (NoNull, heap_type_of_str_type c (DefContT ct'))], []
+    (ts11 @ [RefT (Null, DefHT (type_ c x))]) -->
+      [RefT (NoNull, DefHT (type_ c y))], []
 
   | Suspend x ->
     let tag = tag c x in
@@ -625,7 +621,7 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
     let ct = cont_type c x in
     let FuncT (ts1, ts2) = func_type_of_cont_type c ct x.at in
     check_resume_table c ts2 xys e.at;
-    (ts1 @ [RefT (Null, heap_type_of_str_type c (DefContT ct))]) --> ts2, []
+    (ts1 @ [RefT (Null, DefHT (type_ c x))]) --> ts2, []
 
   | ResumeThrow (x, y, xys) ->
     let ct = cont_type c x in
@@ -633,7 +629,7 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
     let tag = tag c y in
     let FuncT (ts0, _) = func_type_of_tag_type c tag y.at in
     check_resume_table c ts2 xys e.at;
-    (ts0 @ [RefT (Null, heap_type_of_str_type c (DefContT ct))]) --> ts2, []
+    (ts0 @ [RefT (Null, DefHT (type_ c x))]) --> ts2, []
 
   | Barrier (bt, es) ->
     let InstrT (ts1, ts2, xs) as ft = check_block_type c bt e.at in
