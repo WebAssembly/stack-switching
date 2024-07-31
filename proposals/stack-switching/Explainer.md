@@ -214,7 +214,7 @@ This abbreviation will be formalized with an auxiliary function or other means i
   - `(on $e switch) : t*`
     - iff `C.tags[$e] = tag $ft`
     - and `C.types[$ft] ~~ func [] -> [t*']`
-    - and `t* <: t*'`
+    - and `t'* <: t*`
 
 - `suspend <tagidx>`
   - Send a tagged signal to suspend the current computation.
