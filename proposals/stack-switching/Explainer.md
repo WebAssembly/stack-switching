@@ -158,43 +158,46 @@ We add two new continuation heap types and their subtyping hierachy:
 
 ### Instructions
 
-The new instructions and their validation rules are as follows.
+The new instructions and their validation rules are as follows. To simplify the presentation, we write `C.types[$ct] ~~ cont [t1*] -> [t2*]` where we really mean this:
+
+```
+C.types[$ct] ~~ cont $ft
+C.types[$ft] ~~ func [t1*] -> [t2*]
+```
+
+This abbreviation will be formalized with an auxiliary function or other means in the spec.
 
 - `cont.new <typeidx>`
   - Create a new continuation from a given typed funcref.
   - `cont.new $ct : [(ref null? $ft)] -> [(ref $ct)]`
-    - iff `C.types[$ct] = cont $ft`
-    - and `C.types[$ft] = [t1*] -> [t2*]`
+    - iff `C.types[$ct] ~~ cont [t1*] -> [t2*]`
 
 - `cont.bind <typeidx> <typeidx>`
   - Partially apply a continuation.
   - `cont.bind $ct $ct' : [t3* (ref null? $ct)] -> [(ref $ct')]`
-    - iff `C.types[$ct'] = cont $ft'`
-    - and `C.types[$ft'] = [t1'*] -> [t2'*]`
-    - and `C.types[$ct] = cont $ft`
-    - and `C.types[$ft] = [t1* t3*] -> [t2*]`
+    - iff `C.types[$ct'] ~~ cont [t1'*] -> [t2'*]`
+    - and `C.types[$ct] ~~ cont [t1* t3*] -> [t2*]`
     - and `[t1*] -> [t2*] <: [t1'*] -> [t2'*]`
   - note - currently binding from right as discussed in https://github.com/WebAssembly/stack-switching/pull/53
 
 - `suspend <tagidx>`
   - Send a tagged signal to suspend the current computation.
   - `suspend $t : [t1*] -> [t2*]`
-    - iff `C.tags[$t] : tag $ft`
-    - and `C.types[$ft] : [t1*] -> [t2*]`
+    - iff `C.tags[$t] = tag $ft`
+    - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
 
 - `resume <typeidx> (on <tagidx> <labelidx>|switch)*`
   - Execute a given continuation.
-    - If the executed continuation suspends with a tagged signal `$t`, the corresponding handler `(tag $t H)` is executed.
+    - If the executed continuation suspends with a tagged signal `$t`, the corresponding handler `(on $t H)` is executed.
   - `resume $ct (on $t H)* : [t1* (ref null? $ct)] -> [t2*]`
-    - iff `C.types[$ct] = cont $ft`
-    - and `C.types[$ft] = [t1*] -> [t2*]`
+    - iff `C.types[$ct] ~~ cont [t1*] -> [t2*]`
     - and for each `(tag $t H)`:
-      - `C.tags[$t] : tag $ft`
-      - and `C.types[$ft] : [te1*] -> [te2*]`
+      - `C.tags[$t] = tag $ft`
+      - and `C.types[$ft] ~~ func [te1*] -> [te2*]`
       - and either `H = $l`
-        - and `C.labels[$l] = [te1'* (ref null? $ct')])*` 
+        - and `C.labels[$l] = [te1'* (ref null? $ct')])*`
         - and `([te1*] <: [te1'*])*`
-        - and `(C.types[$ct'] = cont $ft')*`
+        - and `(C.types[$ct'] ~~ cont $ft')*`
         - and `([te2*] -> [t2*] <: C.types[$ft'])*`
       - or `H = switch`
         - and `te1* = []`
@@ -204,17 +207,16 @@ The new instructions and their validation rules are as follows.
   - Execute a given continuation, but force it to immediately throw the annotated exception.
   - Used to abort a continuation.
   - `resume_throw $ct $e (on $t H)* : [te* (ref null? $ct)] -> [t2*]`
-    - iff `C.types[$ct] = cont $ft`
-    - and `C.types[$ft] = [t1*] -> [t2*]`
+    - iff `C.types[$ct] ~~ cont [t1*] -> [t2*]`
     - and `C.tags[$e] : tag $ft1`
-    - and `C.types[$ft1] : [te*] -> []`
+    - and `C.types[$ft1] ~~ func [te*] -> []`
     - and for each `(tag $t H)`:
       - `C.tags[$t] : tag $ft`
-      - and `C.types[$ft] : [te1*] -> [te2*]`
+      - and `C.types[$ft] ~~ func [te1*] -> [te2*]`
       - and either `H = $l`
-        - and `C.labels[$l] = [te1'* (ref null? $ct')])*` 
+        - and `C.labels[$l] = [te1'* (ref null? $ct')])*`
         - and `([te1*] <: [te1'*])*`
-        - and `(C.types[$ct'] = cont $ft')*`
+        - and `(C.types[$ct'] ~~ cont $ft')*`
         - and `([te2*] -> [t2*] <: C.types[$ft'])*`
       - or `H = switch`
         - and `te1* = []`
@@ -222,15 +224,17 @@ The new instructions and their validation rules are as follows.
 
 - `switch <typeidx> <tagidx>`
 - Switch to executing a given continuation directly, suspending the current execution.
-  - The suspension and switch are performed from the perspective of a parent `switch` handler, determined by the annotated tag.
+  - The suspension and switch are performed from the perspective of a parent `(on $e switch)` handler, determined by the annotated tag.
   - `switch $ct1 $e : t1* (ref null $ct1) -> t2*`
-    - iff `C.tags[$e] : tag $ft`
-    - and `C.types[$ft] : [] -> [t*]`
-    - and `C.types[$ct1] = cont $ft1`
-    - and `C.types[$ft1] = [t1* (ref null? $ct2)] -> [te1*]`
+    - iff `C.tags[$e] = tag $ft`
+    - and `C.types[$ft] ~~ func [] -> [t*]`
+    - and `C.types[$ct1] ~~ cont [t1* (ref null? $ct2)] -> [te1*]`
     - and `te1* <: t*`
-    - and `C.types[$ct2] = cont $ft2`
-    - and `C.types[$ft2] = [t2*] -> [te2*]`
+    - and `C.types[$ct2] ~~ cont [t2*] -> [te2*]`
+
+### Execution
+
+The same tag may be used simultaneously by `throw`, `suspend`, `switch`, and their associated handlers. When searching for a handler for an event, only handlers for the matching kind of event are considered, e.g. only `(on $e $l)` handlers can handle `suspend` events and only `(on $e switch)` handlers can handle `switch` events. The handler search continues past handlers for the wrong kind of event, even if they use the correct tag.
 
 ### Binary format
 
@@ -263,4 +267,3 @@ The opcode for heap types is encoded as an `s33`.
 | 0xe3   | `resume $ct (on $t $h)*` | `$ct : u32`, `($t : u32 and $h : u32)*` |
 | 0xe4   | `resume_throw $ct $e (on $t $h)` | `$ct : u32`, `$e : u32`, `($t : u32 and $h : u32)*` |
 | 0xe5   | `switch $ct $e`          | `$ct : u32`, `$e : u32` |
-
