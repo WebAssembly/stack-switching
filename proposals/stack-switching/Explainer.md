@@ -222,7 +222,7 @@ This abbreviation will be formalized with an auxiliary function or other means i
     - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
 
 - `switch <typeidx> <tagidx>`
-- Switch to executing a given continuation directly, suspending the current execution.
+  - Switch to executing a given continuation directly, suspending the current execution.
   - The suspension and switch are performed from the perspective of a parent `(on $e switch)` handler, determined by the annotated tag.
   - `switch $ct1 $e : [t1* (ref null $ct1)] -> [t2*]`
     - iff `C.tags[$e] = tag $ft`
