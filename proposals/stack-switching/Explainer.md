@@ -213,7 +213,7 @@ This abbreviation will be formalized with an auxiliary function or other means i
     - and `[t2*] -> [t*] <: [t2'*] -> [t'*]`
   - `(on $e switch) : t*`
     - iff `C.tags[$e] = tag $ft`
-    - and `C.types[$ft] ~~ func [] -> [t*']`
+    - and `C.types[$ft] ~~ func [] -> [t'*]`
     - and `t'* <: t*`
 
 - `suspend <tagidx>`
