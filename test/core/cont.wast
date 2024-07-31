@@ -228,6 +228,22 @@
   (type $c2 (cont $f2))
 )
 
+;; Regression test: non-final continuation types
+(module $non_final
+  (type $ft1 (func (param i32)))
+  (type $ct1 (sub (cont $ft1)))
+
+  (type $ft0 (func))
+  (type $ct0 (sub (cont $ft0)))
+
+  (func $test (param $x (ref $ct1))
+    (i32.const 123)
+    (local.get $x)
+    (cont.bind $ct1 $ct0)
+    (drop)
+  )
+)
+
 ;; Simple state example
 
 (module $state
