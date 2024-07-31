@@ -1,4 +1,4 @@
-// META: global=window,worker,jsshell
+// META: global=window,dedicatedworker,jsshell,shadowrealm
 // META: script=/wasm/jsapi/wasm-module-builder.js
 
 function assert_throws_wasm(fn, message) {
@@ -11,14 +11,13 @@ function assert_throws_wasm(fn, message) {
 }
 
 promise_test(async () => {
-  const kWasmAnyRef = 0x6f;
-  const kSig_v_r = makeSig([kWasmAnyRef], []);
+  const kSig_v_r = makeSig([kWasmExternRef], []);
   const builder = new WasmModuleBuilder();
-  const tagIndex = builder.addTag(kSig_v_r);
+  const tagIndexExternref = builder.addTag(kSig_v_r);
   builder.addFunction("throw_param", kSig_v_r)
     .addBody([
       kExprLocalGet, 0,
-      kExprThrow, tagIndex,
+      kExprThrow, tagIndexExternref,
     ])
     .exportFunc();
   const buffer = builder.toBuffer();
@@ -45,11 +44,11 @@ promise_test(async () => {
 
 promise_test(async () => {
   const builder = new WasmModuleBuilder();
-  const tagIndex = builder.addTag(kSig_v_a);
+  const tagIndexAnyref = builder.addTag(kSig_v_a);
   builder.addFunction("throw_null", kSig_v_v)
     .addBody([
-      kExprRefNull, kWasmAnyFunc,
-      kExprThrow, tagIndex,
+      kExprRefNull, kAnyFuncCode,
+      kExprThrow, tagIndexAnyref,
     ])
     .exportFunc();
   const buffer = builder.toBuffer();
@@ -59,11 +58,11 @@ promise_test(async () => {
 
 promise_test(async () => {
   const builder = new WasmModuleBuilder();
-  const tagIndex = builder.addTag(kSig_v_i);
+  const tagIndexI32 = builder.addTag(kSig_v_i);
   builder.addFunction("throw_int", kSig_v_v)
     .addBody([
       ...wasmI32Const(7),
-      kExprThrow, tagIndex,
+      kExprThrow, tagIndexI32,
     ])
     .exportFunc();
   const buffer = builder.toBuffer();
@@ -74,15 +73,21 @@ promise_test(async () => {
 promise_test(async () => {
   const builder = new WasmModuleBuilder();
   const fnIndex = builder.addImport("module", "fn", kSig_v_v);
-  const tagIndex= builder.addTag(kSig_v_r);
+  const tagIndexExternref = builder.addTag(kSig_v_r);
+
   builder.addFunction("catch_exception", kSig_r_v)
     .addBody([
-      kExprTry, kWasmStmt,
-        kExprCallFunction, fnIndex,
-      kExprCatch, tagIndex,
+      kExprBlock, kWasmVoid,
+        kExprBlock, kExternRefCode,
+          kExprTryTable, kWasmVoid, 1,
+            kCatchNoRef, tagIndexExternref, 0,
+            kExprCallFunction, fnIndex,
+          kExprEnd,
+          kExprBr, 1,
+        kExprEnd,
         kExprReturn,
       kExprEnd,
-      kExprRefNull, kWasmAnyRef,
+      kExprRefNull, kExternRefCode,
     ])
     .exportFunc();
 
@@ -101,12 +106,17 @@ promise_test(async () => {
   const fnIndex = builder.addImport("module", "fn", kSig_v_v);
   builder.addFunction("catch_and_rethrow", kSig_r_v)
     .addBody([
-      kExprTry, kWasmStmt,
-        kExprCallFunction, fnIndex,
-      kExprCatchAll,
-        kExprRethrow, 0x00,
+      kExprBlock, kWasmVoid,
+        kExprBlock, kExnRefCode,
+          kExprTryTable, kWasmVoid, 1,
+            kCatchAllRef, 0,
+            kExprCallFunction, fnIndex,
+          kExprEnd,
+          kExprBr, 1,
+        kExprEnd,
+        kExprThrowRef,
       kExprEnd,
-      kExprRefNull, kWasmAnyRef,
+      kExprRefNull, kExternRefCode,
     ])
     .exportFunc();
 
@@ -119,3 +129,54 @@ promise_test(async () => {
   });
   assert_throws_exactly(error, () => instance.exports.catch_and_rethrow());
 }, "Imported JS function throws, Wasm catches and rethrows");
+
+promise_test(async () => {
+  const builder = new WasmModuleBuilder();
+  const fnIndex = builder.addImport("module", "fn", kSig_v_v);
+  const tagI32 = new WebAssembly.Tag({ parameters: ["i32"] });
+  const tagIndexI32 = builder.addImportedTag("module", "tagI32", kSig_v_i);
+  const exn = new WebAssembly.Exception(tagI32, [42]);
+  const kSig_ie_v = makeSig([], [kWasmI32, kExnRefCode]);
+  const sig_ie_v = builder.addType(kSig_ie_v);
+
+  builder.addFunction("all_catch_clauses", kSig_i_v)
+    .addBody([
+      kExprBlock, kWasmVoid,
+        kExprBlock, kExnRefCode,
+          kExprBlock, sig_ie_v,
+            kExprBlock, kWasmVoid,
+              kExprBlock, kWasmI32,
+                kExprTryTable, kWasmVoid, 4,
+                  kCatchNoRef, tagIndexI32, 0,
+                  kCatchAllNoRef, 1,
+                  kCatchRef, tagIndexI32, 2,
+                  kCatchAllRef, 3,
+                  kExprCallFunction, fnIndex,
+                kExprEnd,
+                kExprBr, 4,
+              kExprEnd,
+              kExprReturn,
+            kExprEnd,
+            kExprBr, 2,
+          kExprEnd,
+          kExprDrop,
+          kExprDrop,
+          kExprBr, 1,
+        kExprEnd,
+        kExprDrop,
+      kExprEnd,
+      kExprI32Const, 0,
+    ])
+    .exportFunc();
+
+  const buffer = builder.toBuffer();
+
+  const fn = () => {
+    throw exn;
+  };
+  const {instance} = await WebAssembly.instantiate(buffer, {
+    module: { fn, tagI32: tagI32 }
+  });
+  const result = instance.exports.all_catch_clauses();
+  assert_equals(result, 42);
+}, "try-table uses all four kinds of catch clauses, one of which catches an exception");

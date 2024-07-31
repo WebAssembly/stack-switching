@@ -16,8 +16,47 @@
 )
 
 ;; NOTE(dhil): This test is invalid as our proposal allows non-empty
-;; tag result types
 ;; (assert_invalid
 ;;   (module (tag (result i32)))
 ;;   "non-empty tag result type"
 ;; )
+
+
+;; Link-time typing
+
+(module
+  (rec
+    (type $t1 (func))
+    (type $t2 (func))
+  )
+  (tag (export "tag") (type $t1))
+)
+
+(register "M")
+
+(module
+  (rec
+    (type $t1 (func))
+    (type $t2 (func))
+  )
+  (tag (import "M" "tag") (type $t1))
+)
+
+(assert_unlinkable
+  (module
+    (rec
+      (type $t1 (func))
+      (type $t2 (func))
+    )
+    (tag (import "M" "tag") (type $t2))
+  )
+  "incompatible import"
+)
+
+(assert_unlinkable
+  (module
+    (type $t (func))
+    (tag (import "M" "tag") (type $t))
+  )
+  "incompatible import"
+)

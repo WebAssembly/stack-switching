@@ -803,11 +803,11 @@ Reference Instructions
 
 17. Let :math:`t` be the :ref:`value type <syntax-valtype>` :math:`\unpacktype(\X{ft})`.
 
-18. For each consecutive subsequence :math:`{b'}^n` of :math:`b^\ast`:
+18. For each of the :math:`n` consecutive subsequences :math:`{b'}^z` of :math:`b^\ast`:
 
     a. Assert: due to :ref:`validation <valid-array.new_data>`, :math:`\bytes_{\X{ft}}` is defined.
 
-    b. Let :math:`c_i` be the constant for which :math:`\bytes_{\X{ft}}(c_i)` is :math:`{b'}^n`.
+    b. Let :math:`c_i` be the constant for which :math:`\bytes_{\X{ft}}(c_i)` is :math:`{b'}^z`.
 
     c. Push the value :math:`t.\CONST~c_i` to the stack.
 
@@ -1217,13 +1217,13 @@ Reference Instructions
 
     a. Push the value :math:`\REFARRAYADDR~a_1` to the stack.
 
-    b. Assert: due to the earlier check against the memory size, :math:`d+n-1 < 2^{32}`.
+    b. Assert: due to the earlier check against the array size, :math:`d+n-1 < 2^{32}`.
 
     c. Push the value :math:`\I32.\CONST~(d+n-1)` to the stack.
 
     d. Push the value :math:`\REFARRAYADDR~a_2` to the stack.
 
-    e. Assert: due to the earlier check against the memory size, :math:`s+n-1 < 2^{32}`.
+    e. Assert: due to the earlier check against the array size, :math:`s+n-1 < 2^{32}`.
 
     f. Push the value :math:`\I32.\CONST~(s+n-1)` to the stack.
 
@@ -3833,7 +3833,7 @@ Memory Instructions
 
 20. Push the value :math:`\I32.\CONST~b` to the stack.
 
-21. Execute the instruction :math:`\I32\K{.}\STORE\K{8}~\{ \OFFSET~0, \ALIGN~0 \}`.
+21. Execute the instruction :math:`\I32\K{.}\STORE\K{8}~x~\{ \OFFSET~0, \ALIGN~0 \}`.
 
 22. Assert: due to the earlier check against the memory size, :math:`d+1 < 2^{32}`.
 
@@ -4030,11 +4030,11 @@ Control Instructions
 
 2. Assert: due to :ref:`validation <valid-throw>`, :math:`F.\AMODULE.\MITAGS[x]` exists.
 
-3. Let :math:`a` be the :ref:`tag address <syntax-tagaddr>` :math:`F.\AMODULE.\MITAGS[x]`.
+3. Let :math:`ta` be the :ref:`tag address <syntax-tagaddr>` :math:`F.\AMODULE.\MITAGS[x]`.
 
-4. Assert: due to :ref:`validation <valid-throw>`, :math:`S.\STAGS[a]` exists.
+4. Assert: due to :ref:`validation <valid-throw>`, :math:`S.\STAGS[ta]` exists.
 
-5. Let :math:`\X{ti}` be the :ref:`tag instance <syntax-taginst>` :math:`S.\STAGS[a]`.
+5. Let :math:`\X{ti}` be the :ref:`tag instance <syntax-taginst>` :math:`S.\STAGS[ta]`.
 
 6. Let :math:`[t^n] \toF [{t'}^\ast]` be the :ref:`tag type <syntax-tagtype>` :math:`\X{ti}.\TAGITYPE`.
 
@@ -4042,15 +4042,13 @@ Control Instructions
 
 8. Pop the :math:`n` values :math:`\val^n` from the stack.
 
-9. Let :math:`\X{exn}` be the :ref:`exception instance <syntax-exninst>` :math:`\{ \EITAG~a, \EIFIELDS~\val^n \}`.
+9. Let :math:`\X{ea}` be the :ref:`exception address <syntax-exnaddr>` resulting from :ref:`allocating <alloc-exception>` an exception instance with tag address :math:`ta` and initializer values :math:`\val^n`.
 
-10. Let :math:`\X{ea}` be the length of :math:`S.\SEXNS`.
+10. Let :math:`\X{exn}` be :math:`S.\SEXNS[ea]`
 
-11. Append :math:`\X{exn}` to :math:`S.\SEXNS`.
+11. Push the value :math:`\REFEXNADDR~\X{ea}` to the stack.
 
-12. Push the value :math:`\REFEXNADDR~\X{ea}` to the stack.
-
-13. Execute the instruction |THROWREF|.
+12. Execute the instruction |THROWREF|.
 
 .. math::
    ~\\[-1ex]
@@ -4114,13 +4112,13 @@ Control Instructions
 
     a. Let :math:`\catch_1` be the first :ref:`catch clause <syntax-catch>` in :math:`\catch^\ast` and :math:`{\catch'}^\ast` the remaining clauses.
 
-    b. If :math:`\catch_1` is of the form :math:`\CATCH~x~l` and the :ref:`exception address <syntax-exnaddr>` :math:`a` equals :math:`F.\AMODULE.\MITAGS[x]`, then:
+    b. If :math:`\catch_1` is of the form :math:`\CATCH~x~l` and the :ref:`tag address <syntax-tagaddr>` :math:`a` equals :math:`F.\AMODULE.\MITAGS[x]`, then:
 
        i. Push the values :math:`\X{exn}.\EIFIELDS` to the stack.
 
        ii. Execute the instruction :math:`\BR~l`.
 
-    c. Else if :math:`\catch_1` is of the form :math:`\CATCHREF~x~l` and the :ref:`exception address <syntax-exnaddr>` :math:`a` equals :math:`F.\AMODULE.\MITAGS[x]`, then:
+    c. Else if :math:`\catch_1` is of the form :math:`\CATCHREF~x~l` and the :ref:`tag address <syntax-tagaddr>` :math:`a` equals :math:`F.\AMODULE.\MITAGS[x]`, then:
 
        i. Push the values :math:`\X{exn}.\EIFIELDS` to the stack.
 

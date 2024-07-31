@@ -282,7 +282,7 @@ and func' =
 type tag = tag' Source.phrase
 and tag' =
 {
-  tagtype : tag_type;
+  tgtype : idx;
 }
 
 
@@ -419,7 +419,7 @@ let import_type_of (m : module_) (im : import) : import_type =
     | TableImport tt -> ExternTableT tt
     | MemoryImport mt -> ExternMemoryT mt
     | GlobalImport gt -> ExternGlobalT gt
-    | TagImport et -> ExternTagT (TagT (ht m et))
+    | TagImport x -> ExternTagT (TagT (Lib.List32.nth dts x.it))
   in ImportT (subst_extern_type (subst_of dts) et, module_name, item_name)
 
 let export_type_of (m : module_) (ex : export) : export_type =
@@ -443,8 +443,9 @@ let export_type_of (m : module_) (ex : export) : export_type =
       let gts = globals ets @ List.map (fun g -> g.it.gtype) m.it.globals in
       ExternGlobalT (Lib.List32.nth gts x.it)
     | TagExport x ->
-      let tagts = tags ets @ List.map (fun t -> t.it.tagtype) m.it.tags in
-      ExternTagT (Lib.List32.nth tagts x.it)
+      let tts = tags ets @ List.map (fun t ->
+        TagT (Lib.List32.nth dts t.it.tgtype.it)) m.it.tags in
+      ExternTagT (Lib.List32.nth tts x.it)
   in ExportT (subst_extern_type (subst_of dts) et, name)
 
 let module_type_of (m : module_) : module_type =
