@@ -12,9 +12,6 @@ jobs:
   publish-to-w3c-TR:
     if: github.repository == 'WebAssembly/spec'
     runs-on: ubuntu-latest
-    # TODO(dhil): The following effectively disables this workflow. It
-    # should be removed before merging with upstream.
-    if: false
     steps:
       - name: Checkout repo
         uses: actions/checkout@v2
