@@ -654,3 +654,19 @@
     (drop)
   )
 )
+
+;; Globals
+(module
+  (type $ft (func))
+  (type $ct (cont $ft))
+
+  (global $k (mut (ref null $ct)) (ref.null $ct))
+  (global $g (ref null $ct) (ref.null $ct))
+
+  (func $f)
+  (elem declare func $f)
+
+  (func (export "set-global")
+    (global.set $k (cont.new $ct (ref.func $f))))
+)
+(assert_return (invoke "set-global"))
