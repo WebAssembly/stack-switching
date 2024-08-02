@@ -28,6 +28,7 @@ In this section we give a series of examples illustrating possible encodings of 
 
 ### Yield-style generators
 
+<!--
 ```c
 // Producer: a stream of naturals
 void nats() {
@@ -54,8 +55,8 @@ int32_t sumUp(int32_t upto) {
 
 sumUp(10); // returns 55
 ```
+-->
 
-TODO(dhil): Change dispatch list syntax to `(on ...)`.
 ```wast
 (module $generator
   (type $ft (func)) ;; [] -> []
@@ -88,7 +89,7 @@ TODO(dhil): Change dispatch list syntax to `(on ...)`.
     (loop $consume-next
       (block $on_yield (result i32 (ref $ct))
         ;; continue the generator
-        (resume $ct (tag $yield $on_yield) (local.get $k))
+        (resume $ct (on $yield $on_yield) (local.get $k))
         ;; control flows here if `$k` returns normally
         (return (local.get $s))
       ) ;; control flows here if `$k` suspends with `$yield`; stack: [i32 (ref $ct)]
