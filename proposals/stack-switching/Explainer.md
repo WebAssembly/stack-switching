@@ -149,7 +149,7 @@ Continuations in this proposal are single-shot (aka linear), meaning that they m
 ### Memory management
 
 The current proposal does not require a general garbage collector as the linearity of continuations guarantees that there are no cycles in continuation objects. 
-In theory, we could dispense with automated memory management altogether if we took seriously the idea that failure to use a continuation constitutes a bug in the producer. In practice, for most producers enforcing such a discipline is unrealistic and not something an engine can rely on anyway. To prevent space leaks, most engines will either need some form of automated memory management for unconsumed continuations a monotonic continuation allocation scheme. 
+In theory, we could dispense with automated memory management altogether if we took seriously the idea that failure to use a continuation constitutes a bug in the producer. In practice, for most producers enforcing such a discipline is unrealistic and not something an engine can rely on anyway. To prevent space leaks, most engines will either need some form of automated memory management for unconsumed continuations or a monotonic continuation allocation scheme. 
 
 * Automated memory management: due to the acyclicity of continuations, a reference counting scheme is sufficient.
 * Monotonic continuation allocation: it is safe to use a continuation object as long as its underlying stack is alive. It is trivial to ensure a stack is alive by delaying deallocation until the program finishes. To avoid excessive use of memory, an engine can equip a stack with a revision counter, thus making it safe to repurpose the allocated stack for another continuation.
