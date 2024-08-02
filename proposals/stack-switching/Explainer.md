@@ -21,7 +21,88 @@ This proposal adds typed stack switching to WebAssembly, enabling a single WebAs
 
 ## Motivation
 
-TODO
+Non-local control flow features provide the ability to suspend the
+current execution context and later resume it. Many
+industrial-strength programming languages feature a wealth of
+non-local control flow features such as async/await, coroutines,
+generators/iterators, effect handlers, and so forth. For some
+programming languages non-local control flow is central to their
+identity, meaning that they rely on non-local control flow for
+efficiency, e.g. to support massively scalable concurrency.
+
+Currently, Wasm lacks support for implementing such features directly
+and efficiently without a circuitous global transformation of source
+programs on the producer side. One possible strategy is to add special
+support for each individual non-local control flow feature to Wasm,
+but strategy does not scale to the next 700 non-local control flow
+features. Instead, the goal of this proposal is to introduce a unifed
+structured mechanism that is sufficiently general to cover present
+use-cases as well as being forwards compatible with future use-cases,
+while admitting efficient implementations.
+
+A key technical design challenge is to ensure that the stack switching facility integrates smoothly with existing Wasm language facilities, especially that it remains typeable with the simple type system of Wasm.
+
+<!-- The proposed mechanism is based on proven technology: *delimited
+continuations*. An undelimited continuation represents the rest of a
+computation from a certain point in its execution. A delimited
+continuation is a more modular form of continuation, representing the
+rest of a computation from a particular point in its execution up to a
+*delimiter* or *prompt*. Operationally, one may think of undelimited
+continuations as stacks and delimited continuations as segmented
+stacks.
+
+In their raw form delimited continuations do not readily fit into the
+Wasm ecosystem, as the Wasm type system is not powerful enough to type
+them. The gist of the problem is that the classic treatment of
+delimited continuations provides only one universal control tag
+(i.e. the mechanism which transforms a runtime stack into a
+programmatic data object). In order to use Wasm's simple type system
+to type delimited continuations, we use the idea of multiple *named*
+control tags from Plotkin and Pretnar's effect handlers. Each control
+tag is declared module-wide along its payload type and return
+type. This declaration can be used to readily type points of non-local
+transfer of control. From an operational perspective we may view
+control tags as a means for writing an interface for the possible
+kinds of non-local transfers (or stack switches) that a computation
+may perform. -->
+
+### Typed continuation primer
+
+A *continuation* is a first-class program object that represents the
+remainder of computation from a certain point in the execution of a
+program --- intuitively, its current stack. The typed continuations
+proposal is based on a structured notion of delimited continuations. A
+*delimited continuation* is a continuation whose extent is delimited
+by some *control delimiter*, meaning it represents the remainder of
+computation from a certain point up to (and possibly including) its
+control delimiter -- intuitively, a segment of the stack. An
+alternative to delimited continuations is undelimited continuations
+which represent the remainder of the *entire* program. Delimited
+continuations are preferable as they are more modular and more
+fine-grained in the sense that they provide a means for suspending
+local execution contexts rather than the entire global execution
+context. In particular, delimited continuations are more expressive,
+as an undelimited continuation is merely a delimited continuation
+whose control delimiter is placed at the start of the program.
+
+The crucial feature of the typed continuations proposal that makes it
+more structured than conventional delimited continuations is *control
+tags*. A control tag is a typed symbolic entity that suspends the
+current execution context and reifies it as a *continuation object*
+(henceforth, just *continuation*) up to its control delimiter. The
+type of a control tag communicates the type of its payload as well as
+its expected return type, i.e. the type of data that must be supplied
+to its associated continuation upon resumption. In other words,
+control tags define an *interface* for constructing continuations.
+
+A second aspect of the design that aids modularity by separating
+concerns is that the construction of continuations is distinct from
+*handling* of continuations. A continuation is handled at the
+delimiter of a control tag rather than at the invocation site of the
+control tag. Control tags are a mild extension of exception tags as in
+the exception handling proposal. The key difference is that in
+addition to a payload type, a control tag also declares a return
+type. Operationally, control tags can be thought of as resumable exceptions.
 
 ## Examples
 
