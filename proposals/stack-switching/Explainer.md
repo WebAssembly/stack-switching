@@ -26,6 +26,7 @@ instructions and validation rules to facilitate stack switching.
 1. [Design considerations](#design-considerations)
    1. [Asymmetric and symmetric switching](#asymmetric-and-symmetric-switching)
    1. [Linear usage of continuations](#linear-usage-of-continuations)
+   1. [Memory management](#memory-management)
 1. [Specification changes](#specification-changes)
    1. [Types](#types)
    1. [Tags](#tags)
@@ -55,9 +56,21 @@ use-cases as well as being forwards compatible with future use-cases,
 while admitting efficient implementations.
 
 A key technical design challenge is to ensure that the stack switching
-facility integrates smoothly with existing Wasm language facilities,
-especially that it remains typeable with the simple type system of
-Wasm.
+facility integrates smoothly with existing Wasm language
+facilities. Furthermore, a key concern is to ensure that stack
+switching remains safe, both in the sense of type-safe and that it
+does not break the sandboxing model of Wasm. For these reasons our
+proposed design does not allow mangling Wasm stacks, that is it
+preserves the abstract nature of Wasm execution stacks. Instead, we
+propose to provide stateful handles to inactive execution stacks by
+way of *continuations*. A continuation represents the rest of a
+computation from a particular point in its execution up to a
+*handler*. A continuation is akin to a function in the sense that it
+accepts an input and produces an output, essentially providing a form
+of typed view of an inactive execution stack, where the input type
+discloses the type of data that must be provided to continue execution
+of the stack, and the output type tells the caller the type of data
+that remains on the stack after it finishes executing.
 
 <!-- The proposed mechanism is based on proven technology: *delimited
 continuations*. An undelimited continuation represents the rest of a
