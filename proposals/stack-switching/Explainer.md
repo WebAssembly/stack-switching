@@ -175,7 +175,93 @@ sumUp(10); // returns 55
 
 ### Coroutines
 
-TODO
+```wast
+(module $co2
+  (type $task (func (result i32))) ;; type alias task = [] -> []
+  (type $ct   (cont $task)) ;; type alias   ct = $task
+
+  (tag $interrupt (export "interrupt"))   ;; interrupt : [] -> []
+  (tag $cancel (export "cancel"))   ;; cancel : [] -> []
+
+  ;; run : [(ref $task) (ref $task)] -> []
+  ;; implements a 'seesaw' (c.f. Ganz et al. (ICFP@99))
+  (func $run (export "seesaw") (param $up (ref $ct)) (param $down (ref $ct)) (result i32)
+    (local $result i32)
+    ;; run $up
+    (loop $run_next (result i32)
+      (block $on_interrupt (result (ref $ct))
+        (resume $ct (on $interrupt $on_interrupt)
+                    (local.get $up))
+        ;; $up finished, store its result
+        (local.set $result)
+        ;; next cancel $down
+        (block $on_cancel
+          (try_table (catch $cancel $on_cancel)
+            ;; inject the cancel exception into $down
+            (resume_throw $ct $cancel (local.get $down))
+            (drop) ;; drop the return value if it handled $cancel
+                   ;; itself and returned normally...
+          )
+        ) ;; ... otherwise catch $cancel and return $up's result.
+       (return (local.get $result))
+      ) ;; on_interrupt clause, stack type: [(cont $ct)]
+      (local.set $up)
+      ;; swap $up and $down
+      (local.get $down)
+      (local.set $down (local.get $up))
+      (local.set $up)
+      (br $run_next)
+    )
+  )
+)
+(register "co2")
+```
+```wast
+(module $cogen
+  (type $task (func (result i32)))
+  (type $ct-task (cont $task))
+  (type $seesaw (func (param (ref $ct-task)) (param (ref $ct-task))))
+  (type $seesaw-ct (cont $seesaw))
+  (type $gen (func)) ;; [] -> []
+  (type $ct-gen (cont $gen)) ;; cont [] -> []
+
+  (func $sumUp (import "generator" "sumUp") (param (ref $ct-gen)) (param i32) (result i32))
+  (func $seesaw (import "co2" "seesaw") (param (ref $ct-task)) (param (ref $ct-task)) (result i32))
+
+  (tag $yield (import "generator" "yield") (param i32))
+  (tag $interrupt (import "co2" "interrupt"))
+
+  (func $interruptible-nats (result i32)
+    (local $i i32)
+    (loop $produce-next (result i32)
+      (suspend $yield (local.get $i))
+      (suspend $interrupt)
+      (local.set $i
+        (i32.add (local.get $i)
+                 (i32.const 1)))
+      (br $produce-next) ;; continue to produce the next natural number
+    )
+  )
+
+  (func $seesaw-unit (param $up (ref $ct-task)) (param $down (ref $ct-task))
+    (call $seesaw (local.get $up) (local.get $down))
+    (drop))
+  (elem declare func $interruptible-nats $seesaw-unit)
+
+  (func (export "sumUp-after-seesaw") (result i32)
+    (local $up (ref $ct-task))
+    (local $down (ref $ct-task))
+    (local.set $up (cont.new $ct-task (ref.func $interruptible-nats)))
+    (local.set $down (cont.new $ct-task (ref.func $interruptible-nats)))
+    (call $sumUp (cont.bind $seesaw-ct $ct-gen
+                      (local.get $up)
+                      (local.get $down)
+                      (cont.new $seesaw-ct (ref.func $seesaw-unit)))
+                 (i32.const 10)))
+)
+
+(assert_return (invoke "sumUp-after-seesaw") (i32.const 100))
+```
 
 ### Modular composition
 
