@@ -39,11 +39,11 @@ Based on [typed reference proposal](https://github.com/WebAssembly/function-refe
     - and `(label $l : [te1'* (ref null? $ct')])*`
     - and `([te1*] <: [te1'*])*`
     - and `($ct' = cont $ft')*`
-    - and `$ft' = [t1'*] -> [t2'*]`
+    - and `($ft' = [t1'*] -> [t2'*])*`
     - and `([te2*] -> [t2*] <: [t1'*] -> [t2'*])*`
 
-* `resume_throw <typeidx> <tagidx> (tag <tagidx> <labelidx>)` aborts a continuation
-  - `resume_throw $ct $e (tag $t $l): [te* (ref null? $ct)] -> [t2*]`
+* `resume_throw <typeidx> <tagidx> (tag <tagidx> <labelidx>)*` aborts a continuation
+  - `resume_throw $ct $e (tag $t $l)*: [te* (ref null? $ct)] -> [t2*]`
     - iff `(tag $e : [te*] -> [])`
     - and `$ct = cont $ft`
     - and `$ft = [t1*] -> [t2*]`
@@ -51,7 +51,7 @@ Based on [typed reference proposal](https://github.com/WebAssembly/function-refe
     - and `(label $l : [te1'* (ref null? $ct')])*`
     - and `([te1*] <: [te1'*])*`
     - and `($ct' = cont $ft')*`
-    - and `$ft' = [t1'*] -> [t2'*]`
+    - and `($ft' = [t1'*] -> [t2'*])*`
     - and `([te2*] -> [t2*] <: [t1'*] -> [t2'*])*`
 
 * `barrier <blocktype> <instr>* end` blocks suspension
