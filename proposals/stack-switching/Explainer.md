@@ -15,6 +15,7 @@ This proposal adds typed stack switching to WebAssembly, enabling a single WebAs
    1. [Linear usage of continuations](#linear-usage-of-continuations)
 1. [Specification changes](#specification-changes)
    1. [Types](#types)
+   1. [Tags](#tags)
    1. [Instructions](#instructions)
    1. [Binary format](#binary-format)
 
