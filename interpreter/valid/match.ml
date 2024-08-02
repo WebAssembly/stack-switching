@@ -162,8 +162,8 @@ let match_global_type c (GlobalT (mut1, t1)) (GlobalT (mut2, t2)) =
   | Cons -> true
   | Var -> match_val_type c t2 t1
 
-let match_tag_type c (TagT ht1) (TagT ht2) =
-  match_heap_type c ht1 ht2
+let match_tag_type c (TagT dt1) (TagT dt2) =
+  match_def_type c dt1 dt2
 
 let match_table_type c (TableT (lim1, t1)) (TableT (lim2, t2)) =
   match_limits c lim1 lim2 && match_ref_type c t1 t2 && match_ref_type c t2 t1

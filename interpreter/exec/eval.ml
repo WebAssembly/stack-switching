@@ -188,8 +188,8 @@ let str_type_of_heap_type (inst : module_inst) ht : str_type =
 let func_type_of_cont_type (inst : module_inst) (ContT ht) : func_type =
   as_func_str_type (str_type_of_heap_type inst ht)
 
-let func_type_of_tag_type (inst : module_inst) (TagT ht) : func_type =
-  as_func_str_type (str_type_of_heap_type inst ht)
+let func_type_of_tag_type (_inst : module_inst) (TagT dt) : func_type =
+  as_func_str_type (expand_def_type dt)
 
 
 (* Evaluation *)
@@ -420,7 +420,7 @@ let rec step (c : config) : config =
       | ThrowRef, Ref (NullRef _) :: vs ->
         vs, [Trapping "null exception reference" @@ e.at]
 
-      | ThrowRef, Ref (ExnRef (t, args)) :: vs ->
+      | ThrowRef, Ref (Exn.(ExnRef (Exn (t, args)))) :: vs ->
         vs, [Throwing (t, args) @@ e.at]
 
       | TryTable (bt, cs, es'), vs ->
@@ -428,7 +428,7 @@ let rec step (c : config) : config =
         let n1 = List.length ts1 in
         let n2 = List.length ts2 in
         let args, vs' = split n1 vs e.at in
-        vs', [Handler (n2, cs, (args, [Label (n2, [], ([], List.map plain es')) @@ e.at])) @@ e.at]
+        vs', [Handler (n2, cs, ([], [Label (n2, [], (args, List.map plain es')) @@ e.at])) @@ e.at]
 
       | Drop, v :: vs' ->
         vs', []
@@ -1184,7 +1184,7 @@ let rec step (c : config) : config =
 
     | Handler (n, {it = CatchRef (x1, x2); _} :: cs, (vs', {it = Throwing (a, vs0); at} :: es')), vs ->
       if a == tag c.frame.inst x1 then
-        Ref (ExnRef (a, vs0)) :: vs0 @ vs, [Plain (Br x2) @@ e.at]
+        Ref Exn.(ExnRef (Exn (a, vs0))) :: vs0 @ vs, [Plain (Br x2) @@ e.at]
       else
         vs, [Handler (n, cs, (vs', {it = Throwing (a, vs0); at} :: es')) @@ e.at]
 
@@ -1192,7 +1192,7 @@ let rec step (c : config) : config =
       vs, [Plain (Br x) @@ e.at]
 
     | Handler (n, {it = CatchAllRef x; _} :: cs, (vs', {it = Throwing (a, vs0); at} :: es')), vs ->
-      Ref (ExnRef (a, vs0)) :: vs, [Plain (Br x) @@ e.at]
+      Ref Exn.(ExnRef (Exn (a, vs0))) :: vs, [Plain (Br x) @@ e.at]
 
     | Handler (n, [], (vs', {it = Throwing (a, vs0); at} :: es')), vs ->
       vs, [Throwing (a, vs0) @@ at]
@@ -1317,7 +1317,7 @@ let init_import (inst : module_inst) (ex : extern) (im : import) : module_inst =
     | TableImport tt -> ExternTableT tt
     | MemoryImport mt -> ExternMemoryT mt
     | GlobalImport gt -> ExternGlobalT gt
-    | TagImport x    -> ExternTagT (TagT (VarHT (StatX x.it)))
+    | TagImport x -> ExternTagT (TagT (type_ inst x))
   in
   let et = subst_extern_type (subst_of inst) it in
   let et' = extern_type_of inst.types ex in
@@ -1367,9 +1367,8 @@ let init_elem (inst : module_inst) (seg : elem_segment) : module_inst =
   let elem = Elem.alloc (List.map (fun c -> as_ref (eval_const inst c)) einit) in
   {inst with elems = inst.elems @ [elem]}
 
-let init_tag (inst : module_inst) (tag : tag) : module_inst =
-  let {tagtype} = tag.it in
-  let tag = Tag.alloc (subst_tag_type (subst_of inst) tagtype) in
+let init_tag (inst : module_inst) (t : tag) : module_inst =
+  let tag = Tag.alloc (TagT (type_ inst t.it.tgtype)) in
   {inst with tags = inst.tags @ [tag]}
 
 let init_data (inst : module_inst) (seg : data_segment) : module_inst =

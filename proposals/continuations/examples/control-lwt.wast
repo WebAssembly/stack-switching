@@ -29,7 +29,7 @@
     (local $h (ref $cont-cont))
     (local $k (ref $cont))
     (block $on_control (result (ref $cont-cont) (ref $cont))
-       (resume $cont (tag $control $on_control)
+       (resume $cont (on $control $on_control)
                      (local.get $nextk))
        (return)
     ) ;;   $on_control (param (ref $cont-func) (ref $cont))

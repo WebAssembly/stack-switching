@@ -18,7 +18,7 @@
 
   (func (export "unhandled-3")
     (block $h (result (ref $k1))
-      (resume $k1 (tag $e2 $h) (cont.new $k1 (ref.func $f1)))
+      (resume $k1 (on $e2 $h) (cont.new $k1 (ref.func $f1)))
       (unreachable)
     )
     (drop)
@@ -26,7 +26,7 @@
 
   (func (export "handled")
     (block $h (result (ref $k1))
-      (resume $k1 (tag $e1 $h) (cont.new $k1 (ref.func $f1)))
+      (resume $k1 (on $e1 $h) (cont.new $k1 (ref.func $f1)))
       (unreachable)
     )
     (drop)
@@ -39,7 +39,7 @@
 
   (func (export "uncaught-1")
     (block $h (result (ref $k1))
-      (resume $k1 (tag $e1 $h) (cont.new $k1 (ref.func $f2)))
+      (resume $k1 (on $e1 $h) (cont.new $k1 (ref.func $f2)))
       (unreachable)
     )
     (drop)
@@ -47,7 +47,7 @@
 
   (func (export "uncaught-2")
     (block $h (result (ref $k1))
-      (resume $k1 (tag $e1 $h) (cont.new $k1 (ref.func $f1)))
+      (resume $k1 (on $e1 $h) (cont.new $k1 (ref.func $f1)))
       (unreachable)
     )
     (resume_throw $k1 $exn)
@@ -63,7 +63,7 @@
 
   (func (export "barrier")
     (block $h (result (ref $k1))
-      (resume $k1 (tag $e1 $h) (cont.new $k1 (ref.func $f3)))
+      (resume $k1 (on $e1 $h) (cont.new $k1 (ref.func $f3)))
       (unreachable)
     )
     (resume_throw $k1 $exn)
@@ -79,7 +79,7 @@
   )
   (func $nl2 (param $k (ref $k1))
     (block $h (result (ref $k1))
-      (resume $k1 (tag $e1 $h) (local.get $k))
+      (resume $k1 (on $e1 $h) (local.get $k))
       (unreachable)
     )
     (resume $k1 (local.get $k))
@@ -88,12 +88,12 @@
   (func $nl3 (param $k (ref $k1))
     (local $k' (ref null $k1))
     (block $h1 (result (ref $k1))
-      (resume $k1 (tag $e1 $h1) (local.get $k))
+      (resume $k1 (on $e1 $h1) (local.get $k))
       (unreachable)
     )
     (local.set $k')
     (block $h2 (result (ref $k1))
-      (resume $k1 (tag $e1 $h2) (local.get $k'))
+      (resume $k1 (on $e1 $h2) (local.get $k'))
       (unreachable)
     )
     (resume $k1 (local.get $k'))
@@ -185,7 +185,7 @@
     (tag $foo)
     (func
       (block $on_foo (result (ref $ft))
-        (resume $ct (tag $foo $on_foo) (ref.null $ct))
+        (resume $ct (on $foo $on_foo) (ref.null $ct))
         (unreachable)
       )
       (drop)))
@@ -198,7 +198,7 @@
     (tag $foo)
     (func
       (block $on_foo (result (ref $ct) (ref $ft))
-        (resume $ct (tag $foo $on_foo) (ref.null $ct))
+        (resume $ct (on $foo $on_foo) (ref.null $ct))
         (unreachable)
       )
       (drop)
@@ -241,7 +241,7 @@
     (loop $loop
       (block $on_get (result (ref $k))
         (block $on_set (result i32 (ref $k))
-          (resume $k (tag $get $on_get) (tag $set $on_set)
+          (resume $k (on $get $on_get) (on $set $on_set)
             (local.get $s) (local.get $k)
           )
           (return)
@@ -313,7 +313,7 @@
     (local.get $i)
     (cont.new $cont0 (ref.func $gen))
     (block $on_first_yield (param i64 (ref $cont0)) (result i64 (ref $cont))
-      (resume $cont0 (tag $yield $on_first_yield))
+      (resume $cont0 (on $yield $on_first_yield))
       (unreachable)
     )
     (loop $on_yield (param i64) (param (ref $cont))
@@ -322,7 +322,7 @@
       (local.set $sum (i64.add (local.get $sum) (local.get $n)))
       (i64.eq (local.get $n) (local.get $j))
       (local.get $k)
-      (resume $cont (tag $yield $on_yield))
+      (resume $cont (on $yield $on_yield))
     )
     (return (local.get $sum))
   )
@@ -404,7 +404,7 @@
       (if (call $queue-empty) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_spawn (result (ref $cont) (ref $cont))
-          (resume $cont (tag $yield $on_yield) (tag $spawn $on_spawn)
+          (resume $cont (on $yield $on_yield) (on $spawn $on_spawn)
             (call $dequeue)
           )
           (br $l)  ;; thread terminated
@@ -624,7 +624,7 @@
     (local $k4 (ref null $k4))
     (local $k2 (ref null $k2))
     (block $l (result (ref $k6))
-      (resume $k0 (tag $e $l) (cont.new $k0 (ref.func $f)))
+      (resume $k0 (on $e $l) (cont.new $k0 (ref.func $f)))
       (unreachable)
     )
     (local.set $k6)
@@ -638,3 +638,35 @@
   (i32.const 0) (i32.const 1) (i32.const 2) (i32.const 3)
   (i32.const 4) (i32.const 5) (i32.const 6)
 )
+
+;; Subtyping
+(module
+  (type $ft1 (func (param i32)))
+  (type $ct1 (sub (cont $ft1)))
+
+  (type $ft0 (func))
+  (type $ct0 (sub (cont $ft0)))
+
+  (func $test (param $x (ref $ct1))
+    (i32.const 123)
+    (local.get $x)
+    (cont.bind $ct1 $ct0)
+    (drop)
+  )
+)
+
+;; Globals
+(module
+  (type $ft (func))
+  (type $ct (cont $ft))
+
+  (global $k (mut (ref null $ct)) (ref.null $ct))
+  (global $g (ref null $ct) (ref.null $ct))
+
+  (func $f)
+  (elem declare func $f)
+
+  (func (export "set-global")
+    (global.set $k (cont.new $ct (ref.func $f))))
+)
+(assert_return (invoke "set-global"))

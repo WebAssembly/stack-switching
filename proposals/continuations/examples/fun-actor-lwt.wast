@@ -143,7 +143,7 @@
       (if (call $queue-empty) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_fork (result (ref $cont) (ref $cont))
-          (resume $cont (tag $yield $on_yield) (tag $fork $on_fork)
+          (resume $cont (on $yield $on_yield) (on $fork $on_fork)
             (call $dequeue)
           )
           (br $l)  ;; thread terminated
@@ -262,10 +262,10 @@
           (block $on_recv (result (ref $i-cont))
              ;; this should really be a tail call to the continuation
              ;; do we need a 'return_resume' operator?
-             (resume $i-cont (tag $self $on_self)
-                             (tag $spawn $on_spawn)
-                             (tag $send $on_send)
-                             (tag $recv $on_recv)
+             (resume $i-cont (on $self $on_self)
+                             (on $spawn $on_spawn)
+                             (on $send $on_send)
+                             (on $recv $on_recv)
                              (local.get $res) (local.get $ik)
              )
              (return)
@@ -312,10 +312,10 @@
           (block $on_recv (result (ref $i-cont))
              ;; this should really be a tail call to the continuation
              ;; do we need a 'return_resume' operator?
-             (resume $cont (tag $self $on_self)
-                           (tag $spawn $on_spawn)
-                           (tag $send $on_send)
-                           (tag $recv $on_recv)
+             (resume $cont (on $self $on_self)
+                           (on $spawn $on_spawn)
+                           (on $send $on_send)
+                           (on $recv $on_recv)
                            (local.get $k)
              )
              (return)
