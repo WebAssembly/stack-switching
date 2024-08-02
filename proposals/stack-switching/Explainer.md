@@ -156,6 +156,14 @@ We add two new continuation heap types and their subtyping hierachy:
 - `nocont ok` and `cont ok` always
 - `nocont` is the bottom type of continuation types, whereas `cont` is the top type, i.e. `nocont <: cont`
 
+### Tags
+
+We change the wellformedness condition for tag types to be more liberal, i.e.
+
+- `(tag $t (type $ft)) ok` iff `$ft ok` and `$ft = [t1*] -> [t2*]`
+
+In other words, the return type of tag types is allowed to be non-empty.
+
 ### Instructions
 
 The new instructions and their validation rules are as follows. To simplify the presentation, we write this:
