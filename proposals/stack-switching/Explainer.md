@@ -1,6 +1,12 @@
 # Stack switching
 
-This proposal adds typed stack switching to WebAssembly, enabling a single WebAssembly instance to manage multiple execution stacks concurrently. The primary use-case for stack switching is to add direct support for modular compilation of advanced non-local control flow idioms, e.g. coroutines, async/await, yield-style generators, lightweight threads, and so forth. This document outlines the new instructions and validation rules to facilitate stack switching.
+This proposal adds typed stack switching to WebAssembly, enabling a
+single WebAssembly instance to manage multiple execution stacks
+concurrently. The primary use-case for stack switching is to add
+direct support for modular compilation of advanced non-local control
+flow idioms, e.g. coroutines, async/await, yield-style generators,
+lightweight threads, and so forth. This document outlines the new
+instructions and validation rules to facilitate stack switching.
 
 ## Table of contents
 
@@ -10,6 +16,13 @@ This proposal adds typed stack switching to WebAssembly, enabling a single WebAs
    1. [Coroutines](#coroutines)
    1. [Modular composition](#modular-composition)
    1. [Lightweight threads](#lightweight-threads)
+1. [Instruction set extension](#instruction-set-extension)
+   1. [Declaring control tags](#declaring-control-tags)
+   1. [Creating continuations](#creating-continuations)
+   1. [Invoking continuations](#invoking-continuations)
+   1. [Suspending continuations](#suspending-continuations)
+   1. [Binding continuations](#binding-continuations)
+   1. [Continuation lifetime](#continuation-lifetime)
 1. [Design considerations](#design-considerations)
    1. [Asymmetric and symmetric switching](#asymmetric-and-symmetric-switching)
    1. [Linear usage of continuations](#linear-usage-of-continuations)
@@ -17,6 +30,7 @@ This proposal adds typed stack switching to WebAssembly, enabling a single WebAs
    1. [Types](#types)
    1. [Tags](#tags)
    1. [Instructions](#instructions)
+   1. [Execution](#execution)
    1. [Binary format](#binary-format)
 
 ## Motivation
@@ -40,7 +54,10 @@ structured mechanism that is sufficiently general to cover present
 use-cases as well as being forwards compatible with future use-cases,
 while admitting efficient implementations.
 
-A key technical design challenge is to ensure that the stack switching facility integrates smoothly with existing Wasm language facilities, especially that it remains typeable with the simple type system of Wasm.
+A key technical design challenge is to ensure that the stack switching
+facility integrates smoothly with existing Wasm language facilities,
+especially that it remains typeable with the simple type system of
+Wasm.
 
 <!-- The proposed mechanism is based on proven technology: *delimited
 continuations*. An undelimited continuation represents the rest of a
@@ -215,6 +232,188 @@ TODO
 
 TODO
 
+## Instruction set extension
+
+In this section we give an informal overview and explanations of the
+proposed instruction set extension. In Section [Specification
+changes](#specification-changes) we give an overview of the validation
+and execution rules as well as changes to the binary format.
+
+The proposal adds a new reference type for continuations.
+
+```wast
+  (cont $t)
+```
+
+A continuation type is given in terms of a function type `$t`, whose parameters `tp*`
+describes the expected stack shape prior to resuming/starting the
+continuation, and whose return types `tr*` describes the stack
+shape after the continuation has run to completion.
+
+As a shorthand, we will often write the function type inline and write a continuation type as
+```wast
+  (cont [tp*] -> [tr*])
+```
+
+### Declaring control tags
+
+A control tag is similar to an exception extended with a result type
+(or list thereof). Operationally, a control tag may be thought of as a
+*resumable* exception. A tag declaration provides the type signature
+of a control tag.
+
+```wast
+  (tag $e (param tp*) (result tr*))
+```
+
+The `$e` is the symbolic index of the control tag in the index space
+of tags. The parameter types `tp*` describe the expected stack layout
+prior to invoking the tag, and the result types `tr*` describe the
+stack layout following an invocation of the operation. In this
+document we will sometimes write `$e : [tp*] -> [tr*]` as shorthand
+for indicating that such a declaration is in scope.
+
+### Creating continuations
+
+The following instruction creates a continuation in *suspended state*
+from a function.
+
+```wast
+  cont.new $ct : [(ref $ft)] -> [(ref $ct)]
+  where:
+  - $ft = func [t1*] -> [t2*]
+  - $ct = cont $ft
+```
+
+The instruction takes as operand a reference to
+a function of type `[t1*] -> [t2*]`. The body of this function is a
+computation that may perform non-local control flow.
+
+
+### Invoking continuations
+
+There are three ways to invoke (or run) a continuation.
+
+The first way to invoke a continuation resumes the continuation under
+a *handler*, which handles subsequent control suspensions within the
+continuation.
+
+```wast
+  resume $ct (on $e $l)* : [tp* (ref $ct)] -> [tr*]
+  where:
+  - $ct = cont [tp*] -> [tr*]
+```
+
+The `resume` instruction is parameterised by a continuation type and a
+handler dispatch table defined by a collection of pairs of control
+tags and labels. Each pair maps a control tag to a label pointing to
+its corresponding handler code. The `resume` instruction consumes its
+continuation argument, meaning a continuation may be resumed only
+once.
+
+The second way to invoke a continuation is to raise an exception at
+the control tag invocation site. This amounts to performing "an
+abortive action" which causes the stack to be unwound.
+
+
+```wast
+  resume_throw $ct $exn (on $e $l)* : [tp* (ref $ct)])] -> [tr*]
+  where:
+  - $ct = cont [ta*] -> [tr*]
+  - $exn : [tp*] -> []
+```
+
+The instruction `resume_throw` is parameterised by a continuation
+type, the exception to be raised at the control tag invocation site,
+and a handler dispatch table. As with `resume`, this instruction also
+fully consumes its continuation argument. Operationally, this
+instruction raises the exception `$exn` with parameters of type `tp*`
+at the control tag invocation point in the context of the supplied
+continuation. As an exception is being raised (the continuation is not
+actually being supplied a value) the parameter types for the
+continuation `ta*` are unconstrained.
+
+The third way to invoke a continuation is to perform a symmetric switch.
+
+```wast
+TODO
+```
+
+### Suspending continuations
+
+A computation running inside a continuation can suspend itself by
+invoking one of the declared control tags.
+
+
+```wast
+  suspend $e : [tp*] -> [tr*]
+  where:
+  - $e : [tp*] -> [tr*]
+```
+
+The instruction `suspend` invokes the control tag named `$e` with
+arguments of types `tp*`. Operationally, the instruction transfers
+control out of the continuation to the nearest enclosing handler for
+`$e`. This behaviour is similar to how raising an exception transfers
+control to the nearest exception handler that handles the
+exception. The key difference is that the continuation at the
+suspension point expects to be resumed later with arguments of types
+`tr*`.
+
+### Binding continuations
+
+The parameter list of a continuation may be shrunk via `cont.bind`. This
+instruction provides a way to partially apply a given
+continuation. This facility turns out to be important in practice due
+to the block and type structure of Wasm as in order to return a
+continuation from a block, all branches within the block must agree on
+the type of continuation. By using `cont.bind`, one can
+programmatically ensure that the branches within a block each return a
+continuation with compatible type (the [Examples](#examples) section
+provides several example usages of `cont.bind`).
+
+
+```wast
+  cont.bind $ct1 $ct2 : [tp1* (ref $ct1)] -> [(ref $ct2)]
+  where:
+  $ct1 = cont [tp1* tp2*] -> [tr*]
+  $ct2 = cont [tp2*] -> [tr*]
+```
+
+The instruction `cont.bind` binds the arguments of type `tp1*` to a
+continuation of type `$ct1`, yielding a modified continuation of type
+`$ct2` which expects fewer arguments. This instruction also consumes
+its continuation argument, and yields a new continuation that can be
+supplied to either `resume`,`resume_throw`, or `cont.bind`.
+
+### Continuation lifetime
+
+#### Producing continuations
+
+There are four different ways in which continuations are produced
+(`cont.new,suspend,cont.bind,switch`). A fresh continuation object is
+allocated with `cont.new` and the current continuation is reused with
+`suspend`, `cont.bind`, and `switch`.
+
+The `cont.bind` instruction is directly analogous to the mildly
+controversial `func.bind` instruction from the function references
+proposal. However, whereas the latter necessitates the allocation of a
+new closure, as continuations are single-shot no allocation is
+necessary: all allocation happens when the original continuation is
+created by preallocating one slot for each continuation argument.
+
+#### Consuming continuations
+
+There are four different ways in which continuations are consumed
+(`resume,resume_throw,switch,cont.bind`). A continuation may be
+resumed with a particular handler with `resume`; aborted with
+`resume_throw`; symmetrically switched to via `switch`; or partially
+applied with `cont.bind`.
+
+In order to ensure that continuations are one-shot, `resume`,
+`resume_throw`, `switch`, and `cont.bind` destructively modify the
+continuation object such that any subsequent use of the same
+continuation object will result in a trap.
 
 ## Design considerations
 
@@ -226,15 +425,38 @@ TODO
 
 ### Linear usage of continuations
 
-Continuations in this proposal are single-shot (aka linear), meaning that they must be invoked exactly once (though this is not statically enforced). A continuation can be invoked either by resuming it (with `resume`); by aborting it (with `resume_throw`); or by switching to it (with `switch`). Some applications such as backtracking, probabilistic programming, and process duplication exploit multi-shot continuations, but none of the critical use cases require multi-shot continuations. Nevertheless, it is natural to envisage a future iteration of this proposal that includes support for multi-shot continuations by way of a continuation clone instruction.
+Continuations in this proposal are single-shot (aka linear), meaning
+that they must be invoked exactly once (though this is not statically
+enforced). A continuation can be invoked either by resuming it (with
+`resume`); by aborting it (with `resume_throw`); or by switching to it
+(with `switch`). Some applications such as backtracking, probabilistic
+programming, and process duplication exploit multi-shot continuations,
+but none of the critical use cases require multi-shot
+continuations. Nevertheless, it is natural to envisage a future
+iteration of this proposal that includes support for multi-shot
+continuations by way of a continuation clone instruction.
 
 ### Memory management
 
-The current proposal does not require a general garbage collector as the linearity of continuations guarantees that there are no cycles in continuation objects. 
-In theory, we could dispense with automated memory management altogether if we took seriously the idea that failure to use a continuation constitutes a bug in the producer. In practice, for most producers enforcing such a discipline is unrealistic and not something an engine can rely on anyway. To prevent space leaks, most engines will either need some form of automated memory management for unconsumed continuations or a monotonic continuation allocation scheme. 
+The current proposal does not require a general garbage collector as
+the linearity of continuations guarantees that there are no cycles in
+continuation objects.  In theory, we could dispense with automated
+memory management altogether if we took seriously the idea that
+failure to use a continuation constitutes a bug in the producer. In
+practice, for most producers enforcing such a discipline is
+unrealistic and not something an engine can rely on anyway. To prevent
+space leaks, most engines will either need some form of automated
+memory management for unconsumed continuations or a monotonic
+continuation allocation scheme.
 
-* Automated memory management: due to the acyclicity of continuations, a reference counting scheme is sufficient.
-* Monotonic continuation allocation: it is safe to use a continuation object as long as its underlying stack is alive. It is trivial to ensure a stack is alive by delaying deallocation until the program finishes. To avoid excessive use of memory, an engine can equip a stack with a revision counter, thus making it safe to repurpose the allocated stack for another continuation.
+* Automated memory management: due to the acyclicity of continuations,
+  a reference counting scheme is sufficient.
+* Monotonic continuation allocation: it is safe to use a continuation
+  object as long as its underlying stack is alive. It is trivial to
+  ensure a stack is alive by delaying deallocation until the program
+  finishes. To avoid excessive use of memory, an engine can equip a
+  stack with a revision counter, thus making it safe to repurpose the
+  allocated stack for another continuation.
 
 ## Specification changes
 
@@ -338,7 +560,13 @@ This abbreviation will be formalized with an auxiliary function or other means i
 
 ### Execution
 
-The same tag may be used simultaneously by `throw`, `suspend`, `switch`, and their associated handlers. When searching for a handler for an event, only handlers for the matching kind of event are considered, e.g. only `(on $e $l)` handlers can handle `suspend` events and only `(on $e switch)` handlers can handle `switch` events. The handler search continues past handlers for the wrong kind of event, even if they use the correct tag.
+The same tag may be used simultaneously by `throw`, `suspend`,
+`switch`, and their associated handlers. When searching for a handler
+for an event, only handlers for the matching kind of event are
+considered, e.g. only `(on $e $l)` handlers can handle `suspend`
+events and only `(on $e switch)` handlers can handle `switch`
+events. The handler search continues past handlers for the wrong kind
+of event, even if they use the correct tag.
 
 ### Binary format
 
