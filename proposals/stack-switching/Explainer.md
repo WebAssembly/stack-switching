@@ -66,7 +66,7 @@ sumUp(10); // returns 55
   (tag $yield (param i32)) ;; i32 -> []
 
   ;; Producer: a stream of naturals
-  (func $nats
+  (func $nats (export "nats")
     (local $i i32) ;; zero-initialised local
     (loop $produce-next
       (suspend $yield (local.get $i)) ;; yield control with payload `i` to the surrounding context
@@ -80,12 +80,9 @@ sumUp(10); // returns 55
   (elem declare func $nats)
 
   ;; Consumer: sums up some slice of the `nats` stream
-  (func (export "sumUp") (param $upto i32) (result i32)
+  (func $sumUp (export "sumUp") (param $k (ref $ct)) (param $upto i32) (result i32)
     (local $n i32) ;; current value
     (local $s i32) ;; accumulator
-    (local $k (ref $ct)) ;; the continuation of the generator
-    ;; allocate the initial continuation, viz. execution stack, to run the generator `nats`
-    (local.set $k (cont.new $ct (ref.func $nats)))
     (loop $consume-next
       (block $on_yield (result i32 (ref $ct))
         ;; continue the generator
@@ -104,8 +101,16 @@ sumUp(10); // returns 55
     )
     (local.get $s)
   )
+
+  ;; Put everything together
+  (func $main (export "main") (result i32)
+    ;; allocate the initial continuation, viz. execution stack, to run the generator `nats`
+    (local $k (ref $ct))
+    (local.set $k (cont.new $ct (ref.func $nats)))
+    ;; run `sumUp`
+    (call $sumUp (local.get $k) (i32.const 10)))
 )
-(assert_return (invoke "sumUp" (i32.const 10)) (i32.const 55))
+(assert_return (invoke "main") (i32.const 55))
 ```
 
 ### Coroutines
