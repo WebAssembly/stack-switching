@@ -130,7 +130,7 @@ TODO
 
 ## Design considerations
 
-TODO
+In this section we discuss some key design considerations.
 
 ### Asymmetric and symmetric switching
 
@@ -139,6 +139,14 @@ TODO
 ### Linear usage of continuations
 
 Continuations in this proposal are single-shot (aka linear), meaning that they must be invoked exactly once (though this is not statically enforced). A continuation can be invoked either by resuming it (with `resume`); by aborting it (with `resume_throw`); or by switching to it (with `switch`). Some applications such as backtracking, probabilistic programming, and process duplication exploit multi-shot continuations, but none of the critical use cases require multi-shot continuations. Nevertheless, it is natural to envisage a future iteration of this proposal that includes support for multi-shot continuations by way of a continuation clone instruction.
+
+### Memory management
+
+The current proposal does not require a general garbage collector as the linearity of continuations guarantees that there are no cycles in continuation objects. 
+In theory, we could dispense with automated memory management altogether if we took seriously the idea that failure to use a continuation constitutes a bug in the producer. In practice, for most producers enforcing such a discipline is unrealistic and not something an engine can rely on anyway. To prevent space leaks, most engines will either need some form of automated memory management for unconsumed continuations a monotonic continuation allocation scheme. 
+
+* Automated memory management: due to the acyclicity of continuations, a reference counting scheme is sufficient.
+* Monotonic continuation allocation: it is safe to use a continuation object as long as its underlying stack is alive. It is trivial to ensure a stack is alive by delaying deallocation until the program finishes. To avoid excessive use of memory, an engine can equip a stack with a revision counter, thus making it safe to repurpose the allocated stack for another continuation.
 
 ## Specification changes
 
