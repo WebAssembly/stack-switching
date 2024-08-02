@@ -138,7 +138,7 @@ TODO
 
 ### Linear usage of continuations
 
-TODO
+Continuations in this proposal are single-shot (aka linear), meaning that they must be invoked exactly once (though this is not statically enforced). A continuation can be invoked either by resuming it (with `resume`); by aborting it (with `resume_throw`); or by switching to it (with `switch`). Some applications such as backtracking, probabilistic programming, and process duplication exploit multi-shot continuations, but none of the critical use cases require multi-shot continuations. Nevertheless, it is natural to envisage a future iteration of this proposal that includes support for multi-shot continuations by way of a continuation clone instruction.
 
 ## Specification changes
 
