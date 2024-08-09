@@ -96,11 +96,19 @@ function assert_malformed(bytes) {
   throw new Error("Wasm decoding failure expected");
 }
 
+function assert_malformed_custom(bytes) {
+  return;
+}
+
 function assert_invalid(bytes) {
   try { module(bytes, false) } catch (e) {
     if (e instanceof WebAssembly.CompileError) return;
   }
   throw new Error("Wasm validation failure expected");
+}
+
+function assert_invalid_custom(bytes) {
+  return;
 }
 
 function assert_unlinkable(bytes) {
@@ -302,8 +310,29 @@ let nan_bitmask_of = function
   | CanonicalNan -> abs_mask_of  (* differ from canonical NaN in sign bit *)
   | ArithmeticNan -> canonical_nan_of  (* 1 everywhere canonical NaN is *)
 
+let type_of_num_pat = function
+  | NumPat num -> Value.type_of_num num.it
+  | NanPat op -> Value.type_of_op op.it
+
+let type_of_vec_pat = function
+  | VecPat vec -> Value.type_of_vec vec
+
+let type_of_ref_pat = function
+  | RefPat ref -> type_of_ref ref.it
+  | RefTypePat ht -> (NoNull, ht)
+  | NullPat -> (Null, BotHT)
+
+let type_of_result res =
+  match res.it with
+  | NumResult pat -> NumT (type_of_num_pat pat)
+  | VecResult pat -> VecT (type_of_vec_pat pat)
+  | RefResult pat -> RefT (type_of_ref_pat pat)
+
 let assert_return ress ts at =
   let test (res, t) =
+    if not (Match.match_val_type [] t (type_of_result res)) then
+      [ Br (0l @@ at) @@ at ]
+    else
     match res.it with
     | NumResult (NumPat {it = num; at = at'}) ->
       let t', reinterpret = reinterpret_of (Value.type_of_op num) in
@@ -370,7 +399,7 @@ let assert_return ress ts at =
         VecTest (V128 (V128.I8x16 V128Op.AllTrue)) @@ at;
         Test (I32 I32Op.Eqz) @@ at;
         BrIf (0l @@ at) @@ at ]
-    | RefResult (RefPat {it = NullRef t; _}) ->
+    | RefResult (RefPat {it = NullRef _; _}) ->
       [ RefIsNull @@ at;
         Test (Value.I32 I32Op.Eqz) @@ at;
         BrIf (0l @@ at) @@ at ]
@@ -382,17 +411,16 @@ let assert_return ress ts at =
         BrIf (0l @@ at) @@ at ]
     | RefResult (RefPat _) ->
       assert false
+    | RefResult (RefTypePat (ExnHT | ExternHT)) ->
+      [ BrOnNull (0l @@ at) @@ at ]
     | RefResult (RefTypePat t) ->
       [ RefTest (NoNull, t) @@ at;
         Test (I32 I32Op.Eqz) @@ at;
         BrIf (0l @@ at) @@ at ]
     | RefResult NullPat ->
-      (match t with
-      | RefT _ ->
-        [ BrOnNull (0l @@ at) @@ at ]
-      | _ ->
-        [ Br (0l @@ at) @@ at ]
-      )
+      [ RefIsNull @@ at;
+        Test (I32 I32Op.Eqz) @@ at;
+        BrIf (0l @@ at) @@ at ]
   in [], List.flatten (List.rev_map test (List.combine ress ts))
 
 let i32 = NumT I32T
@@ -439,10 +467,17 @@ let is_js_num_type = function
   | I32T -> true
   | I64T | F32T | F64T -> false
 
+let is_js_vec_type = function
+  | _ -> false
+
+let is_js_ref_type = function
+  | (_, ExnHT) -> false
+  | _ -> true
+
 let is_js_val_type = function
   | NumT t -> is_js_num_type t
-  | VecT _ -> false
-  | RefT _ -> true
+  | VecT t -> is_js_vec_type t
+  | RefT t -> is_js_ref_type t
   | BotT -> assert false
 
 let is_js_global_type = function
@@ -540,12 +575,11 @@ let of_result res =
 
 let rec of_definition def =
   match def.it with
-  | Textual m -> of_bytes (Encode.encode m)
-  | Encoded (_, bs) -> of_bytes bs
+  | Textual (m, _) -> of_bytes (Encode.encode m)
+  | Encoded (_, bs) -> of_bytes bs.it
   | Quoted (_, s) ->
-    try of_definition (snd (Parse.Module.parse_string s))
-    with Parse.Syntax _ ->
-      of_bytes "<malformed quote>"
+    try of_definition (snd (Parse.Module.parse_string ~offset:s.at s.it))
+    with Parse.Syntax _ | Custom.Syntax _ -> of_bytes "<malformed quote>"
 
 let of_wrapper mods x_opt name wrap_action wrap_assertion at =
   let x = of_var_opt mods x_opt in
@@ -592,8 +626,12 @@ let of_assertion mods ass =
   match ass.it with
   | AssertMalformed (def, _) ->
     "assert_malformed(" ^ of_definition def ^ ");"
+  | AssertMalformedCustom (def, _) ->
+    "assert_malformed_custom(" ^ of_definition def ^ ");"
   | AssertInvalid (def, _) ->
     "assert_invalid(" ^ of_definition def ^ ");"
+  | AssertInvalidCustom (def, _) ->
+    "assert_invalid_custom(" ^ of_definition def ^ ");"
   | AssertUnlinkable (def, _) ->
     "assert_unlinkable(" ^ of_definition def ^ ");"
   | AssertUninstantiable (def, _) ->
@@ -617,9 +655,10 @@ let of_command mods cmd =
   | Module (x_opt, def) ->
     let rec unquote def =
       match def.it with
-      | Textual m -> m
-      | Encoded (_, bs) -> Decode.decode "binary" bs
-      | Quoted (_, s) -> unquote (snd (Parse.Module.parse_string s))
+      | Textual (m, _) -> m
+      | Encoded (name, bs) -> Decode.decode name bs.it
+      | Quoted (_, s) ->
+        unquote (snd (Parse.Module.parse_string ~offset:s.at s.it))
     in bind mods x_opt (unquote def);
     "let " ^ current_var mods ^ " = instance(" ^ of_definition def ^ ");\n" ^
     (if x_opt = None then "" else

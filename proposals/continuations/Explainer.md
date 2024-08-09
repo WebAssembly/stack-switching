@@ -216,7 +216,7 @@ a *handler*, which handles subsequent control suspensions within the
 continuation.
 
 ```wast
-  resume $ct (tag $e $l)* : [tp* (ref $ct)] -> [tr*]
+  resume $ct (on $e $l)* : [tp* (ref $ct)] -> [tr*]
   where:
   - $ct = cont [tp*] -> [tr*]
 ```
@@ -234,7 +234,7 @@ abortive action" which causes the stack to be unwound.
 
 
 ```wast
-  resume_throw $ct $exn (tag $e $l)* : [tp* (ref $ct)])] -> [tr*]
+  resume_throw $ct $exn (on $e $l)* : [tp* (ref $ct)])] -> [tr*]
   where:
   - $ct = cont [ta*] -> [tr*]
   - $exn : [tp*] -> []
@@ -423,7 +423,7 @@ We now define a scheduler.
     (loop $l
       (if (call $queue-empty) (then (return)))
       (block $on_yield (result (ref $cont))
-        (resume $cont (tag $yield $on_yield)
+        (resume $cont (on $yield $on_yield)
                       (call $dequeue)
         )
         (br $l)  ;; thread terminated
@@ -440,7 +440,7 @@ We assume a suitable interface to a queue of active threads
 represented as continuations. The scheduler is a loop which repeatedly
 runs the continuation (thread) at the head of the queue. It does so by
 resuming the continuation with a handler for the `$yield` tag. The
-handler `(tag $yield $on_yield)` specifies that the `$yield` tag
+handler `(on $yield $on_yield)` specifies that the `$yield` tag
 is handled by running the code immediately following the block
 labelled with `$on_yield`, the `$on_yield` clause. The result of the
 block `(result (ref $cont))` declares that there will be a
@@ -598,8 +598,8 @@ thread to completion without actually yielding.
       (if (ref.is_null (local.get $nextk)) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_fork (result (ref $cont) (ref $cont))
-          (resume $cont (tag $yield $on_yield)
-                        (tag $fork $on_fork)
+          (resume $cont (on $yield $on_yield)
+                        (on $fork $on_fork)
                         (local.get $nextk)
           )
           (local.set $nextk (call $dequeue))
@@ -673,8 +673,8 @@ schedulers.
       (if (ref.is_null (local.get $nextk)) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_fork (result (ref $cont) (ref $cont))
-          (resume $cont (tag $yield $on_yield)
-                        (tag $fork $on_fork)
+          (resume $cont (on $yield $on_yield)
+                        (on $fork $on_fork)
                         (local.get $nextk)
           )
           (local.set $nextk (call $dequeue))
@@ -697,8 +697,8 @@ schedulers.
       (if (ref.is_null (local.get $nextk)) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_fork (result (ref $cont) (ref $cont))
-          (resume $cont (tag $yield $on_yield)
-                        (tag $fork $on_fork)
+          (resume $cont (on $yield $on_yield)
+                        (on $fork $on_fork)
                         (local.get $nextk)
           )
           (local.set $nextk (call $dequeue))
@@ -721,8 +721,8 @@ schedulers.
       (if (ref.is_null (local.get $nextk)) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_fork (result (ref $cont) (ref $cont))
-          (resume $cont (tag $yield $on_yield)
-                        (tag $fork $on_fork)
+          (resume $cont (on $yield $on_yield)
+                        (on $fork $on_fork)
                         (local.get $nextk)
           )
           (local.set $nextk (call $dequeue))
@@ -746,8 +746,8 @@ schedulers.
       (if (ref.is_null (local.get $nextk)) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_fork (result (ref $cont) (ref $cont))
-          (resume $cont (tag $yield $on_yield)
-                        (tag $fork $on_fork)
+          (resume $cont (on $yield $on_yield)
+                        (on $fork $on_fork)
                         (local.get $nextk)
           )
           (local.set $nextk (call $dequeue))
@@ -933,7 +933,7 @@ First we implement control/prompt.
   (tag $control (export "control") (param (ref $cont-func)))    ;; control : [([contref ([] -> [])] -> [])] -> []
   (func $prompt (export "prompt") (param $nextk (ref null $cont)) ;; prompt : [(contref ([] -> []))] -> []
     (block $on_control (result (ref $cont-func) (ref $cont))
-       (resume $cont (tag $control $on_control)
+       (resume $cont (on $control $on_control)
                      (local.get $nextk))
        (return)
     ) ;;   $on_control (param (ref $cont-func) (ref $cont))
@@ -1439,7 +1439,7 @@ executing a variant of the `resume` instruction and is passed to the
 continuation:
 
 ```wast
-  resume_with $ht $ct (tag $e $l)* : [ t1* (ref $ht) (ref $ct) ] -> [ t2* ]
+  resume_with $ht $ct (on $e $l)* : [ t1* (ref $ht) (ref $ct) ] -> [ t2* ]
   where:
   - $ht = handler t2*
   - $ct = cont ([ (ref $ht) t1* ] -> [ t2* ])
@@ -1491,7 +1491,7 @@ instruction for switching directly to another continuation:
 This behaves as if there was a built-in tag
 
 ```wast
-  (tag $Switch (param t1* (ref $ct1)) (result t3*))
+  (on $Switch (param t1* (ref $ct1)) (result t3*))
 ```
 
 with which the computation suspends to the handler, and the handler

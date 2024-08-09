@@ -803,11 +803,11 @@ Reference Instructions
 
 17. Let :math:`t` be the :ref:`value type <syntax-valtype>` :math:`\unpacktype(\X{ft})`.
 
-18. For each consecutive subsequence :math:`{b'}^n` of :math:`b^\ast`:
+18. For each of the :math:`n` consecutive subsequences :math:`{b'}^z` of :math:`b^\ast`:
 
     a. Assert: due to :ref:`validation <valid-array.new_data>`, :math:`\bytes_{\X{ft}}` is defined.
 
-    b. Let :math:`c_i` be the constant for which :math:`\bytes_{\X{ft}}(c_i)` is :math:`{b'}^n`.
+    b. Let :math:`c_i` be the constant for which :math:`\bytes_{\X{ft}}(c_i)` is :math:`{b'}^z`.
 
     c. Push the value :math:`t.\CONST~c_i` to the stack.
 
@@ -819,14 +819,14 @@ Reference Instructions
    S; F; (\I32.\CONST~s)~(\I32.\CONST~n)~(\ARRAYNEWDATA~x~y) &\stepto& \TRAP
      \\&&
      \begin{array}[t]{@{}r@{~}l@{}}
-      (\iff & \expanddt(F.\AMODULE.\MITYPES[x]) = \TARRAY~\X{ft}^n \\
+      (\iff & \expanddt(F.\AMODULE.\MITYPES[x]) = \TARRAY~\X{ft} \\
       \land & s + n\cdot|\X{ft}|/8 > |S.\SDATAS[F.\AMODULE.\MIDATAS[y]].\DIDATA|)
      \end{array} \\
    \\[1ex]
    S; F; (\I32.\CONST~s)~(\I32.\CONST~n)~(\ARRAYNEWDATA~x~y) &\stepto& (t.\CONST~c)^n~(\ARRAYNEWFIXED~x~n)
      \\&&
      \begin{array}[t]{@{}r@{~}l@{}}
-      (\iff & \expanddt(F.\AMODULE.\MITYPES[x]) = \TARRAY~\X{ft}^n \\
+      (\iff & \expanddt(F.\AMODULE.\MITYPES[x]) = \TARRAY~\X{ft} \\
       \land & t = \unpacktype(\X{ft}) \\
       \land & \concat((\bytes_{\X{ft}}(c))^n) = S.\SDATAS[F.\AMODULE.\MIDATAS[y]].\DIDATA[s \slice n\cdot|\X{ft}|/8] \\
      \end{array} \\
@@ -1065,7 +1065,7 @@ Reference Instructions
 
 12. Assert: due to :ref:`validation <valid-array.fill>`, the :ref:`array instance <syntax-arrayinst>` :math:`S.\SARRAYS[a]` exists.
 
-13. If :math:`d + n` is larger than or equal to the length of :math:`S.\SARRAYS[a].\AIFIELDS`, then:
+13. If :math:`d + n` is larger than the length of :math:`S.\SARRAYS[a].\AIFIELDS`, then:
 
     a. Trap.
 
@@ -1102,13 +1102,13 @@ Reference Instructions
      (\iff d + n > |S.\SARRAYS[a].\AIFIELDS|)
    \\[1ex]
    S; (\REFARRAYADDR~a)~(\I32.\CONST~d)~\val~(\I32.\CONST~0)~(\ARRAYFILL~x)
-     \quad\stepto\quad S; \epsilon
+     \quad\stepto\quad \epsilon
      \\ \qquad
      (\otherwise)
    \\[1ex]
    S; (\REFARRAYADDR~a)~(\I32.\CONST~d)~\val~(\I32.\CONST~n+1)~(\ARRAYFILL~x)
      \quad\stepto
-     \\ \quad S;
+     \\ \quad
        \begin{array}[t]{@{}l@{}}
        (\REFARRAYADDR~a)~(\I32.\CONST~d)~\val~(\ARRAYSET~x) \\
        (\REFARRAYADDR~a)~(\I32.\CONST~d+1)~\val~(\I32.\CONST~n)~(\ARRAYFILL~x) \\
@@ -1175,11 +1175,11 @@ Reference Instructions
 
 23. Assert: due to :ref:`validation <valid-array.copy>`, the :ref:`array instance <syntax-arrayinst>` :math:`S.\SARRAYS[a_2]` exists.
 
-24. If :math:`d + n` is larger than or equal to the length of :math:`S.\SARRAYS[a_1].\AIFIELDS`, then:
+24. If :math:`d + n` is larger than the length of :math:`S.\SARRAYS[a_1].\AIFIELDS`, then:
 
     a. Trap.
 
-25. If :math:`s + n` is larger than or equal to the length of :math:`S.\SARRAYS[a_2].\AIFIELDS`, then:
+25. If :math:`s + n` is larger than the length of :math:`S.\SARRAYS[a_2].\AIFIELDS`, then:
 
     a. Trap.
 
@@ -1217,13 +1217,13 @@ Reference Instructions
 
     a. Push the value :math:`\REFARRAYADDR~a_1` to the stack.
 
-    b. Assert: due to the earlier check against the memory size, :math:`d+n-1 < 2^{32}`.
+    b. Assert: due to the earlier check against the array size, :math:`d+n-1 < 2^{32}`.
 
     c. Push the value :math:`\I32.\CONST~(d+n-1)` to the stack.
 
     d. Push the value :math:`\REFARRAYADDR~a_2` to the stack.
 
-    e. Assert: due to the earlier check against the memory size, :math:`s+n-1 < 2^{32}`.
+    e. Assert: due to the earlier check against the array size, :math:`s+n-1 < 2^{32}`.
 
     f. Push the value :math:`\I32.\CONST~(s+n-1)` to the stack.
 
@@ -1252,7 +1252,7 @@ Reference Instructions
      (\iff d + n > |S.\SARRAYS[a_1].\AIFIELDS| \vee s + n > |S.\SARRAYS[a_2].\AIFIELDS|)
    \\[1ex]
    S; F; (\REFARRAYADDR~a_1)~(\I32.\CONST~d)~(\REFARRAYADDR~a_2)~(\I32.\CONST~s)~(\I32.\CONST~0)~(\ARRAYCOPY~x~y)
-     \quad\stepto\quad S; \epsilon
+     \quad\stepto\quad \epsilon
      \\ \qquad
      (\otherwise)
    \\[1ex]
@@ -1391,13 +1391,13 @@ Where:
      \end{array}
    \\[1ex]
    S; F; (\REFARRAYADDR~a)~(\I32.\CONST~d)~(\I32.\CONST~s)~(\I32.\CONST~0)~(\ARRAYINITDATA~x~y)
-     \quad\stepto\quad S; F; \epsilon
+     \quad\stepto\quad \epsilon
      \\ \qquad
      (\otherwise)
    \\[1ex]
    S; F; (\REFARRAYADDR~a)~(\I32.\CONST~d)~(\I32.\CONST~s)~(\I32.\CONST~n+1)~(\ARRAYINITDATA~x~y)
      \quad\stepto
-     \\ \quad S; F;
+     \\ \quad
      \begin{array}[t]{@{}l@{}}
      (\REFARRAYADDR~a)~(\I32.\CONST~d)~(t.\CONST~c)~(\ARRAYSET~x) \\
      (\REFARRAYADDR~a)~(\I32.\CONST~d+1)~(\I32.\CONST~s+|\X{ft}|/8)~(\I32.\CONST~n)~(\ARRAYINITDATA~x~y) \\
@@ -1497,13 +1497,13 @@ Where:
      \end{array}
    \\[1ex]
    S; F; (\REFARRAYADDR~a)~(\I32.\CONST~d)~(\I32.\CONST~s)~(\I32.\CONST~0)~(\ARRAYINITELEM~x~y)
-     \quad\stepto\quad S; F; \epsilon
+     \quad\stepto\quad \epsilon
      \\ \qquad
      (\otherwise)
    \\[1ex]
    S; F; (\REFARRAYADDR~a)~(\I32.\CONST~d)~(\I32.\CONST~s)~(\I32.\CONST~n+1)~(\ARRAYINITELEM~x~y)
      \quad\stepto
-     \\ \quad S; F;
+     \\ \quad
      \begin{array}[t]{@{}l@{}}
      (\REFARRAYADDR~a)~(\I32.\CONST~d)~\REF~(\ARRAYSET~x) \\
      (\REFARRAYADDR~a)~(\I32.\CONST~d+1)~(\I32.\CONST~s+1)~(\I32.\CONST~n)~(\ARRAYINITELEM~x~y) \\
@@ -1538,7 +1538,7 @@ Where:
 
 .. math::
    \begin{array}{lcl@{\qquad}l}
-   (\REFNULL \X{ht})~\ANYCONVERTEXTERN &\stepto& (\REFNULL~\ANY) \\
+   (\REFNULL~\X{ht})~\ANYCONVERTEXTERN &\stepto& (\REFNULL~\ANY) \\
    (\REFEXTERN~\reff)~\ANYCONVERTEXTERN &\stepto& \reff \\
    \end{array}
 
@@ -1564,8 +1564,8 @@ Where:
 
 .. math::
    \begin{array}{lcl@{\qquad}l}
-   (\REFNULL \X{ht})~\EXTERNCONVERTANY &\stepto& (\REFNULL~\EXTERN) \\
-   \reff~\EXTERNCONVERTANY &\stepto& (\REFEXTERN~\reff) & (\iff \reff \neq (\REFNULL \X{ht})) \\
+   (\REFNULL~\X{ht})~\EXTERNCONVERTANY &\stepto& (\REFNULL~\EXTERN) \\
+   \reff~\EXTERNCONVERTANY &\stepto& (\REFEXTERN~\reff) & (\iff \reff \neq (\REFNULL~\X{ht})) \\
    \end{array}
 
 
@@ -1776,7 +1776,7 @@ Most other vector instructions are defined in terms of numeric operators that ar
 :math:`\shape\K{.}\SPLAT`
 .........................
 
-1. Let :math:`t` be the type :math:`\unpacked(\shape)`.
+1. Let :math:`t` be the type :math:`\unpackshape(\shape)`.
 
 2. Assert: due to :ref:`validation <valid-vec-splat>`, a value of :ref:`value type <syntax-valtype>` :math:`t` is on the top of the stack.
 
@@ -1791,7 +1791,7 @@ Most other vector instructions are defined in terms of numeric operators that ar
 .. math::
    \begin{array}{lcl@{\qquad}l}
    (t\K{.}\CONST~c_1)~\shape\K{.}\SPLAT &\stepto& (\V128\K{.}\VCONST~c)
-     & (\iff t = \unpacked(\shape)
+     & (\iff t = \unpackshape(\shape)
        \wedge c = \lanes^{-1}_{\shape}(c_1^{\dim(\shape)}))
      \\
    \end{array}
@@ -1810,7 +1810,7 @@ Most other vector instructions are defined in terms of numeric operators that ar
 
 4. Let :math:`i^\ast` be the result of computing :math:`\lanes_{t_1\K{x}N}(c_1)`.
 
-5. Let :math:`t_2` be the type :math:`\unpacked(t_1\K{x}N)`.
+5. Let :math:`t_2` be the type :math:`\unpackshape(t_1\K{x}N)`.
 
 6. Let :math:`c_2` be the result of computing :math:`\extend^{sx^?}_{t_1,t_2}(i^\ast[x])`.
 
@@ -1823,7 +1823,7 @@ Most other vector instructions are defined in terms of numeric operators that ar
    \end{array}
    \\ \qquad
      \begin{array}[t]{@{}r@{~}l@{}}
-      (\iff & t_2 = \unpacked(t_1\K{x}N) \\
+      (\iff & t_2 = \unpackshape(t_1\K{x}N) \\
        \wedge & c_2 = \extend^{sx^?}_{t_1,t_2}(\lanes_{t_1\K{x}N}(c_1)[x]))
      \end{array}
    \end{array}
@@ -1836,7 +1836,7 @@ Most other vector instructions are defined in terms of numeric operators that ar
 
 1. Assert: due to :ref:`validation <valid-vec-replace_lane>`, :math:`x < \dim(\shape)`.
 
-2. Let :math:`t_2` be the type :math:`\unpacked(\shape)`.
+2. Let :math:`t_2` be the type :math:`\unpackshape(\shape)`.
 
 3. Assert: due to :ref:`validation <valid-vec-replace_lane>`, a value of :ref:`value type <syntax-valtype>` :math:`t_1` is on the top of the stack.
 
@@ -3833,7 +3833,7 @@ Memory Instructions
 
 20. Push the value :math:`\I32.\CONST~b` to the stack.
 
-21. Execute the instruction :math:`\I32\K{.}\STORE\K{8}~\{ \OFFSET~0, \ALIGN~0 \}`.
+21. Execute the instruction :math:`\I32\K{.}\STORE\K{8}~x~\{ \OFFSET~0, \ALIGN~0 \}`.
 
 22. Assert: due to the earlier check against the memory size, :math:`d+1 < 2^{32}`.
 
@@ -4030,11 +4030,11 @@ Control Instructions
 
 2. Assert: due to :ref:`validation <valid-throw>`, :math:`F.\AMODULE.\MITAGS[x]` exists.
 
-3. Let :math:`a` be the :ref:`tag address <syntax-tagaddr>` :math:`F.\AMODULE.\MITAGS[x]`.
+3. Let :math:`ta` be the :ref:`tag address <syntax-tagaddr>` :math:`F.\AMODULE.\MITAGS[x]`.
 
-4. Assert: due to :ref:`validation <valid-throw>`, :math:`S.\STAGS[a]` exists.
+4. Assert: due to :ref:`validation <valid-throw>`, :math:`S.\STAGS[ta]` exists.
 
-5. Let :math:`\X{ti}` be the :ref:`tag instance <syntax-taginst>` :math:`S.\STAGS[a]`.
+5. Let :math:`\X{ti}` be the :ref:`tag instance <syntax-taginst>` :math:`S.\STAGS[ta]`.
 
 6. Let :math:`[t^n] \toF [{t'}^\ast]` be the :ref:`tag type <syntax-tagtype>` :math:`\X{ti}.\TAGITYPE`.
 
@@ -4042,15 +4042,13 @@ Control Instructions
 
 8. Pop the :math:`n` values :math:`\val^n` from the stack.
 
-9. Let :math:`\X{exn}` be the :ref:`exception instance <syntax-exninst>` :math:`\{ \EITAG~a, \EIFIELDS~\val^n \}`.
+9. Let :math:`\X{ea}` be the :ref:`exception address <syntax-exnaddr>` resulting from :ref:`allocating <alloc-exception>` an exception instance with tag address :math:`ta` and initializer values :math:`\val^n`.
 
-10. Let :math:`\X{ea}` be the length of :math:`S.\SEXNS`.
+10. Let :math:`\X{exn}` be :math:`S.\SEXNS[ea]`
 
-11. Append :math:`\X{exn}` to :math:`S.\SEXNS`.
+11. Push the value :math:`\REFEXNADDR~\X{ea}` to the stack.
 
-12. Push the value :math:`\REFEXNADDR~\X{ea}` to the stack.
-
-13. Execute the instruction |THROWREF|.
+12. Execute the instruction |THROWREF|.
 
 .. math::
    ~\\[-1ex]
@@ -4114,13 +4112,13 @@ Control Instructions
 
     a. Let :math:`\catch_1` be the first :ref:`catch clause <syntax-catch>` in :math:`\catch^\ast` and :math:`{\catch'}^\ast` the remaining clauses.
 
-    b. If :math:`\catch_1` is of the form :math:`\CATCH~x~l` and the :ref:`exception address <syntax-exnaddr>` :math:`a` equals :math:`F.\AMODULE.\MITAGS[x]`, then:
+    b. If :math:`\catch_1` is of the form :math:`\CATCH~x~l` and the :ref:`tag address <syntax-tagaddr>` :math:`a` equals :math:`F.\AMODULE.\MITAGS[x]`, then:
 
        i. Push the values :math:`\X{exn}.\EIFIELDS` to the stack.
 
        ii. Execute the instruction :math:`\BR~l`.
 
-    c. Else if :math:`\catch_1` is of the form :math:`\CATCHREF~x~l` and the :ref:`exception address <syntax-exnaddr>` :math:`a` equals :math:`F.\AMODULE.\MITAGS[x]`, then:
+    c. Else if :math:`\catch_1` is of the form :math:`\CATCHREF~x~l` and the :ref:`tag address <syntax-tagaddr>` :math:`a` equals :math:`F.\AMODULE.\MITAGS[x]`, then:
 
        i. Push the values :math:`\X{exn}.\EIFIELDS` to the stack.
 
@@ -4377,7 +4375,7 @@ Control Instructions
    \begin{array}{lcl@{\qquad}l}
    S; F; \reff~(\BRONCAST~l~\X{rt}_1~\X{rt}_2) &\stepto& \reff~(\BR~l)
      & (\iff S \vdashval \reff : \X{rt}
-        \land \vdashreftypematch \X{rt} \matchesreftype \insttype_{F.\AMODULE}(\X{rt}_2)) \\
+        \land {} \vdashreftypematch \X{rt} \matchesreftype \insttype_{F.\AMODULE}(\X{rt}_2)) \\
    S; F; \reff~(\BRONCAST~l~\X{rt}_1~\X{rt}_2) &\stepto& \reff
      & (\otherwise) \\
    \end{array}
@@ -4412,7 +4410,7 @@ Control Instructions
    \begin{array}{lcl@{\qquad}l}
    S; F; \reff~(\BRONCASTFAIL~l~\X{rt}_1~\X{rt}_2) &\stepto& \reff
      & (\iff S \vdashval \reff : \X{rt}
-        \land \vdashreftypematch \X{rt} \matchesreftype \insttype_{F.\AMODULE}(\X{rt}_2)) \\
+        \land {} \vdashreftypematch \X{rt} \matchesreftype \insttype_{F.\AMODULE}(\X{rt}_2)) \\
    S; F; \reff~(\BRONCASTFAIL~l~\X{rt}_1~\X{rt}_2) &\stepto& \reff~(\BR~l)
      & (\otherwise) \\
    \end{array}

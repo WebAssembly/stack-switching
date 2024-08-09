@@ -128,7 +128,7 @@ let def_type = function
 let global_type (GlobalT (_mut, t)) = val_type t
 let table_type (TableT (_lim, t)) = ref_type t
 let memory_type (MemoryT (_lim)) = empty
-let tag_type (TagT ht) = heap_type ht
+let tag_type (TagT dt) = def_type dt
 
 let extern_type = function
   | ExternFuncT dt -> def_type dt
@@ -218,7 +218,7 @@ let func (f : func) =
   {(types (idx f.it.ftype) ++ block f.it.body) with locals = Set.empty}
 let table (t : table) = table_type t.it.ttype ++ const t.it.tinit
 let memory (m : memory) = memory_type m.it.mtype
-let tag (e : tag) = tag_type e.it.tagtype
+let tag (e : tag) = empty
 
 let segment_mode f (m : segment_mode) =
   match m.it with

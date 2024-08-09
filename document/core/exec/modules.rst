@@ -170,6 +170,32 @@ are *allocated* in a :ref:`store <syntax-store>` :math:`S`, as defined by the fo
    \end{array}
 
 
+.. index:: exception, exception instance, exception address, tag address
+.. _alloc-exception:
+
+:ref:`Exceptions <syntax-exninst>`
+..................................
+
+1. Let :math:`ta` be the :ref:`tag address <syntax-tagaddr>` associated with the exception to allocate and :math:`\EIFIELDS~\val^\ast` be the values to initialize the exception with.
+
+2. Let :math:`a` be the first free :ref:`exception address <syntax-exnaddr>` in :math:`S`.
+
+3. Let :math:`\exninst` be the :ref:`exception instance <syntax-exninst>` :math:`\{ \EITAG~ta, \EIFIELDS~\val^\ast \}`.
+
+4. Append :math:`\exninst` to the |SEXNS| of :math:`S`.
+
+5. Return :math:`a`.
+
+.. math::
+   \begin{array}{rlll}
+   \allocexn(S, \tagaddr, \val^\ast) &=& S', \exnaddr \\[1ex]
+   \mbox{where:} \hfill \\
+   \exnaddr &=& |S.\SEXNS| \\
+   \exninst &=& \{ \EITAG~\tagaddr, \EIFIELDS~\val^\ast \} \\
+   S' &=& S \compose \{\SEXNS~\exninst\} \\
+   \end{array}
+
+
 .. index:: global, global instance, global address, global type, value type, mutability, value
 .. _alloc-global:
 
@@ -633,19 +659,17 @@ It is up to the :ref:`embedder <embedder>` to define how such conditions are rep
 
 14. For each :ref:`data segment <syntax-data>` :math:`\data_i` in :math:`\module.\MDATAS` whose :ref:`mode <syntax-datamode>` is of the form :math:`\DACTIVE~\{ \DMEM~\memidx_i, \DOFFSET~\X{dinstr}^\ast_i~\END \}`, do:
 
-    a. Assert: :math:`\memidx_i` is :math:`0`.
+    a. Let :math:`n` be the length of the vector :math:`\data_i.\DINIT`.
 
-    b. Let :math:`n` be the length of the vector :math:`\data_i.\DINIT`.
+    b. :ref:`Execute <exec-instr-seq>` the instruction sequence :math:`\X{dinstr}^\ast_i`.
 
-    c. :ref:`Execute <exec-instr-seq>` the instruction sequence :math:`\X{dinstr}^\ast_i`.
+    c. :ref:`Execute <exec-const>` the instruction :math:`\I32.\CONST~0`.
 
-    d. :ref:`Execute <exec-const>` the instruction :math:`\I32.\CONST~0`.
+    d. :ref:`Execute <exec-const>` the instruction :math:`\I32.\CONST~n`.
 
-    e. :ref:`Execute <exec-const>` the instruction :math:`\I32.\CONST~n`.
+    e. :ref:`Execute <exec-memory.init>` the instruction :math:`\MEMORYINIT~i`.
 
-    f. :ref:`Execute <exec-memory.init>` the instruction :math:`\MEMORYINIT~i`.
-
-    g. :ref:`Execute <exec-data.drop>` the instruction :math:`\DATADROP~i`.
+    f. :ref:`Execute <exec-data.drop>` the instruction :math:`\DATADROP~i`.
 
 15. If the :ref:`start function <syntax-start>` :math:`\module.\MSTART` is not empty, then:
 
@@ -695,8 +719,8 @@ where:
    \F{runelem}_i(\{\ETYPE~\X{et}, \EINIT~\expr^n, \EMODE~\EDECLARATIVE\}) \quad=\\ \qquad
      (\ELEMDROP~i) \\[1ex]
    \F{rundata}_i(\{\DINIT~b^n, \DMODE~\DPASSIVE\}) \quad=\\ \qquad \epsilon \\
-   \F{rundata}_i(\{\DINIT~b^n, \DMODE~\DACTIVE \{\DMEM~0, \DOFFSET~\instr^\ast~\END\}\}) \quad=\\ \qquad
-     \instr^\ast~(\I32.\CONST~0)~(\I32.\CONST~n)~(\MEMORYINIT~i)~(\DATADROP~i) \\
+   \F{rundata}_i(\{\DINIT~b^n, \DMODE~\DACTIVE \{\DMEM~x, \DOFFSET~\instr^\ast~\END\}\}) \quad=\\ \qquad
+     \instr^\ast~(\I32.\CONST~0)~(\I32.\CONST~n)~(\MEMORYINIT~x~i)~(\DATADROP~i) \\
    \end{array}
 
 .. note::

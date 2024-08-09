@@ -238,6 +238,10 @@
       )
     )
   )
+
+  (func (export "try-with-param")
+    (i32.const 0) (try_table (param i32) (drop))
+  )
 )
 
 (assert_return (invoke "simple-throw-catch" (i32.const 0)) (i32.const 23))
@@ -293,6 +297,8 @@
 
 (assert_exception (invoke "return-call-in-try-catch"))
 (assert_exception (invoke "return-call-indirect-in-try-catch"))
+
+(assert_return (invoke "try-with-param"))
 
 (module
   (func $imported-throw (import "test" "throw"))
@@ -367,6 +373,84 @@
   (module
     (tag (param i64))
     (func (result i32 exnref) (try_table (result i32) (catch_ref 0 0) (i32.const 42)))
+  )
+  "type mismatch"
+)
+
+
+(module
+  (type $t (func))
+  (func $dummy)
+  (elem declare func $dummy)
+
+  (tag $e (param (ref $t)))
+  (func $throw (throw $e (ref.func $dummy)))
+
+  (func (export "catch") (result (ref null $t))
+    (block $l (result (ref null $t))
+      (try_table (catch $e $l) (call $throw))
+      (unreachable)
+    )
+  )
+  (func (export "catch_ref1") (result (ref null $t))
+    (block $l (result (ref null $t) (ref exn))
+      (try_table (catch_ref $e $l) (call $throw))
+      (unreachable)
+    )
+    (drop)
+  )
+  (func (export "catch_ref2") (result (ref null $t))
+    (block $l (result (ref null $t) (ref null exn))
+      (try_table (catch_ref $e $l) (call $throw))
+      (unreachable)
+    )
+    (drop)
+  )
+  (func (export "catch_all_ref1")
+    (block $l (result (ref exn))
+      (try_table (catch_all_ref $l) (call $throw))
+      (unreachable)
+    )
+    (drop)
+  )
+  (func (export "catch_all_ref2")
+    (block $l (result (ref null exn))
+      (try_table (catch_all_ref $l) (call $throw))
+      (unreachable)
+    )
+    (drop)
+  )
+)
+
+(assert_return (invoke "catch") (ref.func))
+(assert_return (invoke "catch_ref1") (ref.func))
+(assert_return (invoke "catch_ref2") (ref.func))
+(assert_return (invoke "catch_all_ref1"))
+(assert_return (invoke "catch_all_ref2"))
+
+(assert_invalid
+  (module
+    (type $t (func))
+    (tag $e (param (ref null $t)))
+    (func (export "catch") (result (ref $t))
+      (block $l (result (ref $t))
+        (try_table (catch $e $l))
+        (unreachable)
+      )
+    )
+  )
+  "type mismatch"
+)
+(assert_invalid
+  (module
+    (type $t (func))
+    (tag $e (param (ref null $t)))
+    (func (export "catch_ref") (result (ref $t))
+      (block $l (result (ref $t) (ref exn))
+        (try_table (catch $e $l))
+        (unreachable)
+      )
+    )
   )
   "type mismatch"
 )

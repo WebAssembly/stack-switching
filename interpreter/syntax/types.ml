@@ -51,7 +51,7 @@ type table_type = TableT of Int32.t limits * ref_type
 type memory_type = MemoryT of Int32.t limits
 type global_type = GlobalT of mut * val_type
 type local_type = LocalT of init * val_type
-type tag_type = TagT of heap_type
+type tag_type = TagT of def_type
 type extern_type =
   | ExternFuncT of def_type
   | ExternTableT of table_type
@@ -213,7 +213,7 @@ let subst_global_type s = function
   | GlobalT (mut, t) ->  GlobalT (mut, subst_val_type s t)
 
 let subst_tag_type s = function
-  | TagT ht -> TagT (subst_heap_type s ht)
+  | TagT dt -> TagT (subst_def_type s dt)
 
 let subst_extern_type s = function
   | ExternFuncT dt -> ExternFuncT (subst_def_type s dt)
@@ -408,7 +408,7 @@ and string_of_str_type = function
 
 
 and string_of_tag_type = function
-  | TagT ht -> string_of_heap_type ht
+  | TagT dt -> string_of_def_type dt
 
 and string_of_sub_type = function
   | SubT (Final, [], st) -> string_of_str_type st
