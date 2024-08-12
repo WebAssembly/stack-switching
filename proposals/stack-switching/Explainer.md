@@ -45,15 +45,7 @@ programming languages non-local control flow is central to their
 identity, meaning that they rely on non-local control flow for
 efficiency, e.g. to support massively scalable concurrency.
 
-Currently, Wasm lacks support for implementing such features directly
-and efficiently without a circuitous global transformation of source
-programs on the producer side. One possible strategy is to add special
-support for each individual non-local control flow feature to Wasm,
-but strategy does not scale to the next 700 non-local control flow
-features. Instead, the goal of this proposal is to introduce a unifed
-structured mechanism that is sufficiently general to cover present
-use-cases as well as being forwards compatible with future use-cases,
-while admitting efficient implementations.
+Rather than build specific control flow mechanisms for all possible varieties of non-local control flow, our strategy is to build a single mechanism that can be used by language providers to construct their own language specific features.
 
 A key technical design challenge is to ensure that the stack switching
 facility integrates smoothly with existing Wasm language
