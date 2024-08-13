@@ -9,7 +9,6 @@ lightweight threads, and so forth. This document outlines the new
 instructions and validation rules to facilitate stack switching.
 
 ## Table of contents
-
 1. [Motivation](#motivation)
 1. [Examples](#examples)
    1. [Yield-style generators](#yield-style-generators)
@@ -45,34 +44,41 @@ programming languages non-local control flow is central to their
 identity, meaning that they rely on non-local control flow for
 efficiency, e.g. to support massively scalable concurrency.
 
-Rather than build specific control flow mechanisms for all possible varieties of non-local control flow, our strategy is to build a single mechanism that can be used by language providers to construct their own language specific features.
+Rather than build specific control flow mechanisms for all possible
+varieties of non-local control flow, our strategy is to build a single
+mechanism that can be used by language providers to construct their
+own language specific features.
 
-A key technical design challenge is to ensure that the stack switching
-facility integrates smoothly with existing Wasm language
-facilities. Furthermore, a key concern is to ensure that stack
-switching remains safe, both in the sense of type-safe and that it
-does not break the sandboxing model of Wasm. For these reasons our
-proposed design does not allow mangling Wasm stacks, that is it
-preserves the abstract nature of Wasm execution stacks. Instead, we
-propose to provide stateful handles to inactive execution stacks by
-way of *continuations*. A continuation represents the rest of a
-computation from a particular point in its execution up to a
-*handler*. A continuation is akin to a function in the sense that it
-accepts an input and produces an output, essentially providing a form
-of typed view of an inactive execution stack, where the input type
-discloses the type of data that must be provided to continue
-execution, and the output type tells the caller the type of data which
-remains on the stack after it finishes executing. A continuation is
-created by suspending with a control tag --- a control tag is an
-ever-so-slightly generalisation of the notion of tag from the
-[exception handling
-proposal](https://github.com/WebAssembly/exception-handling). Each
-control tag is declared module-wide along its payload type and return
-type. This declaration can be used to readily type points of non-local
-transfer of control. From an operational perspective we may view
-control tags as a means for writing an interface for the possible
-kinds of non-local transfers (or stack switches) that a computation
-may perform.
+SL: I've done a quick polishing pass, but I think the rest of this
+motivation section still has plenty of room for improvement.
+
+A key technical design challenge is to ensure that stack switching
+integrates smoothly with existing Wasm language features. Moreover, a
+central concern is to ensure that stack switching remains safe, both
+by respecting type-safety and by not breaking the sandboxing model of
+Wasm. For these reasons the design does not allow mangling Wasm
+stacks, that is, it preserves the abstract nature of Wasm execution
+stacks. Instead, it provides handles to inactive execution stacks as
+*continuations*.
+
+A continuation represents the rest of a computation from a particular
+point in its execution up to a *handler*. A continuation is akin to a
+function in the sense that it takes a sequence of parameters and
+returns a sequence of results, providing a typed view of a suspended
+execution stack. The parameter types describe the data that must be
+supplied in order for a continuation to resume executing, and the
+result types describe the type of data that will be returned once it
+has finished executing.
+
+A continuation is created by suspending with a control tag --- control
+tags generalise tags from the [exception handling
+proposal](https://github.com/WebAssembly/exception-handling) with
+result types. Each control tag is declared module-wide along with its
+parameter types and result types. Control tags provide a means for
+writing an interface to the possible kinds of non-local transfers (or
+stack switches) that a computation may perform.
+
+TODO: briefly mention and motivate direct switching
 
 ## Examples
 
