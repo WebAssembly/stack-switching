@@ -126,14 +126,14 @@ sumUp(10); // returns 55
 
 ```wast
 (module $generator
-  (type $ft (func)) ;; [] -> []
-  (type $ct (cont $ft)) ;; cont [] -> []
+  (type $ft (func (result i32))) ;; [] -> [i32]
+  (type $ct (cont $ft)) ;; cont [] -> [i32]
 
   ;; Control name declaration
-  (tag $yield (param i32)) ;; i32 -> []
+  (tag $yield (export "yield") (param i32)) ;; i32 -> []
 
   ;; Producer: a stream of naturals
-  (func $nats (export "nats")
+  (func $nats (export "nats") (result i32)
     (local $i i32) ;; zero-initialised local
     (loop $produce-next
       (suspend $yield (local.get $i)) ;; yield control with payload `i` to the surrounding context
@@ -143,6 +143,7 @@ sumUp(10); // returns 55
                  (i32.const 1)))
       (br $produce-next) ;; continue to produce the next natural number
     )
+    (unreachable)
   )
   (elem declare func $nats)
 
@@ -228,10 +229,12 @@ sumUp(10); // returns 55
 (module $cogen
   (type $task (func (result i32)))
   (type $ct-task (cont $task))
-  (type $seesaw (func (param (ref $ct-task)) (param (ref $ct-task))))
+  (type $seesaw (func (param (ref $ct-task)) (param (ref $ct-task)) (result i32)))
   (type $seesaw-ct (cont $seesaw))
-  (type $gen (func)) ;; [] -> []
-  (type $ct-gen (cont $gen)) ;; cont [] -> []
+  (type $gen (func (result i32))) ;; [] -> [i32]
+  (type $ct-gen (cont $gen)) ;; cont [] -> [i32]
+  (type $sum (func (param (ref $ct-gen)) (param i32) (result i32)))
+  (type $ct-sum (cont $sum))
 
   (func $sumUp (import "generator" "sumUp") (param (ref $ct-gen)) (param i32) (result i32))
   (func $seesaw (import "co2" "seesaw") (param (ref $ct-task)) (param (ref $ct-task)) (result i32))
@@ -251,10 +254,7 @@ sumUp(10); // returns 55
     )
   )
 
-  (func $seesaw-unit (param $up (ref $ct-task)) (param $down (ref $ct-task))
-    (call $seesaw (local.get $up) (local.get $down))
-    (drop))
-  (elem declare func $interruptible-nats $seesaw-unit)
+  (elem declare func $interruptible-nats $seesaw $sumUp)
 
   (func (export "sumUp-after-seesaw") (result i32)
     (local $up (ref $ct-task))
@@ -264,11 +264,26 @@ sumUp(10); // returns 55
     (call $sumUp (cont.bind $seesaw-ct $ct-gen
                       (local.get $up)
                       (local.get $down)
-                      (cont.new $seesaw-ct (ref.func $seesaw-unit)))
+                      (cont.new $seesaw-ct (ref.func $seesaw)))
                  (i32.const 10)))
+  (func (export "seesaw-after-sumUp") (result i32)
+    (local $up (ref $ct-gen))
+    (local $down (ref $ct-gen))
+    (local.set $up
+       (cont.bind $ct-sum $ct-gen
+         (cont.new $ct-gen (ref.func $interruptible-nats))
+         (i32.const 10)
+         (cont.new $ct-sum (ref.func $sumUp))))
+    (local.set $down
+       (cont.bind $ct-sum $ct-gen
+         (cont.new $ct-gen (ref.func $interruptible-nats))
+         (i32.const 10)
+         (cont.new $ct-sum (ref.func $sumUp))))
+    (call $seesaw (local.get $up) (local.get $down)))
 )
 
 (assert_return (invoke "sumUp-after-seesaw") (i32.const 100))
+(assert_return (invoke "seesaw-after-sumUp") (i32.const 55))
 ```
 
 ### Lightweight threads
