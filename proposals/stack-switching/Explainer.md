@@ -13,7 +13,6 @@ instructions and validation rules to facilitate stack switching.
 1. [Examples](#examples)
    1. [Yield-style generators](#yield-style-generators)
    1. [Coroutines](#coroutines)
-   1. [Modular composition](#modular-composition)
    1. [Lightweight threads](#lightweight-threads)
 1. [Instruction set extension](#instruction-set-extension)
    1. [Declaring control tags](#declaring-control-tags)
