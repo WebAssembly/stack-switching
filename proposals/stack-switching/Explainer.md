@@ -214,6 +214,7 @@ sumUp(10); // returns 55
 )
 (register "co2")
 ```
+
 ```wast
 (module $cogen
   (type $task (func (result i32)))
@@ -260,10 +261,6 @@ sumUp(10); // returns 55
 
 (assert_return (invoke "sumUp-after-seesaw") (i32.const 100))
 ```
-
-### Modular composition
-
-TODO
 
 ### Lightweight threads
 
