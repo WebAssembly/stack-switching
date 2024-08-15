@@ -45,48 +45,74 @@ efficiency, e.g. to support massively scalable concurrency.
 
 Rather than build specific control flow mechanisms for all possible
 varieties of non-local control flow, our strategy is to build a single
-mechanism that can be used by language providers to construct their
-own language specific features.
+mechanism, *continuations*, that can be used by language providers to
+construct their own language specific features.
 
-SL: I've done a quick polishing pass, but I think the rest of this
-motivation section still has plenty of room for improvement.
+A continuation represents a suspended execution stack. Stack switching
+is realised by instructions for suspending and resuming
+continuations. In this respect the design provides a form of
+*asymmetric coroutines*. Continuations are composable, meaning that
+when a continuation is resumed it is spliced onto the current
+execution stack. This preserves the caller-callee relationship between
+stacks meaning that no special plumbing is needed in order to compose
+non-local control features with built-in control effects such as
+traps, exceptions, and embedder integration.
 
-A key technical design challenge is to ensure that stack switching
-integrates smoothly with existing Wasm language features. Moreover, a
-central concern is to ensure that stack switching remains safe, both
-by respecting type-safety and by not breaking the sandboxing model of
-Wasm. For these reasons the design does not allow mangling Wasm
-stacks, that is, it preserves the abstract nature of Wasm execution
-stacks. Instead, it provides handles to inactive execution stacks as
-*continuations*.
+When suspending, we provide a tag and payload, much like when raising
+an exception. Correspondingly, when resuming a continuation a
+*handler* is installed which specifies a different behaviour for each
+of the different kinds of tag with which the continuation may
+subsequently be suspended. Unlike normal exception handlers such
+*effect handlers* are passed the continuation as well as the tag and
+its payload.
 
-A continuation represents the rest of a computation from a particular
-point in its execution up to a *handler*. A continuation is akin to a
-function in the sense that it takes a sequence of parameters and
-returns a sequence of results, providing a typed view of a suspended
-execution stack. The parameter types describe the data that must be
-supplied in order for a continuation to resume executing, and the
-result types describe the type of data that will be returned once it
-has finished executing.
+We also offer an alternative to the interface based on suspending and
+resuming continuations by way of an instruction for directly switching
+between stacks. In this respect the design provides a form of
+*symmetric coroutines*. Direct switching to a continuation is
+semantically equivalent to suspending the current execution stack and
+then resuming another continuation, but can (and should) be optimised.
 
-A continuation is created by suspending with a control tag --- control
-tags generalise tags from the [exception handling
-proposal](https://github.com/WebAssembly/exception-handling) with
-result types. Each control tag is declared module-wide along with its
-parameter types and result types. Control tags provide a means for
-writing an interface to the possible kinds of non-local transfers (or
-stack switches) that a computation may perform.
 
-The proposal includes both asymmetric and symmetric mechanisms for
-switching stacks. The asymmetric mechanism preserves the caller-callee
-relationship between stacks, meaning that using the asymmetric
-semantics to invoke a continuation installs the stack underlying the
-callee as a child of the stack underlying the caller. Conversely, the
-symmetric mechanism allows for swapping stacks in place, that is,
-using the symmetric semantics to invoke a continuation replaces the
-stack of the caller with the stack underlying the callee.
+<!-- SL: I've done a quick polishing pass, but I think the rest of this -->
+<!-- motivation section still has plenty of room for improvement. -->
 
-TODO: briefly mention and motivate direct switching
+<!-- A key technical design challenge is to ensure that stack switching -->
+<!-- integrates smoothly with existing Wasm language features. Moreover, a -->
+<!-- central concern is to ensure that stack switching remains safe, both -->
+<!-- by respecting type-safety and by not breaking the sandboxing model of -->
+<!-- Wasm. For these reasons the design does not allow mangling Wasm -->
+<!-- stacks, that is, it preserves the abstract nature of Wasm execution -->
+<!-- stacks. Instead, it provides handles to inactive execution stacks as -->
+<!-- *continuations*. -->
+
+<!-- A continuation represents the rest of a computation from a particular -->
+<!-- point in its execution up to a *handler*. A continuation is akin to a -->
+<!-- function in the sense that it takes a sequence of parameters and -->
+<!-- returns a sequence of results, providing a typed view of a suspended -->
+<!-- execution stack. The parameter types describe the data that must be -->
+<!-- supplied in order for a continuation to resume executing, and the -->
+<!-- result types describe the type of data that will be returned once it -->
+<!-- has finished executing. -->
+
+<!-- A continuation is created by suspending with a control tag --- control -->
+<!-- tags generalise tags from the [exception handling -->
+<!-- proposal](https://github.com/WebAssembly/exception-handling) with -->
+<!-- result types. Each control tag is declared module-wide along with its -->
+<!-- parameter types and result types. Control tags provide a means for -->
+<!-- writing an interface to the possible kinds of non-local transfers (or -->
+<!-- stack switches) that a computation may perform. -->
+
+<!-- The proposal includes both asymmetric and symmetric mechanisms for -->
+<!-- switching stacks. The asymmetric mechanism preserves the caller-callee -->
+<!-- relationship between stacks, meaning that using the asymmetric -->
+<!-- semantics to invoke a continuation installs the stack underlying the -->
+<!-- callee as a child of the stack underlying the caller. Conversely, the -->
+<!-- symmetric mechanism allows for swapping stacks in place, that is, -->
+<!-- using the symmetric semantics to invoke a continuation replaces the -->
+<!-- stack of the caller with the stack underlying the callee. -->
+
+<!-- TODO: briefly mention and motivate direct switching -->
 
 ## Examples
 
