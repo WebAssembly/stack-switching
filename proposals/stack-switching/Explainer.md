@@ -78,6 +78,15 @@ parameter types and result types. Control tags provide a means for
 writing an interface to the possible kinds of non-local transfers (or
 stack switches) that a computation may perform.
 
+The proposal includes both asymmetric and symmetric mechanisms for
+switching stacks. The asymmetric mechanism preserves the caller-callee
+relationship between stacks, meaning that using the asymmetric
+semantics to invoke a continuation installs the stack underlying the
+callee as a child of the stack underlying the caller. Conversely, the
+symmetric mechanism allows for swapping stacks in place, that is,
+using the symmetric semantics to invoke a continuation replaces the
+stack of the caller with the stack underlying the callee.
+
 TODO: briefly mention and motivate direct switching
 
 ## Examples
