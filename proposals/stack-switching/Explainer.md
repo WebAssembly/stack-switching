@@ -48,31 +48,47 @@ varieties of non-local control flow, our strategy is to build a single
 mechanism, *continuations*, that can be used by language providers to
 construct their own language specific features.
 
-A continuation represents a suspended execution stack. Stack switching
-is realised by instructions for suspending and resuming
-continuations. In this respect the design provides a form of
-*asymmetric coroutines*. Continuations are composable, meaning that
-when a continuation is resumed it is spliced onto the current
-execution stack. This preserves the caller-callee relationship between
-stacks meaning that no special plumbing is needed in order to compose
-non-local control features with built-in control effects such as
-traps, exceptions, and embedder integration.
+## Continuations
+
+A continuation represents a snapshot of execution on a particular
+stack. Stack switching is realised by instructions for suspending and
+resuming continuations. Continuations are composable, meaning that
+when a suspended continuation is resumed it is spliced onto the
+current continuation. This splicing establishes a parent-child
+relationship between the current and resumed continuation. In this
+respect the design provides a form of *asymmetric coroutines*.
+
+SL: Perhaps the following paragraph belongs elsewhere
+
+The parent-child relationship aligns with the caller-callee
+relationship for standard function calls meaning that no special
+plumbing is needed in order to compose the non-local control features
+we define with built-in non-local control features such as traps,
+exceptions, and embedder integration.
 
 When suspending, we provide a tag and payload, much like when raising
-an exception. Correspondingly, when resuming a continuation a
-*handler* is installed which specifies a different behaviour for each
-of the different kinds of tag with which the continuation may
-subsequently be suspended. Unlike normal exception handlers such
-*effect handlers* are passed the continuation as well as the tag and
-its payload.
+an exception. Correspondingly, when resuming a suspended continuation
+a *handler* is installed which specifies different behaviours for the
+different kinds of tag with which the resumed continuation may
+subsequently be suspended. Unlike for a normal exception handler the
+handler is passed the suspended continuation as well as a payload.
 
 We also offer an alternative to the interface based on suspending and
-resuming continuations by way of an instruction for directly switching
-between stacks. In this respect the design provides a form of
-*symmetric coroutines*. Direct switching to a continuation is
-semantically equivalent to suspending the current execution stack and
-then resuming another continuation, but can (and should) be optimised.
+resuming continuations by way of an instruction for direct switching
+between continuations. Direct switching combines suspending the
+current continuation with resuming a previously suspended peer
+continuation. Direct switching *does not* establish a parent-child
+relationship between the current continuation and its peer. In this
+respect the design provides a form of *symmetric coroutines*.
 
+SL: Perhaps the following paragraph belongs elsewhere
+
+Direct switching to a suspended peer continuation is semantically
+equivalent to suspending the current continuation with a special
+switch tag whose payload is the suspended peer continuation in the
+context of a handler which resumes the peer continuation. However,
+direct switching can (and should) be optimised to avoid the need to
+switch control to the handler before switching control to the peer.
 
 <!-- SL: I've done a quick polishing pass, but I think the rest of this -->
 <!-- motivation section still has plenty of room for improvement. -->
