@@ -409,17 +409,22 @@ a *handler*, which handles subsequent control suspensions within the
 continuation.
 
 ```wast
-  resume $ct (on $e $l)* : [t1* (ref $ct)] -> [t2*]
+  resume $ct hdl* : [t1* (ref $ct)] -> [t2*]
   where:
   - $ct = cont [t1*] -> [t2*]
 ```
 
 The `resume` instruction is parameterised by a continuation type and a
-handler dispatch table defined by a collection of pairs of control
-tags and labels. Each pair maps a control tag to a label pointing to
-its corresponding handler code. The `resume` instruction consumes its
-continuation argument, meaning a continuation may be resumed only
-once.
+handler dispatch table `hdl`. The shape of `hdl` can be either:
+
+1. `(on $e $l)` mapping the control tag `$e` to the label
+`$l`. Intercepting `$e` causes a branch to `$l`.
+
+1. `(on $e switch)` allowing a direct switch with control tag `$e`.
+
+
+The `resume` instruction consumes its continuation argument, meaning a
+continuation may be resumed only once.
 
 The second way to invoke a continuation is to raise an exception at
 the control tag invocation site. This amounts to performing "an
@@ -427,7 +432,7 @@ abortive action" which causes the stack to be unwound.
 
 
 ```wast
-  resume_throw $ct $exn (on $e $l)* : [te* (ref $ct)])] -> [t2*]
+  resume_throw $ct $exn hdl* : [te* (ref $ct)])] -> [t2*]
   where:
   - $ct = cont [t1*] -> [t2*]
   - $exn : [te*] -> []
@@ -437,11 +442,11 @@ The instruction `resume_throw` is parameterised by a continuation
 type, the exception to be raised at the control tag invocation site,
 and a handler dispatch table. As with `resume`, this instruction also
 fully consumes its continuation argument. Operationally, this
-instruction raises the exception `$exn` with parameters of type `tp*`
+instruction raises the exception `$exn` with parameters of type `te*`
 at the control tag invocation point in the context of the supplied
 continuation. As an exception is being raised (the continuation is not
 actually being supplied a value) the parameter types for the
-continuation `ta*` are unconstrained.
+continuation `t1*` are unconstrained.
 
 The third way to invoke a continuation is to perform a symmetric
 switch.
@@ -455,6 +460,12 @@ switch.
   - $ct2 = cont [t2*] -> [te2*]
   - t* <: te2*
 ```
+
+The instruction `switch` is parameterised by a continuation type and a
+control tag. The instruction suspends the current continuation and
+thereafter performs a direct switch to its continuation argument.  As
+with `resume` and `resume_throw`, this instruction fully consumes its
+continuation argument.
 
 ### Suspending continuations
 
