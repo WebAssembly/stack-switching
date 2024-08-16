@@ -77,9 +77,9 @@ We also offer an alternative to the interface based on suspending and
 resuming continuations by way of an instruction for direct switching
 between continuations. Direct switching combines suspending the
 current continuation with resuming a previously suspended peer
-continuation. Direct switching *does not* establish a parent-child
-relationship between the current continuation and its peer. In this
-respect the design provides a form of *symmetric coroutines*.
+continuation. Direct switching establishes a peer-to-peer relationship
+between the current continuation and its peer. In this respect the
+design provides a form of *symmetric coroutines*.
 
 SL: Perhaps the following paragraph belongs elsewhere
 
