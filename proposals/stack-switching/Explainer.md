@@ -459,6 +459,7 @@ switch.
   - te1* <: t*
   - $ct2 = cont [t2*] -> [te2*]
   - t* <: te2*
+  #TODO(dhil): We should probably simplify the typing here such that te1 = t = te2 (as we do in the other cases).
 ```
 
 The instruction `switch` is parameterised by a continuation type and a
