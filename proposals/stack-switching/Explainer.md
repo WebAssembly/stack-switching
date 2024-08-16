@@ -635,10 +635,9 @@ This abbreviation will be formalised with an auxiliary function or other means i
 - `cont.bind <typeidx> <typeidx>`
   - Partially apply a continuation.
   - `cont.bind $ct $ct' : [t3* (ref null? $ct)] -> [(ref $ct')]`
-    - iff `C.types[$ct'] ~~ cont [t1'*] -> [t2'*]`
-    - and `C.types[$ct] ~~ cont [t1* t3*] -> [t2*]`
+    - iff `C.types[$ct] ~~ cont [t3* t1*] -> [t2*]`
+    - and `C.types[$ct'] ~~ cont [t1'*] -> [t2'*]`
     - and `[t1*] -> [t2*] <: [t1'*] -> [t2'*]`
-  - note - currently binding from right as discussed in https://github.com/WebAssembly/stack-switching/pull/53
 
 - `resume <typeidx> hdl*`
   - Execute a given continuation.
