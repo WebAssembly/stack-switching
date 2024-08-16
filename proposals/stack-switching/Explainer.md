@@ -625,7 +625,7 @@ C.types[$ct] ~~ cont $ft
 C.types[$ft] ~~ func [t1*] -> [t2*]
 ```
 
-This abbreviation will be formalized with an auxiliary function or other means in the spec.
+This abbreviation will be formalised with an auxiliary function or other means in the spec.
 
 - `cont.new <typeidx>`
   - Create a new continuation from a given typed funcref.
@@ -642,7 +642,7 @@ This abbreviation will be formalized with an auxiliary function or other means i
 
 - `resume <typeidx> hdl*`
   - Execute a given continuation.
-    - If the executed continuation suspends with a tagged signal `$t`, the corresponding handler `(on $t H)` is executed.
+    - If the executed continuation suspends with a control tag `$t`, the corresponding handler `(on $t H)` is executed.
   - `resume $ct hdl* : [t1* (ref null? $ct)] -> [t2*]`
     - iff `C.types[$ct] ~~ cont [t1*] -> [t2*]`
     - and `(hdl : t2*)*`
@@ -657,7 +657,7 @@ This abbreviation will be formalized with an auxiliary function or other means i
     - and `(hdl : t2*)*`
 
 - `hdl = (on <tagidx> <labelidx>) | (on <tagidx> switch)`
-  - Handlers attached to `resume` and `resume_throw`, handling events for `suspend` and `switch`, respectively.
+  - Handlers attached to `resume` and `resume_throw`, handling control tags for `suspend` and `switch`, respectively.
   - `(on $e $l) : t*`
     - iff `C.tags[$e] = tag $ft`
     - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
@@ -670,14 +670,14 @@ This abbreviation will be formalized with an auxiliary function or other means i
     - and `C.types[$ft] ~~ func [] -> [t*]`
 
 - `suspend <tagidx>`
-  - Send a tagged signal to suspend the current computation.
+  - Use a control tag to suspend the current computation.
   - `suspend $t : [t1*] -> [t2*]`
     - iff `C.tags[$t] = tag $ft`
     - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
 
 - `switch <typeidx> <tagidx>`
   - Switch to executing a given continuation directly, suspending the current execution.
-  - The suspension and switch are performed from the perspective of a parent `(on $e switch)` handler, determined by the annotated tag.
+  - The suspension and switch are performed from the perspective of a parent `(on $e switch)` handler, determined by the annotated control tag.
   - `switch $ct1 $e : [t1* (ref null $ct1)] -> [t2*]`
     - iff `C.tags[$e] = tag $ft`
     - and `C.types[$ft] ~~ func [] -> [t*]`
@@ -688,7 +688,7 @@ This abbreviation will be formalized with an auxiliary function or other means i
 
 ### Execution
 
-The same tag may be used simultaneously by `throw`, `suspend`,
+The same control tag may be used simultaneously by `throw`, `suspend`,
 `switch`, and their associated handlers. When searching for a handler
 for an event, only handlers for the matching kind of event are
 considered, e.g. only `(on $e $l)` handlers can handle `suspend`
