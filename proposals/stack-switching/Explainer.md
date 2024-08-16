@@ -349,17 +349,20 @@ and execution rules as well as changes to the binary format.
 The proposal adds a new reference type for continuations.
 
 ```wast
-  (cont $t)
+  (cont $ft)
 ```
 
-A continuation type is given in terms of a function type `$t`, whose parameters `tp*`
-describes the expected stack shape prior to resuming/starting the
-continuation, and whose return types `tr*` describes the stack
-shape after the continuation has run to completion.
+A continuation type is given in terms of a function type `$ft`, whose
+parameters `t1*` describes the expected stack shape prior to
+resuming/starting the continuation, and whose return types `t2*`
+describes the stack shape after the continuation has run to
+completion.
 
-As a shorthand, we will often write the function type inline and write a continuation type as
+As a shorthand, we will often write the function type inline and write
+a continuation type as
+
 ```wast
-  (cont [tp*] -> [tr*])
+  (cont [t1*] -> [t2*])
 ```
 
 ### Declaring control tags
@@ -370,14 +373,14 @@ A control tag is similar to an exception extended with a result type
 of a control tag.
 
 ```wast
-  (tag $e (param tp*) (result tr*))
+  (tag $t (param t1*) (result t2*))
 ```
 
-The `$e` is the symbolic index of the control tag in the index space
-of tags. The parameter types `tp*` describe the expected stack layout
-prior to invoking the tag, and the result types `tr*` describe the
+The `$t` is the symbolic index of the control tag in the index space
+of tags. The parameter types `t1*` describe the expected stack layout
+prior to invoking the tag, and the result types `t2*` describe the
 stack layout following an invocation of the operation. In this
-document we will sometimes write `$e : [tp*] -> [tr*]` as shorthand
+document we will sometimes write `$t : [t1*] -> [t2*]` as shorthand
 for indicating that such a declaration is in scope.
 
 ### Creating continuations
@@ -392,9 +395,9 @@ from a function.
   - $ct = cont $ft
 ```
 
-The instruction takes as operand a reference to
-a function of type `[t1*] -> [t2*]`. The body of this function is a
-computation that may perform non-local control flow.
+The instruction takes as operand a reference to a function of type
+`[t1*] -> [t2*]`. The body of this function is a computation that may
+perform non-local control flow.
 
 
 ### Invoking continuations
@@ -406,9 +409,9 @@ a *handler*, which handles subsequent control suspensions within the
 continuation.
 
 ```wast
-  resume $ct (on $e $l)* : [tp* (ref $ct)] -> [tr*]
+  resume $ct (on $e $l)* : [t1* (ref $ct)] -> [t2*]
   where:
-  - $ct = cont [tp*] -> [tr*]
+  - $ct = cont [t1*] -> [t2*]
 ```
 
 The `resume` instruction is parameterised by a continuation type and a
@@ -424,10 +427,10 @@ abortive action" which causes the stack to be unwound.
 
 
 ```wast
-  resume_throw $ct $exn (on $e $l)* : [tp* (ref $ct)])] -> [tr*]
+  resume_throw $ct $exn (on $e $l)* : [te* (ref $ct)])] -> [t2*]
   where:
-  - $ct = cont [ta*] -> [tr*]
-  - $exn : [tp*] -> []
+  - $ct = cont [t1*] -> [t2*]
+  - $exn : [te*] -> []
 ```
 
 The instruction `resume_throw` is parameterised by a continuation
@@ -440,10 +443,17 @@ continuation. As an exception is being raised (the continuation is not
 actually being supplied a value) the parameter types for the
 continuation `ta*` are unconstrained.
 
-The third way to invoke a continuation is to perform a symmetric switch.
+The third way to invoke a continuation is to perform a symmetric
+switch.
 
 ```wast
-TODO
+  switch $ct1 $e : [t1* (ref $ct1)] -> [t2*]
+  where:
+  - $e = tag [] -> [t*]
+  - $ct1 = cont [t1* (ref $ct2)] -> [te1*]
+  - te1* <: t*
+  - $ct2 = cont [t2*] -> [te2*]
+  - t* <: te2*
 ```
 
 ### Suspending continuations
@@ -453,9 +463,9 @@ invoking one of the declared control tags.
 
 
 ```wast
-  suspend $e : [tp*] -> [tr*]
+  suspend $e : [t1*] -> [t2*]
   where:
-  - $e : [tp*] -> [tr*]
+  - $e : [t1*] -> [t2*]
 ```
 
 The instruction `suspend` invokes the control tag named `$e` with
@@ -481,10 +491,10 @@ provides several example usages of `cont.bind`).
 
 
 ```wast
-  cont.bind $ct1 $ct2 : [tp1* (ref $ct1)] -> [(ref $ct2)]
+  cont.bind $ct1 $ct2 : [t1* (ref $ct1)] -> [(ref $ct2)]
   where:
-  $ct1 = cont [tp1* tp2*] -> [tr*]
-  $ct2 = cont [tp2*] -> [tr*]
+  $ct1 = cont [t1* t3*] -> [t2*]
+  $ct2 = cont [t3*] -> [t2*]
 ```
 
 The instruction `cont.bind` binds the arguments of type `tp1*` to a
