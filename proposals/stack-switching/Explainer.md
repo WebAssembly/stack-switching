@@ -10,10 +10,9 @@ instructions and validation rules to facilitate stack switching.
 
 ## Table of contents
 1. [Motivation](#motivation)
-1. [Examples](#examples)
-   1. [Yield-style generators](#yield-style-generators)
-   1. [Coroutines](#coroutines)
-   1. [Lightweight threads](#lightweight-threads)
+1. [Introduction to continuation-based stack switching](#introduction-to-continuation-based-stack-switching)
+   1. [Generators](#generators)
+   1. [Task scheduling](#task-scheduling)
 1. [Instruction set extension](#instruction-set-extension)
    1. [Declaring control tags](#declaring-control-tags)
    1. [Creating continuations](#creating-continuations)
@@ -401,13 +400,12 @@ the parent (as `suspend` would), `switch` effectively replaces the continuation
 under the `yield` handler in `$entry` with a different continuation.
 
 
-## Examples
+<!--- ## Examples
 
 In this section we give a series of examples illustrating possible encodings of common non-local control flow idioms.
 
 ### Yield-style generators
 
-<!--
 ```c
 // Producer: a stream of naturals
 void nats() {
@@ -434,7 +432,6 @@ int32_t sumUp(int32_t upto) {
 
 sumUp(10); // returns 55
 ```
--->
 
 ```wast
 (module $generator
@@ -608,7 +605,7 @@ TODO
 
 #### Symmetric variation
 
-TODO
+TODO -->
 
 ## Instruction set extension
 
