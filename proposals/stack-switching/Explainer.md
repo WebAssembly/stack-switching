@@ -764,15 +764,16 @@ arguments yielding another suspended continuation.
 ```wast
   cont.bind $ct1 $ct2 : [t1* (ref $ct1)] -> [(ref $ct2)]
   where:
-  $ct1 = cont [t1* t3*] -> [t2*]
-  $ct2 = cont [t3*] -> [t2*]
+  - $ct1 = cont [t1* t3*] -> [t2*]
+  - $ct2 = cont [t3*] -> [t2*]
 ```
 
-The `cont.bind` instruction binds the arguments of type `t1*` to a
-suspended continuation of type `$ct1`, yielding a modified suspended
-continuation of type `$ct2`. The `cont.bind` instruction also consumes
-its continuation argument, and yields a new continuation that can be
-supplied to `resume`,`resume_throw`, `switch` or `cont.bind`.
+The `cont.bind` instruction binds a prefix of its arguments of type
+`t1*` to a suspended continuation of type `$ct1`, yielding a modified
+suspended continuation of type `$ct2`. The `cont.bind` instruction
+also consumes its continuation argument, and yields a new continuation
+that can be supplied to `resume`,`resume_throw`, `switch` or
+`cont.bind`.
 
 
 SL: I think the following observation probably belongs in design
