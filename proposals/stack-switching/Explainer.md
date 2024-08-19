@@ -609,10 +609,14 @@ TODO -->
 
 ## Instruction set extension
 
-In this section we give an informal overview and explanations of the
-proposed instruction set extension. In Section [Specification
-changes](#specification-changes) we give an overview of the validation
-and execution rules as well as changes to the binary format.
+Here we give an informal account of the proposed instruction set
+extension. In the [specification changes](#specification-changes) we
+give a more formal account of the validation rules and changes to the
+binary format.
+
+For simplicity we ignore subtyping in this section, but in the
+[specification changes](#specification-changes) we take full account
+of subtyping.
 
 The proposal adds a new reference type for continuations.
 
@@ -620,11 +624,10 @@ The proposal adds a new reference type for continuations.
   (cont $ft)
 ```
 
-A continuation type is given in terms of a function type `$ft`, whose
-parameters `t1*` describes the expected stack shape prior to
+A continuation type is specified in terms of a function type `$ft`,
+whose parameter types `t1*` describe the expected stack shape prior to
 resuming/starting the continuation, and whose return types `t2*`
-describes the stack shape after the continuation has run to
-completion.
+describe the stack shape after the continuation has run to completion.
 
 As a shorthand, we will often write the function type inline and write
 a continuation type as
@@ -635,10 +638,10 @@ a continuation type as
 
 ### Declaring control tags
 
-A control tag is similar to an exception extended with a result type
-(or list thereof). Operationally, a control tag may be thought of as a
-*resumable* exception. A tag declaration provides the type signature
-of a control tag.
+Control tags generalise exception tags to include result
+types. Operationally, a control tag may be thought of as a *resumable*
+exception. A tag declaration provides the type signature of a control
+tag.
 
 ```wast
   (tag $t (param t1*) (result t2*))
@@ -647,14 +650,15 @@ of a control tag.
 The `$t` is the symbolic index of the control tag in the index space
 of tags. The parameter types `t1*` describe the expected stack layout
 prior to invoking the tag, and the result types `t2*` describe the
-stack layout following an invocation of the operation. In this
-document we will sometimes write `$t : [t1*] -> [t2*]` as shorthand
-for indicating that such a declaration is in scope.
+stack layout following an invocation of the operation.
+
+We will often write `$t : [t1*] -> [t2*]` as shorthand for indicating
+that such a declaration is in scope.
 
 ### Creating continuations
 
-The following instruction creates a continuation in *suspended state*
-from a function.
+The following instruction creates a *suspended continuation* from a
+function.
 
 ```wast
   cont.new $ct : [(ref $ft)] -> [(ref $ct)]
@@ -663,18 +667,16 @@ from a function.
   - $ct = cont $ft
 ```
 
-The instruction takes as operand a reference to a function of type
-`[t1*] -> [t2*]`. The body of this function is a computation that may
-perform non-local control flow.
-
+It takes a reference to a function of type `[t1*] -> [t2*]` whose body
+may perform non-local control flow.
 
 ### Invoking continuations
 
-There are three ways to invoke (or run) a continuation.
+There are three ways to invoke a suspended continuation.
 
-The first way to invoke a continuation resumes the continuation under
-a *handler*, which handles subsequent control suspensions within the
-continuation.
+The first way to invoke a continuation is to resume the suspended
+continuation under a *handler*. The handler specifies what to do when
+control is subsequently suspended again.
 
 ```wast
   resume $ct hdl* : [t1* (ref $ct)] -> [t2*]
@@ -688,15 +690,14 @@ handler dispatch table `hdl`. The shape of `hdl` can be either:
 1. `(on $e $l)` mapping the control tag `$e` to the label
 `$l`. Intercepting `$e` causes a branch to `$l`.
 
-1. `(on $e switch)` allowing a direct switch with control tag `$e`.
+2. `(on $e switch)` allowing a direct switch with control tag `$e`.
 
+The `resume` instruction consumes its continuation argument, meaning
+that a continuation may be resumed only once.
 
-The `resume` instruction consumes its continuation argument, meaning a
-continuation may be resumed only once.
 
 The second way to invoke a continuation is to raise an exception at
-the control tag invocation site. This amounts to performing "an
-abortive action" which causes the stack to be unwound.
+the control tag invocation site which causes the stack to be unwound.
 
 
 ```wast
@@ -706,15 +707,16 @@ abortive action" which causes the stack to be unwound.
   - $exn : [te*] -> []
 ```
 
-The instruction `resume_throw` is parameterised by a continuation
+The `resume_throw` instruction is parameterised by a continuation
 type, the exception to be raised at the control tag invocation site,
 and a handler dispatch table. As with `resume`, this instruction also
-fully consumes its continuation argument. Operationally, this
-instruction raises the exception `$exn` with parameters of type `te*`
-at the control tag invocation point in the context of the supplied
-continuation. As an exception is being raised (the continuation is not
-actually being supplied a value) the parameter types for the
-continuation `t1*` are unconstrained.
+fully consumes its continuation argument. This instruction raises the
+exception `$exn` with parameters of type `te*` at the control tag
+invocation point in the context of the supplied continuation. As an
+exception is being raised (the continuation is not actually being
+supplied a value) the parameter types for the continuation `t1*` are
+unconstrained.
+
 
 The third way to invoke a continuation is to perform a symmetric
 switch.
@@ -722,25 +724,23 @@ switch.
 ```wast
   switch $ct1 $e : [t1* (ref $ct1)] -> [t2*]
   where:
-  - $e = tag [] -> [t*]
-  - $ct1 = cont [t1* (ref $ct2)] -> [te1*]
-  - te1* <: t*
-  - $ct2 = cont [t2*] -> [te2*]
-  - t* <: te2*
-  #TODO(dhil): We should probably simplify the typing here such that te1 = t = te2 (as we do in the other cases).
+  - $e : [] -> [t*]
+  - $ct1 = cont [t1* (ref $ct2)] -> [t*]
+  - $ct2 = cont [t2*] -> [t*]
 ```
 
-The instruction `switch` is parameterised by a continuation type and a
-control tag. The instruction suspends the current continuation and
-thereafter performs a direct switch to its continuation argument.  As
-with `resume` and `resume_throw`, this instruction fully consumes its
+The `switch` instruction is parameterised by a continuation type
+(`$ct1`) and a control tag (`$e`). It suspends the current
+continuation (of type `$ct2`), then performs a direct switch to the
+suspended peer continuation (of type `$ct1`), passing in the required
+parameters (including the just suspended current continuation, in
+order to allow the peer to switch back again). As with `resume` and
+`resume_throw`, the `switch` instruction fully consumes its suspended
 continuation argument.
 
 ### Suspending continuations
 
-A computation running inside a continuation can suspend itself by
-invoking one of the declared control tags.
-
+The current continuation can be suspended.
 
 ```wast
   suspend $e : [t1*] -> [t2*]
@@ -748,27 +748,18 @@ invoking one of the declared control tags.
   - $e : [t1*] -> [t2*]
 ```
 
-The instruction `suspend` invokes the control tag named `$e` with
-arguments of types `tp*`. Operationally, the instruction transfers
-control out of the continuation to the nearest enclosing handler for
-`$e`. This behaviour is similar to how raising an exception transfers
-control to the nearest exception handler that handles the
-exception. The key difference is that the continuation at the
-suspension point expects to be resumed later with arguments of types
-`tr*`.
+The `suspend` instruction invokes the control tag `$e` with arguments
+of types `t1*`. It suspends the current continuation up to the nearest
+enclosing handler for `$e`. This behaviour is similar to how raising
+an exception transfers control to the nearest exception handler that
+handles the exception. The key difference is that the continuation at
+the suspension point expects to be resumed later with arguments of
+types `t2*`.
 
-### Binding continuations
+### Partial application
 
-The parameter list of a continuation may be shrunk via `cont.bind`. This
-instruction provides a way to partially apply a given
-continuation. This facility turns out to be important in practice due
-to the block and type structure of Wasm as in order to return a
-continuation from a block, all branches within the block must agree on
-the type of continuation. By using `cont.bind`, one can
-programmatically ensure that the branches within a block each return a
-continuation with compatible type (the [Examples](#examples) section
-provides several example usages of `cont.bind`).
-
+A suspended continuation can be partially applied to a prefix of its
+arguments yielding another suspended continuation.
 
 ```wast
   cont.bind $ct1 $ct2 : [t1* (ref $ct1)] -> [(ref $ct2)]
@@ -777,40 +768,52 @@ provides several example usages of `cont.bind`).
   $ct2 = cont [t3*] -> [t2*]
 ```
 
-The instruction `cont.bind` binds the arguments of type `tp1*` to a
-continuation of type `$ct1`, yielding a modified continuation of type
-`$ct2` which expects fewer arguments. This instruction also consumes
+The `cont.bind` instruction binds the arguments of type `t1*` to a
+suspended continuation of type `$ct1`, yielding a modified suspended
+continuation of type `$ct2`. The `cont.bind` instruction also consumes
 its continuation argument, and yields a new continuation that can be
-supplied to either `resume`,`resume_throw`, or `cont.bind`.
+supplied to `resume`,`resume_throw`, `switch` or `cont.bind`.
+
+
+SL: I think the following observation probably belongs in design
+considerations rather than here
+
+Partial application turns out to be important in practice due to the
+block and type structure of Wasm as in order to return a continuation
+from a block, all branches within the block must agree on the type of
+continuation. By using `cont.bind`, one can programmatically ensure
+that the branches within a block each return a continuation with
+compatible type (the [Examples](#examples) section provides several
+example usages of `cont.bind`).
 
 ### Continuation lifetime
 
 #### Producing continuations
 
-There are four different ways in which continuations are produced
-(`cont.new,suspend,cont.bind,switch`). A fresh continuation object is
-allocated with `cont.new` and the current continuation is reused with
-`suspend`, `cont.bind`, and `switch`.
+There are four different ways in which continuations may be produced
+(`cont.new,suspend,cont.bind,switch`). A fresh continuation object
+is allocated with `cont.new` and the current continuation is reused
+with `suspend`, `cont.bind`, and `switch`.
 
-The `cont.bind` instruction is directly analogous to the mildly
-controversial `func.bind` instruction from the function references
-proposal. However, whereas the latter necessitates the allocation of a
-new closure, as continuations are single-shot no allocation is
-necessary: all allocation happens when the original continuation is
-created by preallocating one slot for each continuation argument.
+The `cont.bind` instruction is similar to the `func.bind` instruction
+that was initially part of the function references proposal. However,
+whereas the latter necessitates the allocation of a new closure, as
+continuations are single-shot no allocation is necessary: all
+allocation happens when the original continuation is created by
+preallocating one slot for each continuation argument.
 
 #### Consuming continuations
 
-There are four different ways in which continuations are consumed
-(`resume,resume_throw,switch,cont.bind`). A continuation may be
-resumed with a particular handler with `resume`; aborted with
-`resume_throw`; symmetrically switched to via `switch`; or partially
-applied with `cont.bind`.
+There are four different ways in which suspended continuations are
+consumed (`resume,resume_throw,switch,cont.bind`). A suspended
+continuation may be resumed with a particular handler with `resume`;
+aborted with `resume_throw`; directly switched to via `switch`; or
+partially applied with `cont.bind`.
 
 In order to ensure that continuations are one-shot, `resume`,
 `resume_throw`, `switch`, and `cont.bind` destructively modify the
-continuation object such that any subsequent use of the same
-continuation object will result in a trap.
+suspended continuation such that any subsequent use of the same
+suspended continuation will result in a trap.
 
 ## Design considerations
 
