@@ -987,6 +987,8 @@ The opcode for heap types is encoded as an `s33`.
 
 ### Instructions
 
+We use the use the opcode space `0xe0-0xe5` for the six new instructions.
+
 | Opcode | Instruction              | Immediates |
 | ------ | ------------------------ | ---------- |
 | 0xe0   | `cont.new $ct`           | `$ct : u32` |
