@@ -193,9 +193,9 @@ The interface between generator and consumer is defined in two parts:
   The tag's definition also reflects that an `i32` value will be passed when
   using it to suspend execution.
 
- 
+
  The function `$generator` is defined as follows.
- 
+
  ```wat
 (func $consumer
   (local $c (ref $ct))
@@ -220,7 +220,7 @@ The interface between generator and consumer is defined in two parts:
   )
 )
  ```
- 
+
 The function `$consumer` uses `cont.new` to create a continuation executing
 `$generator`. This creates a value of reference type `(ref $ct)`, saved in `$c`.
 It then runs a loop, where a `resume` instruction is used
@@ -266,14 +266,14 @@ toplevel function running inside a continuation, such as `$generator`, returns.
 Control simply transfers to the next instruction after the `resume` instruction
 in the immediate parent, making the return values of the function inside the
 continuation the return values of the matching `resume` instruction.
- 
- 
+
+
 In our example, the toplevel function running inside the continuation (i.e.,
 `$generator`) simply returns once the loop counter `$i` reaches 0. Thus, this
 causes execution to continue after the `resume` instruction in `$generator`. The
 absence of results in the continuation type `$ct` reflects that `$generator` has
 no return values and `$consumer` returns, too.
- 
+
 The concrete definition of `$generator` is as follows.
 
 ```wat
@@ -317,11 +317,11 @@ This approach is illustrated by the following skeleton code.
 
 ```wat
 (module $scheduler1
-  
+
   (type $ft (func))
   ;; Continuation type of all tasks
   (type $ct (cont $ft))
-  
+
 
   ;; Tag used to yield execution in one task and resume another one.
   (tag $yield)
@@ -337,7 +337,7 @@ This approach is illustrated by the following skeleton code.
     (loop $resume_next
       ;; pick $next_task from queue, or return if no more tasks.
       ...
-      (block $on_yield 
+      (block $on_yield
         (resume $ct (on $yield $on_yield) (local.get $next_task))
         ;; task finished execution
         (br $schedule_next)
@@ -357,7 +357,7 @@ This approach is illustrated by the following skeleton code.
 
   )
   ...
-  (func $task_n (param (ref null $ct)) ...)  
+  (func $task_n (param (ref null $ct)) ...)
 )
 ```
 
@@ -377,7 +377,7 @@ handler resuming another continuation `$c`.
 This is achieved using the `switch` instruction, which also relies on tags,
 allowing to transfer control from the original continuation directly to `$c`,
 thus eschewing the need for the intermediate stack switch to the parent.
- 
+
 Concretely, executing `switch $yield (local.get $c)`  behaves equivalently to
 `(suspend $yield)`, assuming that the active (ordinary) handler for `$yield`
 immediately resumes `$c` and additionally passes the continuation obtained from
@@ -446,11 +446,11 @@ instruction with the following, alternative skeleton code.
       ;; we were resumed by `$entry` instead of being switched to directly.
       ...
     )
-    ;; Just return if no other task in queue, making the $yield_to_next call 
+    ;; Just return if no other task in queue, making the $yield_to_next call
     ;; a noop.
 
   )
-  
+
 )
 ```
 
