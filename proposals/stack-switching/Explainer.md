@@ -101,10 +101,11 @@ We define the following tag `$gen` to coordinate between `$generator` and
 Tag definitions serve two purposes in our proposal, somewhat resembling their
 use in exception handling:
 1. In order to switch execution to `$consumer`, the `$generator` suspends
- itself, which requires providing a tag. In our example, the overall instruction
- for suspension then becomes `suspend $gen`. The tag is used at runtime to
- determine where to continue execution, by identifying the active *suspend
- handler* for that tag. In our example, this will be inside the function
+   itself, which requires providing a tag. In our example, the overall
+   instruction for suspension then becomes `suspend $gen`. The tag is used at
+   runtime to determine where to continue execution, by identifying the active
+   *suspend handler* for that tag. In our example, this will be inside the
+   function
  `$consumer`. Conceptually, tags act as *delimeters*.
 2. As seen above, tags can have parameter types. They reflect what values are
    passed from the suspend site to the corresponding handler (i.e., where
@@ -226,13 +227,11 @@ executes (which may be another continuation, or the main stack) becomes the
 parent-child relationship reflect the asymmetric nature of our stack switching
 proposal. They affect execution in two ways, which we discuss in the following.
 
-Firstly, in our `resume` instruction, the *handler clause* `(on $gen
-$on_gen)` installs a suspend handler for that tag while executing the
-continuation.
-This means that if during the execution of `$c`, the continuation
-executes the instruction `suspend $gen`, execution continues in the block
-`$on_gen`.
-In general, executing an instruction `suspend $t` for some tag `$t` means that
+Firstly, in our `resume` instruction, the *handler clause* `(on $gen $on_gen)`
+installs a suspend handler for that tag while executing the continuation. This
+means that if during the execution of `$c`, the continuation executes the
+instruction `suspend $gen`, execution continues in the block `$on_gen`. In
+general, executing an instruction `suspend $t` for some tag `$t` means that
 execution continues at the *innermost* ancestor whose `resume` instruction
 installed a suspend handler for `$t`. This is analogous to the search for a
 matching exception handler after raising an exception.
