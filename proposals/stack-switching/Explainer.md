@@ -1080,8 +1080,8 @@ This abbreviation will be formalised with an auxiliary function or other means i
 - `barrier <typeidx <typeidx> instr* end`
   - Prevents suspensions propagating beyond this program point.
   - `barrier $l $ft instr* end : t2*`
-    - iff `C.labels[$l] = [t2*]
-    - and `C.types[$ft] ~~ func [t1*] -> [t2*]
+    - iff `C.labels[$l] = [t2*]`
+    - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
     - and `instr* : t2*`
 
 - `switch <typeidx> <tagidx>`
