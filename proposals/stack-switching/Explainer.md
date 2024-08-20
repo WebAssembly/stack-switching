@@ -1137,5 +1137,5 @@ We use the use the opcode space `0xe0-0xe6` for the seven new instructions.
 | 0xe2   | `suspend $t`             | `$t : u32` |
 | 0xe3   | `resume $ct (on $t $h)*` | `$ct : u32`, `($t : u32 and $h : u32)*` |
 | 0xe4   | `resume_throw $ct $e (on $t $h)` | `$ct : u32`, `$e : u32`, `($t : u32 and $h : u32)*` |
-| 0xe5   | `barrier $l $bt instr* end | `$l : u32`, `$bt : u32` |
+| 0xe5   | `barrier $l $bt instr* end` | `$l : u32`, `$bt : u32` |
 | 0xe6   | `switch $ct $e`          | `$ct : u32`, `$e : u32` |
