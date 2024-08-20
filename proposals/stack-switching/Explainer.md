@@ -84,10 +84,45 @@ asymmetric and symmetric stack switching, respectively.
 
 ### Generators
 
-This example shows a generator-consumer pattern, implemented by switching
-between the stack running the consumer and the one running the generator.
+This example shows a generator-consumer pattern. Both sides are represented by
+the functions `$generator` and `$consumer`, running on two different stacks.
+Execution then switches back and forth between both stacks, passing generated
+values along.
 
-We implement this in a module with the folllowing toplevel definitions.
+
+Our proposal reuses *tags* from the exception handling proposal.
+We define the following tag `$gen` to coordinate between `$generator` and
+`$consumer`.
+
+```wat
+(tag $gen (param i32))
+```
+
+Tag definitions serve two purposes in our proposal, somewhat resembling their
+use in exception handling:
+1. In order to switch execution to `$consumer`, the `$generator` suspends
+ itself, which requires providing a tag. In our example, the overall instruction
+ for suspension then becomes `suspend $gen`. The tag is used at runtime to
+ determine where to continue execution, by identifying the active *suspend
+ handler* for that tag. In our example, this will be inside the function
+ `$consumer`. Conceptually, tags act as *delimeters*.
+2. As seen above, tags can have parameter types. They reflect what values are
+   passed from the suspend site to the corresponding handler (i.e., where
+   execution continues). In our example, the tag's single `i32` parameter value
+   corresponds to the value created by the generator and passed to the consumer.
+   Our proposal extends the definition of tags to allow them to have result
+   types, too. These types represent what values must be passed in order to
+   resume a previously suspended continuation. These values therefore become
+   available at the suspend site. Thus, when suspending with a tag `$t`, the
+   tag's parameter and result types become the parameter and result types,
+   respectively, of `suspend $t` instructions. Tag result typescould be used in
+   our example if we wanted to pass values from the `$consumer` back to the
+   `$generator` when the former resumes execution of the latter. We eschew
+   passing values in this direction in our example.
+
+
+The overall module implementing our example has the folllowing toplevel
+definitions.
 
 ```wat
 (module $generator
@@ -115,32 +150,13 @@ We implement this in a module with the folllowing toplevel definitions.
 )
 ```
 
-Conceptually, both functions execute loops, and execution switches back and
-forth between `$consumer` and `$generator`.
-The `$generator` function suspends itself in every iteration and passes along
-the next generated value. Execution then continues in the `$consumer`, where the
-generated value is received, as well as a new continuation.
-The `$consumer` resumes each continuation received this way until the generator
-returns. 
+The module defines the *continuation type* `$ct` from the function type `$ft`.
+It allows passing continuations corresponding to suspended executions of
+`$generator` as first-class values of type `(ref $ct)`, similar to function
+references.
+Together, the continuation type `$ct` and the tag `$gen` define the interface
+between `$generator` and `$consumer` in a type-safe way.
 
-The interface between generator and consumer is defined in two parts:
-- The *continuation type* `$ct` is defined from the function type `$ft`. It allows
-  passing continuations corresponding to suspended executions of `$generator` as
-  first-class values of type `(ref $ct)`, similar to function references.
-- Defining the tag `$gen` allows us to use it as a delimiter for
-  continuations: When `$generator` suspends itself, it does so
-  using the tag `$gen`. The tag is then used at runtime to determine where to
-  continue execution afterwards, by identifying the active *suspend handler* for
-  that tag. In our example, this will be inside the function `$consumer`.
-  The tag's definition also reflects that an `i32` value will be passed when
-  using it to suspend execution, which represents each generated value passed to
-  the `$consumer`.
-  Our proposal extends the definition of tags to allow result types in addition
-  to parameter types. Such results would be used if we wanted to pass values
-  from the `$consumer` back to the `$generator` when the former resumes the
-  latter.
-  We eschew passing values in this direction in our example.
-  
 
 
 The concrete definition of `$generator` is straightforward:
@@ -160,9 +176,8 @@ The concrete definition of `$generator` is straightforward:
 )
 ```
 
-The function executes 100 iterations of a loop and returns afterwards. As
-mentioned before, the function suspends itself in each iteration with the
-`$gen` tag, denoted `suspend $gen`. 
+The function executes 100 iterations of a loop and returns afterwards. The
+function suspends itself in each iteration with the `$gen` tag.
 The value passed from the `suspend` instruction to the handler (i.e., the value
 produced by the generator) is just the current value of the loop counter.
 
@@ -214,17 +229,16 @@ proposal. They affect execution in two ways, which we discuss in the following.
 Firstly, in our `resume` instruction, the *handler clause* `(on $gen
 $on_gen)` installs a suspend handler for that tag while executing the
 continuation.
-This means that if during the execution of `$c`, the continuation suspends
+This means that if during the execution of `$c`, the continuation
 executes the instruction `suspend $gen`, execution continues in the block
-`$on_gen.
+`$on_gen`.
 In general, executing an instruction `suspend $t` for some tag `$t` means that
 execution continues at the *innermost* ancestor whose `resume` instruction
 installed a suspend handler for `$t`. This is analogous to the search for a
 matching exception handler after raising an exception.
 
-In our example, this means that whenever `$generator` executes  `suspend
-$gen`, execution continues in the `$on_gen` block in
-`$consumer`.
+As mentioned above, whenever `$generator` executes `suspend $gen`, execution
+continues in the `$on_gen` block in `$consumer`.
 In that case, two values are found on the Wasm value stack:
 The topmost value is a new continuation, representing the remaining execution of
 `$generator` after the `suspend` instruction therein.
