@@ -136,7 +136,7 @@ switch control to the handler before switching control to the peer.
 We informally demonstrate the proposed stack switching mechanisms using two
 examples. They showcase how generators and a task scheduler can be implemented
 using our proposal. For the sake of exposition, both examples are kept minimal,
-but could be extended to real world programs. The two examples demonstrate
+but could be extended to real-world programs. The two examples demonstrate
 asymmetric and symmetric stack switching, respectively.
 
 
@@ -174,7 +174,7 @@ We implement this in a module with the folllowing toplevel definitions.
 ```
 
 Conceptually, both functions execute loops, and execution switches back and
-forth between `$consumer` and `$generator` by switching stacks.
+forth between `$consumer` and `$generator`.
 The `$generator` function suspends itself in every iteration and passes along
 the next generated value. Execution then continues in the `$consumer`, where the
 generated value is received, as well as a new continuation.
@@ -192,10 +192,11 @@ The interface between generator and consumer is defined in two parts:
   that tag. In our example, this will be inside the function `$consumer`.
   The tag's definition also reflects that an `i32` value will be passed when
   using it to suspend execution, which represents each generated value passed to
-  the consumer.
-  Our proposal extends the definition of tags to have results in addition to
-  parameters. Such results would be used if we wanted to pass values from the
-  `$consumer` back to the `$generator` when the former resumes the latter.
+  the `$consumer`.
+  Our proposal extends the definition of tags to allow result types in addition
+  to parameter types. Such results would be used if we wanted to pass values
+  from the `$consumer` back to the `$generator` when the former resumes the
+  latter.
   We eschew passing values in this direction in our example.
   
 
@@ -222,7 +223,6 @@ mentioned before, the function suspends itself in each iteration with the
 `$yield` tag, denoted `suspend $yield`. 
 The value passed from the `suspend` instruction to the handler (i.e., the value
 produced by the generator) is just the current value of the loop counter.
-
 
 
 The function `$consumer` is defined as follows.
@@ -273,15 +273,15 @@ Firstly, in our `resume` instruction, the *handler clause* `(on $yield
 $on_yield)` installs a suspend handler for that tag while executing the
 continuation.
 This means that if during the execution of `$c`, the continuation suspends
-itself using tag `$yield` (i.e., it executes the instruction `suspend $yield`),
-execution continues in the block `$on_yield`.
+executes the instruction `suspend $yield`, execution continues in the block
+`$on_yield`.
 In general, executing an instruction `suspend $t` for some tag `$t` means that
-execution continues at the innermost ancestor whose `resume` instruction
+execution continues at the *innermost* ancestor whose `resume` instruction
 installed a suspend handler for `$t`. This is analogous to the search for a
 matching exception handler after raising an exception.
 
-In our example, this means that whenever `$generator` executes a `suspend
-$yield` instruction, execution continues in the `$on_yield` block in
+In our example, this means that whenever `$generator` executes  `suspend
+$yield`, execution continues in the `$on_yield` block in
 `$consumer`.
 In that case, two values are found on the Wasm value stack:
 The topmost value is a new continuation, representing the remaining execution of
