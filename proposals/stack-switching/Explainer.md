@@ -1128,7 +1128,7 @@ The opcode for heap types is encoded as an `s33`.
 
 ### Instructions
 
-We use the use the opcode space `0xe0-0xe6` for the six new instructions.
+We use the use the opcode space `0xe0-0xe6` for the seven new instructions.
 
 | Opcode | Instruction              | Immediates |
 | ------ | ------------------------ | ---------- |
