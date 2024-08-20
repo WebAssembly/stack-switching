@@ -116,10 +116,11 @@ use in exception handling:
    resume a previously suspended continuation. These values therefore become
    available at the suspend site. Thus, when suspending with a tag `$t`, the
    tag's parameter and result types become the parameter and result types,
-   respectively, of `suspend $t` instructions. Tag result typescould be used in
-   our example if we wanted to pass values from the `$consumer` back to the
-   `$generator` when the former resumes execution of the latter. We eschew
-   passing values in this direction in our example.
+   respectively, of `suspend $t` instructions.
+   Tag result types could be used in our example if we wanted to pass values
+   from the `$consumer` back to the `$generator` when the former resumes
+   execution of the latter. We eschew passing values in this direction in our
+   example.
 
 
 The overall module implementing our example has the folllowing toplevel
@@ -242,11 +243,11 @@ In that case, two values are found on the Wasm value stack:
 The topmost value is a new continuation, representing the remaining execution of
 `$generator` after the `suspend` instruction therein.
 The other value is the `i32` value passed from the generator to the consumer, as
-required by the tag's definition. In our example, `$consumer` simply
-prints the generated value and saves the new continuation in `$c` for the next
+required by the tag's definition. In our example, `$consumer` simply prints the
+generated value and saves the new continuation in `$c` to be resumed in the next
 iteration.
 
-Secondly, the parent-child relationships dictate where execution continues after
+Secondly, the parent-child relationships determine where execution continues after
 the toplevel function running inside a continuation, such as `$generator`,
 returns.
 Control simply transfers to the next instruction after the `resume` instruction
@@ -266,7 +267,7 @@ The full definition of the module can be found [here](examples/generator.wast).
 
 
 We now show how the following use case may be implemented efficiently using this
-proposal: We may want to schedule a number of tasks, represented by functions
+proposal: We want to schedule a number of tasks, represented by functions
 `$task_0` to `$task_n`, to be executed concurrently. Scheduling is cooperative,
 meaning that tasks explicitly yield execution so that a scheduler may pick the
 next task to run.
@@ -295,7 +296,7 @@ This approach is illustrated by the following skeleton code.
   (table $task_queue 1000 (ref null $ct))
 
   ;; Entry point, becomes parent of all tasks.
-  ;; Also acts as scheduler when tasks yield.
+  ;; Also acts as scheduler when tasks yield or finish.
   (func $entry
     ;; initialize $task_queue with inital task
     ...
@@ -314,26 +315,26 @@ This approach is illustrated by the following skeleton code.
   )
 
   (func $task_0 (param (ref null $ct))
-
     ...
     ;; To yield execution, simply suspend to scheduling logic in $entry.
     (suspend $yield)
     ...
-
   )
+
   ...
+
   (func $task_n (param (ref null $ct)) ...)
+
 )
 ```
 
 Note that `$entry` performs all scheduling; it is responsible for picking the
 next task to resume in two different circumstances: If the most recent task
 suspended itself, and if it simply ran to completion and returned.
-
-However, we observe that this asymmetric approach requires two low-level stack
-switches in order to change execution from one task to another: The first when
-`suspend`-ing from the yielding task to `$entry`, and a second when `$entry`
-resumes the next task.
+However, we observe that this asymmetric approach requires two stack switches in
+order to change execution from one task to another: The first when `suspend`-ing
+from the yielding task to `$entry`, and a second when `$entry` resumes the next
+task.
 
 
 Our proposal provides a mechanism to optimize the particular pattern shown here,
@@ -370,7 +371,7 @@ instruction with the following, alternative skeleton code.
   (table $task_queue 1000 (ref null $ct))
 
   ;; Entry point, becomes parent of all tasks.
-  ;; No actual scheduling here, besides resuming first task.
+  ;; Only acts as scheduler when tasks finish.
   (func $entry
     ;; initialize $task_queue with inital task
     ...
@@ -385,15 +386,16 @@ instruction with the following, alternative skeleton code.
     )
   )
 
-  (func $task_0 (param (ref null $ct))
-
+  (func $task_0 (param $c (ref null $ct))
+    ;; If $c is not null, put in task_queue.
     ...
     ;; To yield execution, call $yield_to_next
     (call $yield_to_next)
     ...
-
   )
+
   ...
+
   (func $task_n (param (ref null $ct)) ...)
 
   ;; Determines next task to switch to directly.
@@ -403,19 +405,18 @@ instruction with the following, alternative skeleton code.
     (block $done
       (br_if $done (ref.is_null (local.get $next_task)))
       ;; Switch to $next_task.
-      ;; The switch instruction implicitly passes a reference to the currently 
+      ;; The switch instruction implicitly passes a reference to the currently
       ;; executing continuation as an argument to $next_task.
       (switch $ct $yield (local.get $next_task))
       ;; If we get here, some other continuation switch-ed directly to us, or
-      ;; $entry resumed us. 
+      ;; $entry resumed us.
       ;; In the first case, we receive the continuation that switched to us here
-      ;; and we need to enqueue it in the task list. 
+      ;; and we need to enqueue it in the task list.
       ;; In the second case, the passed continuation reference will be null.
       ...
     )
     ;; Just return if no other task in queue, making the $yield_to_next call
     ;; a noop.
-
   )
 
 )
@@ -425,28 +426,26 @@ instruction with the following, alternative skeleton code.
 Here, the function `entry` is still responsible for resuming tasks from the task
 queue, starting with some initial task. Thus, it will still be the parent of
 all task continuations, as in the previous version.
-
-
 However, `$entry` is no longer responsible for handling suspensions of tasks.
 Instead, it only resumes the next task from the queue whenever the previously
 running task returns. Yielding execution from one task that merely wishes to
 suspend itself to another will be handled by the tasks themselves, using the
 `switch` instruction.
 
-FE: We need to come up with names for the two types of handlers.
-"suspend handler" vs "switch handler". Or not call the latter "handlers" at all?
 
 The fact that `$entry` does not handle suspensions is reflected by the fact that
-its `resume` instruction does not install an ordinary handler for the tag
+its `resume` instruction does not install a suspend handler for the tag
 `yield`. Instead, the resume instruction installs a *switch handler* for tag
 `yield`.
 If a task wants to yield execution to another, it simply calls a separate
 function `$yield_to_next`. Therein, the scheduling logic picks the next task
-`$next_task` and switches directly to it. Here, the target continuation (called
+`$next_task` and switches directly to it. Here, the target continuation (i.e.,
 `$next_task` in `$yield_to_next`) receives the current continuation (i.e., the
 one that just called `$switch_to_next`) as an argument. Thus, we use the payload
 passing mechanism used for integer values in the generator example to pass
 continuation references.
+The task that we switched to is then responsible for enqueuing the previous
+continuation (i.e., the one received as a payload) in the task list.
 
 As a minor complication, we need to encode the fact that the continuation
 switched to receives the current one as an argument in the type of
@@ -466,7 +465,7 @@ necessary: It still acts as a delimiter, determining the shape of the
 continuation created when a `switch` using `yield` is performed.
 The resulting stack switching is symmetric in the following sense: Rather than
 switching back to the parent (as `suspend` would), `switch` effectively replaces
-the continuation under the `yield` handler in `$entry` with a different
+the continuation under the handler for `yield` in `$entry` with a different
 continuation.
 
 Our proposal also allows passing additional payloads when `switch`-ing from one
@@ -483,8 +482,8 @@ This is due to the fact that the returning continuation switches to the parent
 establish the following convention for all of our task functions: Immediately
 before they would ordinarily return, they `switch` to the next task. When doing
 so, they would pass a new flag to the target continuation to indicate that the
-source continuation should not be endued in the task list, but canceled. The
-latter can be achieved using the dedicated `resume.throw` instruction.
+source continuation should not be enqueued in the task list, but canceled. The
+latter can be achieved using the dedicated instruction `resume.throw`.
 
 
 
