@@ -506,11 +506,6 @@ Finally, observe that the `$entry` function passes a null continuation to any
 continuation it resumes, indicating to the resumed continuation that there is no
 previous continuation to enqueue in the task list.
 
-Our proposal also allows passing additional payloads when `switch`-ing from one
-continuation to another, besides the continuation switched away from. We eschew
-this in our example, which is reflected by the type `$ct` having no further
-parameters besides the continuation argument required by `switch`.
-
 Note that installing a switch handler for `$yield` in `entry` is strictly
 necessary: It still acts as a delimiter, determining the shape of the
 continuation created when a `switch` using `yield` is performed.
@@ -518,6 +513,24 @@ The resulting stack switching is symmetric in the following sense: Rather than
 switching back to the parent (as `suspend` would), `switch` effectively replaces
 the continuation under the `yield` handler in `$entry` with a different
 continuation.
+
+Our proposal also allows passing additional payloads when `switch`-ing from one
+continuation to another, besides the continuation switched away from. We
+eschewed this in our example, which is reflected by the type `$ct` having no
+further parameters besides the continuation argument required by `switch`.
+
+However, this mechanism could be used to optimize the implementation of task
+switching further:
+In `$scheduler2`, if a `$task_i` function finishes and therefore returns, two
+stack switches are required to continue execution in the next task in the queue.
+This is due to the fact that the returning continuation switches to the parent
+(i.e., `$entry`), which then resumes the next task. To avoid this, we could
+establish the following convention for all of our task functions: Immediately
+before they would ordinarily return, they `switch` to the next task. When doing
+so, they would pass a new flag to the target continuation to indicate that the
+source continuation should not be endued in the task list, but canceled. The
+latter can be achieved using the dedicated `resume.throw` instruction.
+
 
 
 <!--- ## Examples
