@@ -56,15 +56,7 @@ resuming continuations. Continuations are composable, meaning that
 when a suspended continuation is resumed it is spliced onto the
 current continuation. This splicing establishes a parent-child
 relationship between the current and resumed continuation. In this
-respect the design provides a form of *asymmetric coroutines*.
-
-SL: Perhaps the following paragraph belongs elsewhere
-
-The parent-child relationship aligns with the caller-callee
-relationship for standard function calls meaning that no special
-plumbing is needed in order to compose the non-local control features
-we define with built-in non-local control features such as traps,
-exceptions, and embedder integration.
+respect the design provides a form of *asymmetric switching*.
 
 When suspending, we provide a tag and payload, much like when raising
 an exception. Correspondingly, when resuming a suspended continuation
@@ -79,57 +71,7 @@ between continuations. Direct switching combines suspending the
 current continuation with resuming a previously suspended peer
 continuation. Direct switching establishes a peer-to-peer relationship
 between the current continuation and its peer. In this respect the
-design provides a form of *symmetric coroutines*.
-
-SL: Perhaps the following paragraph belongs elsewhere
-
-Direct switching to a suspended peer continuation is semantically
-equivalent to suspending the current continuation with a special
-switch tag whose payload is the suspended peer continuation in the
-context of a handler which resumes the peer continuation. However,
-direct switching can (and should) be optimised to avoid the need to
-switch control to the handler before switching control to the peer.
-
-<!-- SL: I've done a quick polishing pass, but I think the rest of this -->
-<!-- motivation section still has plenty of room for improvement. -->
-
-<!-- A key technical design challenge is to ensure that stack switching -->
-<!-- integrates smoothly with existing Wasm language features. Moreover, a -->
-<!-- central concern is to ensure that stack switching remains safe, both -->
-<!-- by respecting type-safety and by not breaking the sandboxing model of -->
-<!-- Wasm. For these reasons the design does not allow mangling Wasm -->
-<!-- stacks, that is, it preserves the abstract nature of Wasm execution -->
-<!-- stacks. Instead, it provides handles to inactive execution stacks as -->
-<!-- *continuations*. -->
-
-<!-- A continuation represents the rest of a computation from a particular -->
-<!-- point in its execution up to a *handler*. A continuation is akin to a -->
-<!-- function in the sense that it takes a sequence of parameters and -->
-<!-- returns a sequence of results, providing a typed view of a suspended -->
-<!-- execution stack. The parameter types describe the data that must be -->
-<!-- supplied in order for a continuation to resume executing, and the -->
-<!-- result types describe the type of data that will be returned once it -->
-<!-- has finished executing. -->
-
-<!-- A continuation is created by suspending with a control tag --- control -->
-<!-- tags generalise tags from the [exception handling -->
-<!-- proposal](https://github.com/WebAssembly/exception-handling) with -->
-<!-- result types. Each control tag is declared module-wide along with its -->
-<!-- parameter types and result types. Control tags provide a means for -->
-<!-- writing an interface to the possible kinds of non-local transfers (or -->
-<!-- stack switches) that a computation may perform. -->
-
-<!-- The proposal includes both asymmetric and symmetric mechanisms for -->
-<!-- switching stacks. The asymmetric mechanism preserves the caller-callee -->
-<!-- relationship between stacks, meaning that using the asymmetric -->
-<!-- semantics to invoke a continuation installs the stack underlying the -->
-<!-- callee as a child of the stack underlying the caller. Conversely, the -->
-<!-- symmetric mechanism allows for swapping stacks in place, that is, -->
-<!-- using the symmetric semantics to invoke a continuation replaces the -->
-<!-- stack of the caller with the stack underlying the callee. -->
-
-<!-- TODO: briefly mention and motivate direct switching -->
-
+design provides a form of *symmetric switching*.
 
 ## Introduction to continuation-based stack switching
 
@@ -908,18 +850,6 @@ also consumes its continuation argument, and yields a new continuation
 that can be supplied to `resume`,`resume_throw`, `switch` or
 `cont.bind`.
 
-
-SL: I think the following observation probably belongs in design
-considerations rather than here
-
-Partial application turns out to be important in practice due to the
-block and type structure of Wasm as in order to return a continuation
-from a block, all branches within the block must agree on the type of
-continuation. By using `cont.bind`, one can programmatically ensure
-that the branches within a block each return a continuation with
-compatible type (the [Examples](#examples) section provides several
-example usages of `cont.bind`).
-
 ### Trapping continuations
 
 In order to allow ensuring that control cannot be captured across
@@ -972,44 +902,49 @@ suspended continuation will result in a trap.
 
 In this section we discuss some key design considerations.
 
-### Asymmetric and symmetric switching
+### Asymmetric switching
 
-TODO
+Resuming a suspended continuation establishes a parent-child
+relationship which aligns with the caller-callee relationship for
+standard function calls meaning that no special plumbing is needed in
+order to compose the non-local control features we define with
+built-in non-local control features such as traps, exceptions, and
+embedder integration.
 
-### Linear usage of continuations
+### Symmetric switching
 
-Continuations in this proposal are single-shot (aka linear), meaning
-that they must be invoked exactly once (though this is not statically
-enforced). A continuation can be invoked either by resuming it (with
-`resume`); by aborting it (with `resume_throw`); or by switching to it
-(with `switch`). Some applications such as backtracking, probabilistic
-programming, and process duplication exploit multi-shot continuations,
-but none of the critical use cases require multi-shot
-continuations. Nevertheless, it is natural to envisage a future
-iteration of this proposal that includes support for multi-shot
-continuations by way of a continuation clone instruction.
+Direct switching to a suspended peer continuation is semantically
+equivalent to suspending the current continuation with a special
+switch tag whose payload is the suspended peer continuation in the
+context of a handler which resumes the peer continuation. However,
+direct switching can (and should) be optimised to avoid the need to
+switch control to the handler before switching control to the peer.
 
-### Memory management
+### Partial application
 
-The current proposal does not require a general garbage collector as
-the linearity of continuations guarantees that there are no cycles in
-continuation objects.  In theory, we could dispense with automated
-memory management altogether if we took seriously the idea that
-failure to use a continuation constitutes a bug in the producer. In
-practice, for most producers enforcing such a discipline is
-unrealistic and not something an engine can rely on anyway. To prevent
-space leaks, most engines will either need some form of automated
-memory management for unconsumed continuations or a monotonic
-continuation allocation scheme.
+Partial application can be important in practice due to the block and
+type structure of Wasm, as in order to return a continuation from a
+block, all branches within the block must agree on the type of
+continuation. Using `cont.bind`, a producer can ensure that the
+branches within a block each produce a continuation with the same type
+(the [Examples](#examples) section provides several example usages of
+`cont.bind`).
 
-* Automated memory management: due to the acyclicity of continuations,
-  a reference counting scheme is sufficient.
-* Monotonic continuation allocation: it is safe to use a continuation
-  object as long as its underlying stack is alive. It is trivial to
-  ensure a stack is alive by delaying deallocation until the program
-  finishes. To avoid excessive use of memory, an engine can equip a
-  stack with a revision counter, thus making it safe to repurpose the
-  allocated stack for another continuation.
+SL: I'm not sure if we're going to actually include an example of
+`cont.bind` in the initial version of this document.
+
+### One-shot continuations
+
+Continuations in the current proposal are single-shot (aka linear),
+meaning that they should be invoked exactly once. A continuation can
+be invoked either by resuming it (with `resume`); by aborting it (with
+`resume_throw`); or by switching to it (with `switch`). An attempt to
+invoke a continuation more than once results in a trap. Some
+applications such as backtracking, probabilistic programming, and
+process duplication exploit multi-shot continuations, but none of our
+critical use-cases requires multi-shot continuations. Nevertheless, it
+is natural to envisage a future extension that includes support for
+multi-shot continuations by way of a continuation clone instruction.
 
 ## Specification changes
 
