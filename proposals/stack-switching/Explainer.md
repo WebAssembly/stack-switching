@@ -190,6 +190,8 @@ The interface between generator and consumer is defined in two parts:
   tag `$yield`, the latter is used at runtime to identify where to continue
   execution afterwards. In our example, this will be inside the function
   `$consumer`.
+  The tag's definition also reflects that an `i32` value will be passed when
+  using it to suspend execution.
 
  
  The function `$generator` is defined as follows.
@@ -221,13 +223,11 @@ The interface between generator and consumer is defined in two parts:
  
 The function `$consumer` uses `cont.new` to create a continuation executing
 `$generator`. This creates a value of reference type `(ref $ct)`, saved in `$c`.
-
-
-The function `$generator` then runs a loop, where a `resume` instruction is used
+It then runs a loop, where a `resume` instruction is used
 to continue execution of the continuation currently saved in `$c` in each
 iteration.
 
-In general, a `resume` instruction not only takes a continuation as argument,
+In general, a `resume` instruction not only takes a continuation as an argument,
 but also additional values to be passed to the continuation to be resumed,
 reflected in the parameters of continuation's type. In our example, `$ct` has no
 parameters, indicating that no data is passed from `$consumer` to `$generator`.
@@ -242,11 +242,12 @@ Firstly, in our `resume` instruction, the *handler clause* `(on $yield
 $on_yield)` installs a handler for that tag while executing the continuation.
 This means that if during the execution of `$c`, the continuation suspends
 itself using tag `$yield` (i.e., it executes the instruction `suspend $yield`),
-this is handled by the block `$on_yield`. In general, executing an instruction
-`suspend $t` for some tag `$t` means that execution continues at the innermost
-ancestor whose `resume` instruction installed a handler for `$t`. This is
-analogous to the search for a matching exception handler after raising an
-exception.
+this is handled by the block `$on_yield`, meaning that execution continues
+there.
+In general, executing an instruction `suspend $t` for some tag `$t` means that
+execution continues at the innermost ancestor whose `resume` instruction
+installed a handler for `$t`. This is analogous to the search for a matching
+exception handler after raising an exception.
 
 In our example, this means that whenever `$generator` executes a `suspend
 $yield` instruction, execution continues in the `$on_yield` block in
@@ -262,16 +263,16 @@ iteration.
 
 Secondly, parent-child relationships dictate where execution continues after the
 toplevel function running inside a continuation, such as `$generator`, returns.
-Control simply transfers to after the `resume` instruction in the immediate
-parent, making the return values of the function inside the continuation the
-return values of the matching `resume` instruction.
+Control simply transfers to the next instruction after the `resume` instruction
+in the immediate parent, making the return values of the function inside the
+continuation the return values of the matching `resume` instruction.
  
  
-In our example, the toplevel continuation (i.e., `$generator`) simply returns
-once the loop counter `$i` reaches 0. Thus, this causes execution to continue
-after the `resume` instruction in `$generator`. The absence of results in the
-continuation type `$ct` reflects that `$generator` has no return values and
-`$consumer` returns, too.
+In our example, the toplevel function running inside the continuation (i.e.,
+`$generator`) simply returns once the loop counter `$i` reaches 0. Thus, this
+causes execution to continue after the `resume` instruction in `$generator`. The
+absence of results in the continuation type `$ct` reflects that `$generator` has
+no return values and `$consumer` returns, too.
  
 The concrete definition of `$generator` is as follows.
 
