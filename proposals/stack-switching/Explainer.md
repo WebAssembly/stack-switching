@@ -307,12 +307,12 @@ proposal: We may want to schedule a number of tasks, represented by functions
 meaning that tasks explicitly yield execution so that a scheduler may pick the
 next task to run.
 
-We may implement this using the asymmetric stack switching approach discussed
-for generators: We could define a function `$scheduler` that `resume`s the
+One way to implement this is to use the asymmetric stack switching approach
+discussed for generators: We define a function `$entry` that `resume`s the
 initial task, and installs a handler for a tag `$yield`. To yield execution,
-tasks simply perform `(suspend $yield)`, transferring control back to
-`$entry`, their parent. The latter then picks the next task (if any) from a
-task queue and `resume`s it.
+tasks simply perform `(suspend $yield)`, transferring control back to `$entry`,
+their parent. The latter function then picks the next task (if any) from a task
+queue and `resume`s it.
 
 This approach is illustrated by the following skeleton code.
 
@@ -362,29 +362,30 @@ This approach is illustrated by the following skeleton code.
 )
 ```
 
-Note that `$entry` is responsible for picking the next task to resume in two
-different circumstances: If the most recent task suspended itself, and if it
-simply run to completion and returned.
+Note that `$entry` performs all scheduling; it is responsible for picking the
+next task to resume in two different circumstances: If the most recent task
+suspended itself, and if it simply ran to completion and returned.
 
-However, we observe that this asymmetric approach requires two stack switches in
-order to change execution from one task to another: The first when suspending
-from the yielding task to the `entry`, and a second when `entry` resumes
-the next task.
+However, we observe that this asymmetric approach requires two low-level stack
+switches in order to change execution from one task to another: The first when
+`suspend`-ing from the yielding task to `$entry`, and a second when `$entry`
+resumes the next task.
 
 
-The proposal provides a mechanism to optimize the particular pattern shown here,
-where a `suspend` in one continuation would immediately be followed by the
-handler resuming another continuation `$c`.
-This is achieved using the `switch` instruction, which also relies on tags,
-allowing to transfer control from the original continuation directly to `$c`,
-thus eschewing the need for the intermediate stack switch to the parent.
+Our proposal provides a mechanism to optimize the particular pattern shown here,
+where a `suspend` in one continuation is followed by the handler resuming
+another continuation `$c`.
+We may use the `switch` instruction, which also relies on tags, to transfer
+control from the original continuation directly to `$c`, thus eschewing the need
+for the intermediate stack switch to the parent.
 
-Concretely, executing `switch $yield (local.get $c)`  behaves equivalently to
-`(suspend $yield)`, assuming that the active (ordinary) handler for `$yield`
-immediately resumes `$c` and additionally passes the continuation obtained from
-handling `$yield` along as an argument to `$c`.
-However, as mentioned above, using a switch instruction in this situation means
-that only a single stack switch occurs.
+Concretely, executing `switch $yield (local.get $c)` in our example behaves
+equivalently to `(suspend $yield)`, assuming that the active (ordinary) handler
+for `$yield` immediately resumes `$c` and additionally passes the continuation
+obtained from handling `$yield` along as an argument to `$c`.
+However, as mentioned above, using a `switch` instruction here has the advantage
+that a Wasm engine can implement it so that physical stacks are only changed
+once.
 
 We illustrate how the previous example can be updated to use the switch
 instruction with the following, alternative skeleton code.
@@ -438,13 +439,14 @@ instruction with the following, alternative skeleton code.
     (block $done
       (br_if $done (ref.is_null (local.get $next_task)))
       ;; Switch to $next_task.
-      ;; The switch instruction passes a reference to the current
-      ;; continuation as an argument to $next_task.
+      ;; The switch instruction implicitly passes a reference to the currently 
+      ;; executing continuation as an argument to $next_task.
       (switch $ct $yield (local.get $next_task))
-      ;; If we get here, some other continuation switched back to us, and we
-      ;; receive that continuation here. Need to enqueue it
-      ;; in the task list, unless it is a null referene. The latter happens when
-      ;; we were resumed by `$entry` instead of being switched to directly.
+      ;; If we get here, some other continuation switch-ed directly to us, or
+      ;; $entry resumed us. 
+      ;; In the first case, we receive the continuation that switched to us here
+      ;; and we need to enqueue it in the task list. 
+      ;; In the second case, the passed continuation reference will be null.
       ...
     )
     ;; Just return if no other task in queue, making the $yield_to_next call
@@ -457,9 +459,8 @@ instruction with the following, alternative skeleton code.
 
 
 Here, the function `entry` is still responsible for resuming tasks from the task
-queue, starting with some initial task.
-Thus, it will still act as the
-parent of all task continuations, as in the previous version.
+queue, starting with some initial task. Thus, it will still be the parent of
+all task continuations, as in the previous version.
 
 
 However, `$entry` is no longer responsible for handling suspensions of tasks.
@@ -471,27 +472,30 @@ suspend itself to another will be handled by the tasks themselves, using the
 FE: We need to come up with names for the two types of handlers.
 "suspend handler" vs "switch handler". Or not call the latter "handlers" at all?
 
-The fact that `$entry` does not handle suspension is reflected by the fact that
+The fact that `$entry` does not handle suspensions is reflected by the fact that
 its `resume` instruction does not install an ordinary handler for the tag
 `yield`. Instead, the resume instruction installs a *switch handler* for tag
 `yield`.
-If a task wants to yield execution to another,
-it simply calls a separate function `$yield_to_next`. Therein, the scheduling logic
-picks the next task `$next_task` and switches directly to it.
-Here, the target continuation (i.e.,`$next_task`) receives the current
-continuation as an argument, similar to how values were passed in the
-generator example.
+If a task wants to yield execution to another, it simply calls a separate
+function `$yield_to_next`. Therein, the scheduling logic picks the next task
+`$next_task` and switches directly to it. Here, the target continuation (called
+`$next_task` in `$yield_to_next`) receives the current continuation (i.e., the
+one that just called `$switch_to_next`) as an argument. Thus, we use the payload
+passing mechanism used for integer values in the generator example to pass
+continuation references.
 
 As a minor complication, we need to encode the fact that the continuation
 switched to receives the current one as an argument in the type of
-the continuations handled by the scheduler.
-Thus, the type `$ct` is recursive: A continuation of that type takes a nullable
-reference to a continuation of the same type as an argument.
+the continuations handled by all scheduling logic.
+Thus, the type `$ct` is recursive: A continuation of that type takes a value of
+type `(ref null $ct)` as a parameter.
 In order to give the same type to continuations that have yielded execution
 (i.e., created by `switch`) and those continuations that correspond to beginning
 the execution of a `$task_i` function (i.e., those created by `cont.new`), we
 add a `(ref null $ct)` parameter to all of the `$task_i` functions.
-This is why `$entry` passes a null continuation to any continuation it resumes.
+Finally, observe that the `$entry` function passes a null continuation to any
+continuation it resumes, indicating to the resumed continuation that there is no
+previous continuation to enqueue in the task list.
 
 Our proposal also allows passing additional payloads when `switch`-ing from one
 continuation to another, besides the continuation switched away from. We eschew
@@ -499,11 +503,12 @@ this in our example, which is reflected by the type `$ct` having no further
 parameters besides the continuation argument required by `switch`.
 
 Note that installing a switch handler for `$yield` in `entry` is strictly
-necessary: It acts as a delimiter, determining the shape of the continuation
-created when a `switch` using `yield` is performed.
-The resulting stack switching is indeed symmetric: Rather than switching back to
-the parent (as `suspend` would), `switch` effectively replaces the continuation
-under the `yield` handler in `$entry` with a different continuation.
+necessary: It still acts as a delimiter, determining the shape of the
+continuation created when a `switch` using `yield` is performed.
+The resulting stack switching is symmetric in the following sense: Rather than
+switching back to the parent (as `suspend` would), `switch` effectively replaces
+the continuation under the `yield` handler in `$entry` with a different
+continuation.
 
 
 <!--- ## Examples
