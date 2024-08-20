@@ -155,9 +155,8 @@ definitions.
 The module defines the *continuation type* `$ct` from the function type `$ft`.
 It allows passing continuations corresponding to suspended executions of
 `$generator` as first-class values of type `(ref $ct)`, similar to function
-references.
-Together, the continuation type `$ct` and the tag `$gen` define the interface
-between `$generator` and `$consumer` in a type-safe way.
+references. Together, the continuation type `$ct` and the tag `$gen` define the
+interface between `$generator` and `$consumer` in a type-safe way.
 
 
 
@@ -179,9 +178,9 @@ The concrete definition of `$generator` is straightforward:
 ```
 
 The function executes 100 iterations of a loop and returns afterwards. The
-function suspends itself in each iteration with the `$gen` tag.
-The value passed from the `suspend` instruction to the handler (i.e., the value
-produced by the generator) is just the current value of the loop counter.
+function suspends itself in each iteration with the `$gen` tag. The value passed
+from the `suspend` instruction to the handler (i.e., the value produced by the
+generator) is just the current value of the loop counter.
 
 
 The function `$consumer` is defined as follows.
