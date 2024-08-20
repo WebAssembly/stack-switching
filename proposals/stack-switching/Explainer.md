@@ -19,6 +19,7 @@ instructions and validation rules to facilitate stack switching.
    1. [Invoking continuations](#invoking-continuations)
    1. [Suspending continuations](#suspending-continuations)
    1. [Binding continuations](#binding-continuations)
+   1. [Trapping continuations](#trapping-continuations)
    1. [Continuation lifetime](#continuation-lifetime)
 1. [Design considerations](#design-considerations)
    1. [Asymmetric and symmetric switching](#asymmetric-and-symmetric-switching)
@@ -892,6 +893,25 @@ that the branches within a block each return a continuation with
 compatible type (the [Examples](#examples) section provides several
 example usages of `cont.bind`).
 
+### Trapping continuations
+
+In order to allow ensuring that control cannot be captured across
+certain abstraction or language boundaries, we provide an instruction
+for explicitly trapping attempts at reifying stacks across a certain
+point.
+
+```wast
+  barrier $l $bt instr* end : [t1*] -> [t2*]
+  where:
+  - $bt = [t1*] -> [t2*]
+  - instr* : [t1*] -> [t2*]
+```
+
+The `barrier` instruction is a block with label `$l`, block type
+`$bt = [t1*] -> [t2*]`, whose body is the instruction sequence given
+by `instr*`. Operationally, `barrier` may be viewed as a "catch-all"
+handler, that handles any control tag by invoking a trap.
+
 ### Continuation lifetime
 
 #### Producing continuations
@@ -1052,6 +1072,13 @@ This abbreviation will be formalised with an auxiliary function or other means i
     - iff `C.tags[$t] = tag $ft`
     - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
 
+- `barrier <typeidx <typeidx> instr* end`
+  - Prevents suspensions propagating beyond this program point.
+  - `barrier $l $ft instr* end : t2*`
+    - iff `C.labels[$l] = [t2*]
+    - and `C.types[$ft] ~~ func [t1*] -> [t2*]
+    - and `instr* : t2*`
+
 - `switch <typeidx> <tagidx>`
   - Switch to executing a given continuation directly, suspending the current execution.
   - The suspension and switch are performed from the perspective of a parent `(on $e switch)` handler, determined by the annotated control tag.
@@ -1096,7 +1123,7 @@ The opcode for heap types is encoded as an `s33`.
 
 ### Instructions
 
-We use the use the opcode space `0xe0-0xe5` for the six new instructions.
+We use the use the opcode space `0xe0-0xe6` for the six new instructions.
 
 | Opcode | Instruction              | Immediates |
 | ------ | ------------------------ | ---------- |
@@ -1105,4 +1132,5 @@ We use the use the opcode space `0xe0-0xe5` for the six new instructions.
 | 0xe2   | `suspend $t`             | `$t : u32` |
 | 0xe3   | `resume $ct (on $t $h)*` | `$ct : u32`, `($t : u32 and $h : u32)*` |
 | 0xe4   | `resume_throw $ct $e (on $t $h)` | `$ct : u32`, `$e : u32`, `($t : u32 and $h : u32)*` |
-| 0xe5   | `switch $ct $e`          | `$ct : u32`, `$e : u32` |
+| 0xe5   | `barrier $l $bt instr* end | `$l : u32`, `$bt : u32` |
+| 0xe6   | `switch $ct $e`          | `$ct : u32`, `$e : u32` |
