@@ -144,9 +144,10 @@ asymmetric and symmetric stack switching, respectively.
 This example shows a generator-consumer pattern, implemented by switching
 between the stack running the consumer and the one running the generator.
 
+We implement this in a module with the folllowing toplevel definitions.
 
 ```wat
-(module
+(module $generator
   (type $ft (func))
   ;; Types of continuations used by the generator:
   ;; No need for param or result types: No data data passed back to the
@@ -163,41 +164,10 @@ between the stack running the consumer and the one running the generator.
   (func $print (import "spectest" "print_i32") (param i32))
 
   ;; Simple generator yielding values from 100 down to 1
-  (func $generator
-    (local $i i32)
-    (local.set $i (i32.const 100))
-    (loop $l
-      ;; Suspend execution, pass current value of $i to consumer
-      (suspend $yield (local.get $i))
-      ;; Decrement $i and exit loop once $i reaches 0
-      (local.tee $i (i32.sub (local.get $i) (i32.const 1)))
-      (br_if $l)
-    )
-  )
+  (func $generator ...)
   (elem declare func $generator)
 
-  (func $consumer
-    (local $c (ref $ct))
-    ;; Create continuation executing function $generator.
-    ;; Execution only starts when resumed for the first time.
-    (local.set $c (cont.new $ct (ref.func $generator)))
-
-    (loop $loop
-      (block $on_yield (result i32 (ref $ct))
-        ;; Resume continuation $c
-        (resume $ct (on $yield $on_yield) (local.get $c))
-        ;; $generator returned: no more data
-        (return)
-      )
-      ;; Generator suspended, stack now contains [i32 (ref $ct)]
-      ;; Save continuation to resume it in next iteration
-      (local.set $c)
-      ;; Stack now contains the i32 value yielded by $generator
-      (call $print)
-
-      (br $loop)
-    )
-  )
+  (func $consumer ...)
 
 )
 ```
@@ -207,15 +177,51 @@ the function `$generator`. The latter executes a loop counting from 100 down
 to 0. In each iteration, the `$generator` function suspends execution,
 transferring control back to the `$consumer` function, passing along the next
 generated value at the same time.
-In our example, each generated value is simply the current loop counter.
 Execution then continues in `$consumer`, which receives the generated value,
 as well as a continuation that allows continuing execution of `$generator` at
 its `suspend` instruction.
 
-Concretely, the function `$consumer` uses `cont.new` to create a continuation
-executing `$generator`. This creates a value of reference type `(ref $ct)`,
-saved in `$c`, where `$ct` is a *continuation type* defined earlier from the
-function type `$ft`.
+The interface between generator and consumer is defined in two parts:
+- The *continuation type* `$ct` defined from the function type `$ft`. It allows
+  passing continuations corresponding to suspended executions of `$generator` as
+  first-class values of type `(ref $ct)`, similar to function references.
+- Defining the tag `$yield` allows us to use it as a delimiter for
+  continuations. This means that when suspending execution in `$generator` using
+  tag `$yield`, the latter is used at runtime to identify where to continue
+  execution afterwards. In our example, this will be inside the function
+  `$consumer`.
+
+ 
+ The function `$generator` is defined as follows.
+ 
+ ```wat
+(func $consumer
+  (local $c (ref $ct))
+  ;; Create continuation executing function $generator.
+  ;; Execution only starts when resumed for the first time.
+  (local.set $c (cont.new $ct (ref.func $generator)))
+
+  (loop $loop
+    (block $on_yield (result i32 (ref $ct))
+      ;; Resume continuation $c
+      (resume $ct (on $yield $on_yield) (local.get $c))
+      ;; $generator returned: no more data
+      (return)
+    )
+    ;; Generator suspended, stack now contains [i32 (ref $ct)]
+    ;; Save continuation to resume it in next iteration
+    (local.set $c)
+    ;; Stack now contains the i32 value yielded by $generator
+    (call $print)
+
+    (br $loop)
+  )
+)
+ ```
+ 
+The function `$consumer` uses `cont.new` to create a continuation executing
+`$generator`. This creates a value of reference type `(ref $ct)`, saved in `$c`.
+
 
 The function `$generator` then runs a loop, where a `resume` instruction is used
 to continue execution of the continuation currently saved in `$c` in each
@@ -242,8 +248,9 @@ ancestor whose `resume` instruction installed a handler for `$t`. This is
 analogous to the search for a matching exception handler after raising an
 exception.
 
-In our example, this means that after executing the `suspend $yield` instruction
-in `$generator`, execution continues in the `$on_yield` block in `$consumer`.
+In our example, this means that whenever `$generator` executes a `suspend
+$yield` instruction, execution continues in the `$on_yield` block in
+`$consumer`.
 In that case, two values are found on the Wasm value stack:
 The topmost value is a new continuation, representing the remaining execution of
 `$generator` after the `suspend` instruction therein.
@@ -258,12 +265,36 @@ toplevel function running inside a continuation, such as `$generator`, returns.
 Control simply transfers to after the `resume` instruction in the immediate
 parent, making the return values of the function inside the continuation the
 return values of the matching `resume` instruction.
-
+ 
+ 
 In our example, the toplevel continuation (i.e., `$generator`) simply returns
 once the loop counter `$i` reaches 0. Thus, this causes execution to continue
-after the `resume` instruction in `$generator`. The continuation type `$ct`
-reflects that `$generator` has no return values and `$consumer` returns, too.
+after the `resume` instruction in `$generator`. The absence of results in the
+continuation type `$ct` reflects that `$generator` has no return values and
+`$consumer` returns, too.
+ 
+The concrete definition of `$generator` is as follows.
 
+```wat
+;; Simple generator yielding values from 100 down to 1
+(func $generator
+  (local $i i32)
+  (local.set $i (i32.const 100))
+  (loop $l
+    ;; Suspend execution, pass current value of $i to consumer
+    (suspend $yield (local.get $i))
+    ;; Decrement $i and exit loop once $i reaches 0
+    (local.tee $i (i32.sub (local.get $i) (i32.const 1)))
+    (br_if $l)
+  )
+)
+```
+
+As described earlier, the function executes 100 iterations of a loop and returns
+afterwards. In each iteration, it suspends execution, passing along the current
+loop counter `$i`.
+
+The full definition of the module can be found [here](examples/generator.wast).
 
 ### Task scheduling
 
