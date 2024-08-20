@@ -173,29 +173,59 @@ We implement this in a module with the folllowing toplevel definitions.
 )
 ```
 
-Intuitively, the `$consumer` function creates a new continuation that executes
-the function `$generator`. The latter executes a loop counting from 100 down
-to 0. In each iteration, the `$generator` function suspends execution,
-transferring control back to the `$consumer` function, passing along the next
-generated value at the same time.
-Execution then continues in `$consumer`, which receives the generated value,
-as well as a continuation that allows continuing execution of `$generator` at
-its `suspend` instruction.
+Conceptually, both functions execute loops, and execution switches back and
+forth between `$consumer` and `$generator` by switching stacks.
+The `$generator` function suspends itself in every iteration and passes along
+the next generated value. Execution then continues in the `$consumer`, where the
+generated value is received, as well as a new continuation.
+The `$consumer` resumes each continuation received this way until the generator
+returns. 
 
 The interface between generator and consumer is defined in two parts:
-- The *continuation type* `$ct` defined from the function type `$ft`. It allows
+- The *continuation type* `$ct` is defined from the function type `$ft`. It allows
   passing continuations corresponding to suspended executions of `$generator` as
   first-class values of type `(ref $ct)`, similar to function references.
 - Defining the tag `$yield` allows us to use it as a delimiter for
-  continuations. This means that when suspending execution in `$generator` using
-  tag `$yield`, the latter is used at runtime to identify where to continue
-  execution afterwards. In our example, this will be inside the function
-  `$consumer`.
+  continuations: When `$generator` suspends itself, it does so
+  using the tag `$yield`. The tag is then used at runtime to determine where to
+  continue execution afterwards, by identifying the active *suspend handler* for
+  that tag. In our example, this will be inside the function `$consumer`.
   The tag's definition also reflects that an `i32` value will be passed when
-  using it to suspend execution.
+  using it to suspend execution, which represents each generated value passed to
+  the consumer.
+  Our proposal extends the definition of tags to have results in addition to
+  parameters. Such results would be used if we wanted to pass values from the
+  `$consumer` back to the `$generator` when the former resumes the latter.
+  We eschew passing values in this direction in our example.
+  
 
 
- The function `$generator` is defined as follows.
+The concrete definition of `$generator` is straightforward:
+
+```wat
+;; Simple generator yielding values from 100 down to 1
+(func $generator
+  (local $i i32)
+  (local.set $i (i32.const 100))
+  (loop $l
+    ;; Suspend execution, pass current value of $i to consumer
+    (suspend $yield (local.get $i))
+    ;; Decrement $i and exit loop once $i reaches 0
+    (local.tee $i (i32.sub (local.get $i) (i32.const 1)))
+    (br_if $l)
+  )
+)
+```
+
+The function executes 100 iterations of a loop and returns afterwards. As
+mentioned before, the function suspends itself in each iteration with the
+`$yield` tag, denoted `suspend $yield`. 
+The value passed from the `suspend` instruction to the handler (i.e., the value
+produced by the generator) is just the current value of the loop counter.
+
+
+
+The function `$consumer` is defined as follows.
 
  ```wat
 (func $consumer
@@ -236,19 +266,19 @@ parameters, indicating that no data is passed from `$consumer` to `$generator`.
 Whenever a continuation is resumed, the stack where the `resume` instruction
 executes (which may be another continuation, or the main stack) becomes the
 *parent* of the resumed continuation, such as `$c` in our example. These
-parent-child relationship reflect the asymmetric nature of this stack switching
+parent-child relationship reflect the asymmetric nature of our stack switching
 proposal. They affect execution in two ways, which we discuss in the following.
 
 Firstly, in our `resume` instruction, the *handler clause* `(on $yield
-$on_yield)` installs a handler for that tag while executing the continuation.
+$on_yield)` installs a suspend handler for that tag while executing the
+continuation.
 This means that if during the execution of `$c`, the continuation suspends
 itself using tag `$yield` (i.e., it executes the instruction `suspend $yield`),
-this is handled by the block `$on_yield`, meaning that execution continues
-there.
+execution continues in the block `$on_yield`.
 In general, executing an instruction `suspend $t` for some tag `$t` means that
 execution continues at the innermost ancestor whose `resume` instruction
-installed a handler for `$t`. This is analogous to the search for a matching
-exception handler after raising an exception.
+installed a suspend handler for `$t`. This is analogous to the search for a
+matching exception handler after raising an exception.
 
 In our example, this means that whenever `$generator` executes a `suspend
 $yield` instruction, execution continues in the `$on_yield` block in
@@ -256,18 +286,17 @@ $yield` instruction, execution continues in the `$on_yield` block in
 In that case, two values are found on the Wasm value stack:
 The topmost value is a new continuation, representing the remaining execution of
 `$generator` after the `suspend` instruction therein.
-The other value is the `i32` value passed from the generator to the consumer:
-The tag `$yield` was defined with `(param i32)`, meaning that such a value is
-passed from the `suspend` site to the handler. In our example, `$consumer`
+The other value is the `i32` value passed from the generator to the consumer, as
+required by the tag's definition. In our example, `$consumer` simply
 prints the generated value and saves the new continuation in `$c` for the next
 iteration.
 
-Secondly, parent-child relationships dictate where execution continues after the
-toplevel function running inside a continuation, such as `$generator`, returns.
+Secondly, the parent-child relationships dictate where execution continues after
+the toplevel function running inside a continuation, such as `$generator`,
+returns.
 Control simply transfers to the next instruction after the `resume` instruction
-in the immediate parent, making the return values of the function inside the
+in the parent, making the return values of the function inside the
 continuation the return values of the matching `resume` instruction.
-
 
 In our example, the toplevel function running inside the continuation (i.e.,
 `$generator`) simply returns once the loop counter `$i` reaches 0. Thus, this
@@ -275,26 +304,6 @@ causes execution to continue after the `resume` instruction in `$generator`. The
 absence of results in the continuation type `$ct` reflects that `$generator` has
 no return values and `$consumer` returns, too.
 
-The concrete definition of `$generator` is as follows.
-
-```wat
-;; Simple generator yielding values from 100 down to 1
-(func $generator
-  (local $i i32)
-  (local.set $i (i32.const 100))
-  (loop $l
-    ;; Suspend execution, pass current value of $i to consumer
-    (suspend $yield (local.get $i))
-    ;; Decrement $i and exit loop once $i reaches 0
-    (local.tee $i (i32.sub (local.get $i) (i32.const 1)))
-    (br_if $l)
-  )
-)
-```
-
-As described earlier, the function executes 100 iterations of a loop and returns
-afterwards. In each iteration, it suspends execution, passing along the current
-loop counter `$i`.
 
 The full definition of the module can be found [here](examples/generator.wast).
 
