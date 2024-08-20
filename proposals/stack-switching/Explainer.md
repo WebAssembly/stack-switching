@@ -101,7 +101,7 @@ We implement this in a module with the folllowing toplevel definitions.
   ;; Tag used to coordinate between generator and consumer: The i32 param
   ;; corresponds to the generated values passed; no values passed back from
   ;; generator to consumer.
-  (tag $yield (param i32))
+  (tag $gen (param i32))
 
 
   (func $print (import "spectest" "print_i32") (param i32))
@@ -127,9 +127,9 @@ The interface between generator and consumer is defined in two parts:
 - The *continuation type* `$ct` is defined from the function type `$ft`. It allows
   passing continuations corresponding to suspended executions of `$generator` as
   first-class values of type `(ref $ct)`, similar to function references.
-- Defining the tag `$yield` allows us to use it as a delimiter for
+- Defining the tag `$gen` allows us to use it as a delimiter for
   continuations: When `$generator` suspends itself, it does so
-  using the tag `$yield`. The tag is then used at runtime to determine where to
+  using the tag `$gen`. The tag is then used at runtime to determine where to
   continue execution afterwards, by identifying the active *suspend handler* for
   that tag. In our example, this will be inside the function `$consumer`.
   The tag's definition also reflects that an `i32` value will be passed when
@@ -152,7 +152,7 @@ The concrete definition of `$generator` is straightforward:
   (local.set $i (i32.const 100))
   (loop $l
     ;; Suspend execution, pass current value of $i to consumer
-    (suspend $yield (local.get $i))
+    (suspend $gen (local.get $i))
     ;; Decrement $i and exit loop once $i reaches 0
     (local.tee $i (i32.sub (local.get $i) (i32.const 1)))
     (br_if $l)
@@ -162,7 +162,7 @@ The concrete definition of `$generator` is straightforward:
 
 The function executes 100 iterations of a loop and returns afterwards. As
 mentioned before, the function suspends itself in each iteration with the
-`$yield` tag, denoted `suspend $yield`. 
+`$gen` tag, denoted `suspend $gen`. 
 The value passed from the `suspend` instruction to the handler (i.e., the value
 produced by the generator) is just the current value of the loop counter.
 
@@ -177,16 +177,16 @@ The function `$consumer` is defined as follows.
   (local.set $c (cont.new $ct (ref.func $generator)))
 
   (loop $loop
-    (block $on_yield (result i32 (ref $ct))
+    (block $on_gen (result i32 (ref $ct))
       ;; Resume continuation $c
-      (resume $ct (on $yield $on_yield) (local.get $c))
+      (resume $ct (on $gen $on_gen) (local.get $c))
       ;; $generator returned: no more data
       (return)
     )
     ;; Generator suspended, stack now contains [i32 (ref $ct)]
     ;; Save continuation to resume it in next iteration
     (local.set $c)
-    ;; Stack now contains the i32 value yielded by $generator
+    ;; Stack now contains the i32 value produced by $generator
     (call $print)
 
     (br $loop)
@@ -211,19 +211,19 @@ executes (which may be another continuation, or the main stack) becomes the
 parent-child relationship reflect the asymmetric nature of our stack switching
 proposal. They affect execution in two ways, which we discuss in the following.
 
-Firstly, in our `resume` instruction, the *handler clause* `(on $yield
-$on_yield)` installs a suspend handler for that tag while executing the
+Firstly, in our `resume` instruction, the *handler clause* `(on $gen
+$on_gen)` installs a suspend handler for that tag while executing the
 continuation.
 This means that if during the execution of `$c`, the continuation suspends
-executes the instruction `suspend $yield`, execution continues in the block
-`$on_yield`.
+executes the instruction `suspend $gen`, execution continues in the block
+`$on_gen.
 In general, executing an instruction `suspend $t` for some tag `$t` means that
 execution continues at the *innermost* ancestor whose `resume` instruction
 installed a suspend handler for `$t`. This is analogous to the search for a
 matching exception handler after raising an exception.
 
 In our example, this means that whenever `$generator` executes  `suspend
-$yield`, execution continues in the `$on_yield` block in
+$gen`, execution continues in the `$on_gen` block in
 `$consumer`.
 In that case, two values are found on the Wasm value stack:
 The topmost value is a new continuation, representing the remaining execution of
