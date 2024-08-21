@@ -1,16 +1,16 @@
-# Stack switching
+# stack-switching
 
-This proposal adds typed stack switching to WebAssembly, enabling a
+This proposal adds typed stack-switching to WebAssembly, enabling a
 single WebAssembly instance to manage multiple execution stacks
-concurrently. The primary use-case for stack switching is to add
+concurrently. The primary use-case for stack-switching is to add
 direct support for modular compilation of advanced non-local control
 flow idioms, e.g. coroutines, async/await, yield-style generators,
 lightweight threads, and so forth. This document outlines the new
-instructions and validation rules to facilitate stack switching.
+instructions and validation rules to facilitate stack-switching.
 
 ## Table of contents
 1. [Motivation](#motivation)
-1. [Introduction to continuation-based stack switching](#introduction-to-continuation-based-stack-switching)
+1. [Introduction to continuation-based stack-switching](#introduction-to-continuation-based-stack-switching)
    1. [Generators](#generators)
    1. [Task scheduling](#task-scheduling)
 1. [Instruction set extension](#instruction-set-extension)
@@ -51,7 +51,7 @@ construct their own language specific features.
 ## Continuations
 
 A continuation represents a snapshot of execution on a particular
-stack. Stack switching is realised by instructions for suspending and
+stack. stack-switching is realised by instructions for suspending and
 resuming continuations. Continuations are composable, meaning that
 when a suspended continuation is resumed it is spliced onto the
 current continuation. This splicing establishes a parent-child
@@ -73,12 +73,12 @@ continuation. Direct switching establishes a peer-to-peer relationship
 between the current continuation and its peer. In this respect the
 design provides a form of *symmetric switching*.
 
-## Introduction to continuation-based stack switching
+## Introduction to continuation-based stack-switching
 
 We illustrate the proposed stack-switching mechanism using two
 examples: generators and task scheduling. The generators example uses
-asymmetric stack switching and the task scheduling example uses
-symmetric stack switching.
+asymmetric stack-switching and the task scheduling example uses
+symmetric stack-switching.
 
 ### Generators
 
@@ -262,7 +262,7 @@ schedule a number of tasks, represented by functions `$task_0` to
 meaning that tasks explicitly yield execution so that a scheduler may
 pick the next task to run.
 
-One approach is to use the asymmetric stack switching approach we used
+One approach is to use the asymmetric stack-switching approach we used
 for the generator example. We define a function `$entry` that resumes
 the initial task and installs a handler for a `$yield` tag inside an
 event loop. In order to yield execution, tasks simply perform
@@ -455,7 +455,7 @@ in the task list.
 Note that installing a switch handler for `$yield` in `entry` is
 strictly necessary. It acts as a delimiter, determining the extent of
 the suspended continuation created when performing `switch
-$yield`. This form of stack switching is symmetric in the following
+$yield`. This form of stack-switching is symmetric in the following
 sense. Rather than switching back to the parent (as `suspend` would),
 `switch` effectively replaces the continuation under the handler for
 `yield` in the event loop with a different continuation.
