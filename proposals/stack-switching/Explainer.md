@@ -75,56 +75,42 @@ design provides a form of *symmetric switching*.
 
 ## Introduction to continuation-based stack switching
 
-We informally demonstrate the proposed stack switching mechanisms using two
-examples. They showcase how generators and a task scheduler can be implemented
-using our proposal. For the sake of exposition, both examples are kept minimal,
-but could be extended to real-world programs. The two examples demonstrate
-asymmetric and symmetric stack switching, respectively.
-
+We illustrate the proposed stack-switching mechanism using two
+examples: generators and task scheduling. The generators example uses
+asymmetric stack switching and the task scheduling example uses
+symmetric stack switching.
 
 ### Generators
 
-This example shows a generator-consumer pattern. Both sides are represented by
-the functions `$generator` and `$consumer`, running on two different stacks.
-Execution then switches back and forth between both stacks, passing generated
-values along.
+The first example illustrates a generator-consumer pattern. Execution
+switches back and forth between a generator and a consumer execution
+stack. Whenever execution switches from the generator to the consumer
+the generator also passes a value to the consumer.
 
-
-Our proposal reuses *tags* from the exception handling proposal.
-We define the following tag `$gen` to coordinate between `$generator` and
-`$consumer`.
+The stack-switching proposal reuses *tags* from the exception handling
+proposal. The following tag is used to coordinate between the
+generator and the consumer.
 
 ```wat
 (tag $gen (param i32))
 ```
 
-Tag definitions serve two purposes in our proposal, somewhat resembling their
-use in exception handling:
-1. In order to switch execution to `$consumer`, the `$generator` suspends
-   itself, which requires providing a tag. In our example, the overall
-   instruction for suspension then becomes `suspend $gen`. The tag is used at
-   runtime to determine where to continue execution, by identifying the active
-   *suspend handler* for that tag. In our example, this will be inside the
-   function
- `$consumer`. Conceptually, tags act as *delimeters*.
-2. As seen above, tags can have parameter types. They reflect what values are
-   passed from the suspend site to the corresponding handler (i.e., where
-   execution continues). In our example, the tag's single `i32` parameter value
-   corresponds to the value created by the generator and passed to the consumer.
-   Our proposal extends the definition of tags to allow them to have result
-   types, too. These types represent what values must be passed in order to
-   resume a previously suspended continuation. These values therefore become
-   available at the suspend site. Thus, when suspending with a tag `$t`, the
-   tag's parameter and result types become the parameter and result types,
-   respectively, of `suspend $t` instructions.
-   Tag result types could be used in our example if we wanted to pass values
-   from the `$consumer` back to the `$generator` when the former resumes
-   execution of the latter. We eschew passing values in this direction in our
-   example.
+To switch execution to the consumer, the generator must suspend
+execution. The suspend instruction takes a tag, here `$gen`. The tag
+is used at runtime to determine how to continue execution, by
+identifying the active *suspend handler* for that tag. In our example,
+this handler will be provided by the consumer.
 
+Much like with exceptions parameter types specify the types of values
+passed from the suspend site to the corresponding handler. In our
+example, the tag's single `i32` parameter value is the value created
+by the generator that is passed to the consumer.
 
-The overall module implementing our example has the folllowing toplevel
-definitions.
+The proposal also extends tags with result types (not used in this
+example). These allow the types of values passed from a resume site to
+a previously suspended continuation when resuming it to be specified.
+
+The overall module implementing our example has the following shape.
 
 ```wat
 (module $generator
@@ -152,15 +138,12 @@ definitions.
 )
 ```
 
-The module defines the *continuation type* `$ct` from the function type `$ft`.
-It allows passing continuations corresponding to suspended executions of
-`$generator` as first-class values of type `(ref $ct)`, similar to function
-references. Together, the continuation type `$ct` and the tag `$gen` define the
-interface between `$generator` and `$consumer` in a type-safe way.
+The module defines *continuation type* `$ct` based on function type
+`$ft`. Suspended continuations of type `(ref $ct)` take no arguments
+and return no results. As we shall see, the generator and consumer
+manipulate suspended continuations of type `(ref $ct)`.
 
-
-
-The concrete definition of `$generator` is straightforward:
+The generator is defined as follows.
 
 ```wat
 ;; Simple generator yielding values from 100 down to 1
@@ -177,13 +160,13 @@ The concrete definition of `$generator` is straightforward:
 )
 ```
 
-The function executes 100 iterations of a loop and returns afterwards. The
-function suspends itself in each iteration with the `$gen` tag. The value passed
-from the `suspend` instruction to the handler (i.e., the value produced by the
-generator) is just the current value of the loop counter.
+It executes 100 iterations of a loop and returns afterwards. Execution
+is suspended on each iteration using the `$gen` tag. The value passed
+from the `suspend` instruction to the handler (i.e., the value
+produced by the generator) is just the current value of the loop
+counter.
 
-
-The function `$consumer` is defined as follows.
+The consumer is defined as follows.
 
  ```wat
 (func $consumer
@@ -200,7 +183,7 @@ The function `$consumer` is defined as follows.
       (return)
     )
     ;; Generator suspended, stack now contains [i32 (ref $ct)]
-    ;; Save continuation to resume it in next iteration
+    ;; Save continuation to resume it in the next iteration
     (local.set $c)
     ;; Stack now contains the i32 value produced by $generator
     (call $print)
@@ -210,73 +193,82 @@ The function `$consumer` is defined as follows.
 )
  ```
 
-The function `$consumer` uses `cont.new` to create a continuation executing
-`$generator`. This creates a value of reference type `(ref $ct)`, saved in `$c`.
-It then runs a loop, where a `resume` instruction is used
-to continue execution of the continuation currently saved in `$c` in each
-iteration.
+It uses `cont.new` to create a continuation executing the
+generator. This instruction creates a value of reference type `(ref
+$ct)`, saved in `$c`. It then runs a loop, where the `resume`
+instruction is used to continue execution of the continuation
+currently saved in `$c` on each iteration.
 
-In general, a `resume` instruction not only takes a continuation as an argument,
-but also additional values to be passed to the continuation to be resumed,
-reflected in the parameters of continuation's type. In our example, `$ct` has no
-parameters, indicating that no data is passed from `$consumer` to `$generator`.
+In general, a `resume` instruction may not only take a suspended
+continuation as an argument, but also additional values to be passed
+to the suspended continuation when it is resumed. These are specified
+in the parameters of the continuation's type. In our example, `$ct`
+has no parameters, indicating that no data is passed from the consumer
+to the generator.
 
-Whenever a continuation is resumed, the stack where the `resume` instruction
-executes (which may be another continuation, or the main stack) becomes the
-*parent* of the resumed continuation, such as `$c` in our example. These
-parent-child relationship reflect the asymmetric nature of our stack switching
-proposal. They affect execution in two ways, which we discuss in the following.
+When a suspended continuation is resumed it is spliced onto the
+current continuation (which may in fact be the top-level continuation
+corresponding to the main stack). This splicing establishes a
+parent-child relationship between the current and resumed
+continuation. This asymmetric relationship affects execution in two
+ways, which we now discuss.
 
-Firstly, in our `resume` instruction, the *handler clause* `(on $gen $on_gen)`
-installs a suspend handler for that tag while executing the continuation. This
-means that if during the execution of `$c`, the continuation executes the
-instruction `suspend $gen`, execution continues in the block `$on_gen`. In
-general, executing an instruction `suspend $t` for some tag `$t` means that
-execution continues at the *innermost* ancestor whose `resume` instruction
-installed a suspend handler for `$t`. This is analogous to the search for a
-matching exception handler after raising an exception.
+First, in the `resume` instruction the *handler clause* `(on $gen
+$on_gen)` installs a suspend handler for that tag while executing the
+continuation. This means that if during execution of `$c`, the
+continuation executes the instruction `suspend $gen`, execution
+continues in the block `$on_gen`. In general, executing an instruction
+`suspend $e` for some tag `$e` means that execution continues at the
+*innermost* ancestor whose `resume` instruction installed a suspend
+handler for `$e`. This behaviour is directly analogous to the search
+for a matching exception handler after raising an exception. However,
+it is more general in that the handler is also passed the suspended
+current continuation. The extent of a suspended continuation captures
+execution from the instruction immediately following `suspend $e` up
+to the `resume` instruction that handles `$e`. In other words, as well
+as resuming a suspended computation and installing a handler, the
+`resume` instruction also acts as a *delimiter* for new suspended
+continuations created by performing `suspend $e` in the scope of the
+resumed continuation.
 
-As mentioned above, whenever `$generator` executes `suspend $gen`, execution
-continues in the `$on_gen` block in `$consumer`.
-In that case, two values are found on the Wasm value stack:
-The topmost value is a new continuation, representing the remaining execution of
-`$generator` after the `suspend` instruction therein.
-The other value is the `i32` value passed from the generator to the consumer, as
-required by the tag's definition. In our example, `$consumer` simply prints the
-generated value and saves the new continuation in `$c` to be resumed in the next
-iteration.
+When the generator executes `suspend $gen`, execution continues in the
+`$on_gen` block in `$consumer`. In that case, two values are pushed
+onto the Wasm value stack. The topmost value is a new suspended
+continuation. It is the continuation of executing the generator
+following the `suspend` instruction (up to the handler). The other
+value is the `i32` value passed from the generator to the consumer, as
+required by the tag's definition. In our example, the consumer simply
+prints the generated value and saves the new continuation in `$c` to
+be resumed in the next iteration.
 
-Secondly, the parent-child relationships determine where execution continues after
-the toplevel function running inside a continuation, such as `$generator`,
-returns.
-Control simply transfers to the next instruction after the `resume` instruction
-in the parent, making the return values of the function inside the
-continuation the return values of the matching `resume` instruction.
+Second, the parent-child relationship determines where execution
+continues after a suspend continuation returns. Control simply
+transfers to the next instruction after the `resume` instruction in
+the parent. A particular special case of this occurs when we resume a
+suspended continuation created with `cont.new`. For instance, in our
+example we pass `$generator` to `cont.new`. Once the loop counter `$i`
+reaches 0 the continuation returns. Execution then continues after the
+`resume` instruction in the consumer and the consumer also returns.
 
-In our example, the toplevel function running inside the continuation (i.e.,
-`$generator`) simply returns once the loop counter `$i` reaches 0. Thus, this
-causes execution to continue after the `resume` instruction in `$generator`. The
-absence of results in the continuation type `$ct` reflects that `$generator` has
-no return values and `$consumer` returns, too.
-
-
-The full definition of the module can be found [here](examples/generator.wast).
+The full definition of this module can be found
+[here](examples/generator.wast).
 
 ### Task scheduling
 
+The second example demonstrates how to implement task scheduling with
+the stack-switching instructions. Specifically, suppose we want to
+schedule a number of tasks, represented by functions `$task_0` to
+`$task_n`, to be executed concurrently. Scheduling is cooperative,
+meaning that tasks explicitly yield execution so that a scheduler may
+pick the next task to run.
 
-We now show how the following use case may be implemented efficiently using this
-proposal: We want to schedule a number of tasks, represented by functions
-`$task_0` to `$task_n`, to be executed concurrently. Scheduling is cooperative,
-meaning that tasks explicitly yield execution so that a scheduler may pick the
-next task to run.
-
-One way to implement this is to use the asymmetric stack switching approach
-discussed for generators: We define a function `$entry` that `resume`s the
-initial task, and installs a handler for a tag `$yield`. To yield execution,
-tasks simply perform `(suspend $yield)`, transferring control back to `$entry`,
-their parent. The latter function then picks the next task (if any) from a task
-queue and `resume`s it.
+One approach is to use the asymmetric stack switching approach we used
+for the generator example. We define a function `$entry` that resumes
+the initial task and installs a handler for a `$yield` tag inside an
+event loop. In order to yield execution, tasks simply perform
+`(suspend $yield)`, transferring control back to the parent
+continuation, which is the event loop. The event loop then selects the
+next task (if any) from a task queue and resumes it.
 
 This approach is illustrated by the following skeleton code.
 
@@ -297,7 +289,7 @@ This approach is illustrated by the following skeleton code.
   ;; Entry point, becomes parent of all tasks.
   ;; Also acts as scheduler when tasks yield or finish.
   (func $entry
-    ;; initialize $task_queue with inital task
+    ;; initialise $task_queue with initial task
     ...
     (loop $resume_next
       ;; pick $next_task from queue, or return if no more tasks.
@@ -327,33 +319,35 @@ This approach is illustrated by the following skeleton code.
 )
 ```
 
-Note that `$entry` performs all scheduling; it is responsible for picking the
-next task to resume in two different circumstances: If the most recent task
-suspended itself, and if it simply ran to completion and returned.
-However, we observe that this asymmetric approach requires two stack switches in
-order to change execution from one task to another: The first when `suspend`-ing
-from the yielding task to `$entry`, and a second when `$entry` resumes the next
-task.
+Note that `$entry` performs all scheduling; it is responsible for
+picking the next task to resume in two different circumstances: a) if
+the most recent task suspended itself, and b) if it simply ran to
+completion and returned. However, notice that this asymmetric approach
+requires two stack switches in order to change execution from one task
+to another: first when suspending from the a task to the event loop,
+and second when the event loop resumes the next task.
 
+Our proposal provides a mechanism to optimise the particular pattern
+shown here, where suspending one continuation is followed by a handler
+resuming another continuation `$c`. We can use the `switch`
+instruction, which also relies on tags, to transfer control from the
+original continuation directly to `$c`, thus avoiding the need for an
+intermediate stack switch to the parent.
 
-Our proposal provides a mechanism to optimize the particular pattern shown here,
-where a `suspend` in one continuation is followed by the handler resuming
-another continuation `$c`.
-We may use the `switch` instruction, which also relies on tags, to transfer
-control from the original continuation directly to `$c`, thus eschewing the need
-for the intermediate stack switch to the parent.
+Concretely, executing `switch $yield (local.get $c)` in our example
+behaves equivalently to `(suspend $yield)`, assuming that the active
+(ordinary) handler for `$yield` immediately resumes `$c` and
+additionally passes the continuation obtained from handling `$yield`
+along as an argument to `$c`. However, as mentioned above, using a
+`switch` instruction here has the advantage that a Wasm engine can
+implement it directly using only a single stack switch.
 
-Concretely, executing `switch $yield (local.get $c)` in our example behaves
-equivalently to `(suspend $yield)`, assuming that the active (ordinary) handler
-for `$yield` immediately resumes `$c` and additionally passes the continuation
-obtained from handling `$yield` along as an argument to `$c`.
-However, as mentioned above, using a `switch` instruction here has the advantage
-that a Wasm engine can implement it so that physical stacks are only changed
-once.
+The key idea is to inline scheduling logic in the tasks themselves in
+order to reduce (or avoid altogether) the need to switch stacks to the
+event loop in order to implement switching tasks.
 
-We illustrate how the previous example can be updated to use the switch
-instruction with the following, alternative skeleton code.
-
+This alternative approach is illustrated by the following skeleton
+code.
 
 ```wat
 (module $scheduler2
@@ -372,7 +366,7 @@ instruction with the following, alternative skeleton code.
   ;; Entry point, becomes parent of all tasks.
   ;; Only acts as scheduler when tasks finish.
   (func $entry
-    ;; initialize $task_queue with inital task
+    ;; initialise $task_queue with initial task
     ...
     (loop $resume_next
       ;; pick $next_task from queue, or return if no more tasks.
@@ -421,69 +415,71 @@ instruction with the following, alternative skeleton code.
 )
 ```
 
+Here, the event loop is still responsible for resuming tasks from the
+task queue, starting with some initial task. Thus, it will still be
+the parent of all task continuations, as in the previous version.
+However, it is no longer responsible for handling suspensions of
+tasks. Instead, it only resumes the next task from the queue whenever
+the previously running task returns. Yielding execution from one task
+that merely wishes to suspend itself to another will be handled by the
+tasks themselves, using the `switch` instruction.
 
-Here, the function `entry` is still responsible for resuming tasks from the task
-queue, starting with some initial task. Thus, it will still be the parent of
-all task continuations, as in the previous version.
-However, `$entry` is no longer responsible for handling suspensions of tasks.
-Instead, it only resumes the next task from the queue whenever the previously
-running task returns. Yielding execution from one task that merely wishes to
-suspend itself to another will be handled by the tasks themselves, using the
-`switch` instruction.
+The fact that the event loop does not handle suspensions is reflected
+by the fact that its `resume` instruction does not install a suspend
+handler for the `yield` tag. Instead, the resume instruction installs
+a *switch handler* for tag `yield`. In order to yield execution a task
+calls a separate function `$yield_to_next`. The scheduling logic picks
+the next task `$next_task` and switches directly to it. Here, the
+target continuation (i.e., `$next_task` in `$yield_to_next`) receives
+the suspended current continuation (i.e., the one that just called
+`$switch_to_next`) as an argument. The payload passing mechanism used
+for integer values in the generator example is now used to pass
+continuation references. The task that we switched to is now
+responsible for enqueuing the previous continuation (i.e., the one
+received as a payload) in the task list.
 
+As a minor complication, we need to encode the fact that the
+continuation switched to receives the current one as an argument in
+the type of the continuations handled by all scheduling logic. This
+means the type `$ct` must be recursive: a continuation of this type
+takes a value of type `(ref null $ct)` as a parameter. In order to
+give the same type to continuations that have yielded execution (those
+created by `switch`) and those continuations that correspond to
+beginning the execution of a `$task_i` function (those created by
+`cont.new`), we add a `(ref null $ct)` parameter to all of the
+`$task_i` functions.  Finally, observe that the event loop passes a
+null continuation to any continuation it resumes, indicating to the
+resumed continuation that there is no previous continuation to enqueue
+in the task list.
 
-The fact that `$entry` does not handle suspensions is reflected by the fact that
-its `resume` instruction does not install a suspend handler for the tag
-`yield`. Instead, the resume instruction installs a *switch handler* for tag
-`yield`.
-If a task wants to yield execution to another, it simply calls a separate
-function `$yield_to_next`. Therein, the scheduling logic picks the next task
-`$next_task` and switches directly to it. Here, the target continuation (i.e.,
-`$next_task` in `$yield_to_next`) receives the current continuation (i.e., the
-one that just called `$switch_to_next`) as an argument. Thus, we use the payload
-passing mechanism used for integer values in the generator example to pass
-continuation references.
-The task that we switched to is then responsible for enqueuing the previous
-continuation (i.e., the one received as a payload) in the task list.
+Note that installing a switch handler for `$yield` in `entry` is
+strictly necessary. It acts as a delimiter, determining the extent of
+the suspended continuation created when performing `switch
+$yield`. This form of stack switching is symmetric in the following
+sense. Rather than switching back to the parent (as `suspend` would),
+`switch` effectively replaces the continuation under the handler for
+`yield` in the event loop with a different continuation.
 
-As a minor complication, we need to encode the fact that the continuation
-switched to receives the current one as an argument in the type of
-the continuations handled by all scheduling logic.
-Thus, the type `$ct` is recursive: A continuation of that type takes a value of
-type `(ref null $ct)` as a parameter.
-In order to give the same type to continuations that have yielded execution
-(i.e., created by `switch`) and those continuations that correspond to beginning
-the execution of a `$task_i` function (i.e., those created by `cont.new`), we
-add a `(ref null $ct)` parameter to all of the `$task_i` functions.
-Finally, observe that the `$entry` function passes a null continuation to any
-continuation it resumes, indicating to the resumed continuation that there is no
-previous continuation to enqueue in the task list.
+The proposal also allows passing additional payloads when performing a
+switch instruction, besides the suspended current continuation. For
+simplicity, our example does not make use of this feature, as we can
+see from the type `$ct`, which has no further parameters besides the
+continuation argument required by `switch`. However, this mechanism
+could be used to optimise the implementation of task scheduling
+further.
 
-Note that installing a switch handler for `$yield` in `entry` is strictly
-necessary: It still acts as a delimiter, determining the shape of the
-continuation created when a `switch` using `yield` is performed.
-The resulting stack switching is symmetric in the following sense: Rather than
-switching back to the parent (as `suspend` would), `switch` effectively replaces
-the continuation under the handler for `yield` in `$entry` with a different
-continuation.
-
-Our proposal also allows passing additional payloads when `switch`-ing from one
-continuation to another, besides the continuation switched away from. We
-eschewed this in our example, which is reflected by the type `$ct` having no
-further parameters besides the continuation argument required by `switch`.
-
-However, this mechanism could be used to optimize the implementation of task
-switching further:
-In `$scheduler2`, if a `$task_i` function finishes and therefore returns, two
-stack switches are required to continue execution in the next task in the queue.
-This is due to the fact that the returning continuation switches to the parent
-(i.e., `$entry`), which then resumes the next task. To avoid this, we could
-establish the following convention for all of our task functions: Immediately
-before they would ordinarily return, they `switch` to the next task. When doing
-so, they would pass a new flag to the target continuation to indicate that the
-source continuation should not be enqueued in the task list, but canceled. The
-latter can be achieved using the dedicated instruction `resume.throw`.
-
+In `$scheduler2`, if a `$task_i` function finishes and therefore
+returns, two stack switches are required to continue execution in the
+next task in the queue. This is due to the fact that the returning
+continuation switches to the parent (i.e., the event loop), which then
+resumes the next task. To avoid this additional stack switch, we could
+add boilerplate code to all of our task functions. Immediately before
+a task function would ordinarily return, it should instead switch to
+the next task. When doing so, it should pass a new flag to the target
+continuation to indicate that the source continuation should not be
+enqueued in the task list, but should instead be cancelled. Cancellation
+can be implemented using another instruction, `resume_throw`, which is
+described later in the document.
 
 
 <!--- ## Examples
@@ -781,10 +777,8 @@ handler dispatch table `hdl`. The shape of `hdl` can be either:
 The `resume` instruction consumes its continuation argument, meaning
 that a continuation may be resumed only once.
 
-
 The second way to invoke a continuation is to raise an exception at
 the control tag invocation site which causes the stack to be unwound.
-
 
 ```wast
   resume_throw $ct $exn hdl* : [te* (ref $ct)])] -> [t2*]
@@ -802,7 +796,6 @@ invocation point in the context of the supplied continuation. As an
 exception is being raised (the continuation is not actually being
 supplied a value) the parameter types for the continuation `t1*` are
 unconstrained.
-
 
 The third way to invoke a continuation is to perform a symmetric
 switch.
@@ -935,14 +928,15 @@ switch control to the handler before switching control to the peer.
 
 Partial application can be important in practice due to the block and
 type structure of Wasm, as in order to return a continuation from a
-block, all branches within the block must agree on the type of
+block all branches within the block must agree on the type of
 continuation. Using `cont.bind`, a producer can ensure that the
-branches within a block each produce a continuation with the same type
-(the [Examples](#examples) section provides several example usages of
-`cont.bind`).
+branches within a block each produce a continuation with the same type.
 
-SL: I'm not sure if we're going to actually include an example of
-`cont.bind` in the initial version of this document.
+<!-- (the [Examples](#examples) section provides several example usages of -->
+<!-- `cont.bind`). -->
+
+<!-- SL: I'm not sure if we're going to actually include an example of -->
+<!-- `cont.bind` in the initial version of this document. -->
 
 ### One-shot continuations
 
@@ -968,7 +962,7 @@ We extend the structure of composite types and heap types as follows.
 - `cont <typeidx>` is a new form of composite type
   - `(cont $ft) ok` iff `$ft ok` and `$ft = [t1*] -> [t2*]`
 
-We add two new continuation heap types and their subtyping hierachy:
+We add two new continuation heap types and their subtyping hierarchy:
 - `heaptypes ::= ... | cont | nocont`
 - `nocont ok` and `cont ok` always
 - `nocont` is the bottom type of continuation types, whereas `cont` is the top type, i.e. `nocont <: cont`
