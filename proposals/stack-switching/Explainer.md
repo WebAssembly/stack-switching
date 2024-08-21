@@ -1,4 +1,4 @@
-# stack-switching
+# Stack-switching
 
 This proposal adds typed stack-switching to WebAssembly, enabling a
 single WebAssembly instance to manage multiple execution stacks
@@ -51,7 +51,7 @@ construct their own language specific features.
 ## Continuations
 
 A continuation represents a snapshot of execution on a particular
-stack. stack-switching is realised by instructions for suspending and
+stack. Stack-switching is realised by instructions for suspending and
 resuming continuations. Continuations are composable, meaning that
 when a suspended continuation is resumed it is spliced onto the
 current continuation. This splicing establishes a parent-child
