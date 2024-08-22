@@ -18,13 +18,13 @@ validation rules to facilitate stack-switching.
    1. [Creating continuations](#creating-continuations)
    1. [Invoking continuations](#invoking-continuations)
    1. [Suspending continuations](#suspending-continuations)
-   1. [Binding continuations](#binding-continuations)
-   1. [Trapping continuations](#trapping-continuations)
+   1. [Partial continuation application](#partial-continuation-application)
    1. [Continuation lifetime](#continuation-lifetime)
 1. [Design considerations](#design-considerations)
-   1. [Asymmetric and symmetric switching](#asymmetric-and-symmetric-switching)
-   1. [Linear usage of continuations](#linear-usage-of-continuations)
-   1. [Memory management](#memory-management)
+   1. [Asymmetric switching](#asymmetric-switching)
+   1. [Symmetric switching](#symmetric-switching)
+   1. [Partial application](#partial-application)
+   1. [One shot continuations](#one-shot-continuations)
 1. [Specification changes](#specification-changes)
    1. [Types](#types)
    1. [Tags](#tags)
@@ -835,7 +835,7 @@ handles the exception. The key difference is that the continuation at
 the suspension point expects to be resumed later with arguments of
 types `t2*`.
 
-### Partial application
+### Partial continuation application
 
 A suspended continuation can be partially applied to a prefix of its
 arguments yielding another suspended continuation.
@@ -854,7 +854,7 @@ also consumes its continuation argument, and yields a new continuation
 that can be supplied to `resume`,`resume_throw`, `switch` or
 `cont.bind`.
 
-### Trapping continuations
+<!-- ### Trapping continuations
 
 In order to allow ensuring that control cannot be captured across
 certain abstraction or language boundaries, we provide an instruction
@@ -872,7 +872,7 @@ The `barrier` instruction is a block with label `$l`, block type
 `$bt = [t1*] -> [t2*]`, whose body is the instruction sequence given
 by `instr*`. Operationally, `barrier` may be viewed as a "catch-all"
 handler, that handles any control tag by invoking a trap.
-
+-->
 ### Continuation lifetime
 
 #### Producing continuations
@@ -1099,5 +1099,5 @@ We use the use the opcode space `0xe0-0xe6` for the seven new instructions.
 | 0xe2   | `suspend $t`             | `$t : u32` |
 | 0xe3   | `resume $ct (on $t $h)*` | `$ct : u32`, `($t : u32 and $h : u32)*` |
 | 0xe4   | `resume_throw $ct $e (on $t $h)` | `$ct : u32`, `$e : u32`, `($t : u32 and $h : u32)*` |
-| 0xe5   | `barrier $l $bt instr* end` | `$l : u32`, `$bt : u32` |
-| 0xe6   | `switch $ct $e`          | `$ct : u32`, `$e : u32` |
+| 0xe5   | `switch $ct $e`          | `$ct : u32`, `$e : u32` |
+<!--| 0xe5   | `barrier $l $bt instr* end` | `$l : u32`, `$bt : u32` |-->
