@@ -246,11 +246,9 @@ Second, the parent-child relationship determines where execution
 continues after a continuation returns. Control simply transfers to
 the next instruction after the `resume` instruction that resumed the
 continuation in the parent, just as a normal function call returns to
-the instruction after its call site. For instance, in our example we
-pass `$generator` to `cont.new`. Each time we suspend we run a little
-bit more of the `$generator` function. Once the loop counter `$i`
-reaches 0, the `$generator` function returns and we have reached the
-end of the continuation, so it too returns. Execution then continues
+the instruction after its call site. For instance, in our example once
+the loop counter `$i` reaches 0, the `$generator` function returns and
+we have reached the end of the continuation. Execution then continues
 at the parent immediately after the `resume` instruction called by the
 consumer, and the consumer also returns.
 
