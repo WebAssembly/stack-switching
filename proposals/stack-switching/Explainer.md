@@ -933,12 +933,6 @@ block all branches within the block must agree on the type of
 continuation. Using `cont.bind`, a producer can ensure that the
 branches within a block each produce a continuation with the same type.
 
-<!-- (the [Examples](#examples) section provides several example usages of -->
-<!-- `cont.bind`). -->
-
-<!-- SL: I'm not sure if we're going to actually include an example of -->
-<!-- `cont.bind` in the initial version of this document. -->
-
 ### One-shot continuations
 
 Continuations in the current proposal are single-shot (aka linear),
@@ -948,13 +942,12 @@ be invoked either by resuming it (with `resume`); by aborting it (with
 invoke a continuation more than once results in a trap. Some
 applications such as backtracking, probabilistic programming, and
 process duplication exploit multi-shot continuations, but none of our
-critical use-cases requires multi-shot continuations. Nevertheless, it
-is natural to envisage a future extension that includes support for
-multi-shot continuations by way of a continuation clone instruction.
+critical use-cases requires multi-shot continuations.
 
 ## Specification changes
 
-This proposal is based on the [function references proposal](https://github.com/WebAssembly/function-references) and [exception handling proposal](https://github.com/WebAssembly/exception-handling).
+This proposal is based on the [function references proposal](https://github.com/WebAssembly/function-references)
+and [exception handling proposal](https://github.com/WebAssembly/exception-handling).
 
 ### Types
 
@@ -1040,12 +1033,12 @@ This abbreviation will be formalised with an auxiliary function or other means i
     - iff `C.tags[$t] = tag $ft`
     - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
 
-- `barrier <typeidx <typeidx> instr* end`
-  - Prevents suspensions propagating beyond this program point.
-  - `barrier $l $ft instr* end : t2*`
-    - iff `C.labels[$l] = [t2*]`
-    - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
-    - and `instr* : t2*`
+<!-- - `barrier <typeidx <typeidx> instr* end` -->
+<!--   - Prevents suspensions propagating beyond this program point. -->
+<!--   - `barrier $l $ft instr* end : t2*` -->
+<!--     - iff `C.labels[$l] = [t2*]` -->
+<!--     - and `C.types[$ft] ~~ func [t1*] -> [t2*]` -->
+<!--     - and `instr* : t2*` -->
 
 - `switch <typeidx> <tagidx>`
   - Switch to executing a given continuation directly, suspending the current execution.
