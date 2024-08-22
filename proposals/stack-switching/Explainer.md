@@ -461,7 +461,7 @@ sense. Rather than switching back to the parent (as `suspend` would),
 `yield` in the event loop with a different continuation.
 
 The proposal also allows passing additional payloads when performing a
-switch instruction, besides the suspended current continuation. For
+`switch` instruction, besides the suspended current continuation. For
 simplicity, our example does not make use of this feature, as we can
 see from the type `$ct`, which has no further parameters besides the
 continuation argument required by `switch`. However, this mechanism
