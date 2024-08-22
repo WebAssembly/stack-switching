@@ -24,7 +24,7 @@ validation rules to facilitate stack-switching.
    1. [Asymmetric switching](#asymmetric-switching)
    1. [Symmetric switching](#symmetric-switching)
    1. [Partial application](#partial-application)
-   1. [One shot continuations](#one-shot-continuations)
+   1. [One-shot continuations](#one-shot-continuations)
 1. [Specification changes](#specification-changes)
    1. [Types](#types)
    1. [Tags](#tags)
