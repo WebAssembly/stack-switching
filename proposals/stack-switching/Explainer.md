@@ -10,6 +10,7 @@ validation rules to facilitate stack-switching.
 
 ## Table of contents
 1. [Motivation](#motivation)
+1. [Continuations](#continuations)
 1. [Introduction to continuation-based stack-switching](#introduction-to-continuation-based-stack-switching)
    1. [Generators](#generators)
    1. [Task scheduling](#task-scheduling)
