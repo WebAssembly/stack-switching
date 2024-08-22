@@ -243,13 +243,16 @@ prints the generated value and saves the new continuation in `$c` to
 be resumed in the next iteration.
 
 Second, the parent-child relationship determines where execution
-continues after a suspend continuation returns. Control simply
-transfers to the next instruction after the `resume` instruction in
-the parent. A particular special case of this occurs when we resume a
-suspended continuation created with `cont.new`. For instance, in our
-example we pass `$generator` to `cont.new`. Once the loop counter `$i`
-reaches 0 the continuation returns. Execution then continues after the
-`resume` instruction in the consumer and the consumer also returns.
+continues after a continuation returns. Control simply transfers to
+the next instruction after the `resume` instruction that resumed the
+continuation in the parent, just as a normal function call returns to
+the instruction after its call site. For instance, in our example we
+pass `$generator` to `cont.new`. Each time we suspend we run a little
+bit more of the `$generator` function. Once the loop counter `$i`
+reaches 0, the `$generator` function returns and we have reached the
+end of the continuation, so it too returns. Execution then continues
+at the parent immediately after the `resume` instruction called by the
+consumer, and the consumer also returns.
 
 The full definition of this module can be found
 [here](examples/generator.wast).
