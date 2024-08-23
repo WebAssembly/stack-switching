@@ -1085,14 +1085,21 @@ The opcode for heap types is encoded as an `s33`.
 
 ### Instructions
 
-We use the use the opcode space `0xe0-0xe6` for the seven new instructions.
+We use the use the opcode space `0xe0-0xe5` for the seven new instructions.
 
 | Opcode | Instruction              | Immediates |
 | ------ | ------------------------ | ---------- |
 | 0xe0   | `cont.new $ct`           | `$ct : u32` |
 | 0xe1   | `cont.bind $ct $ct'`     | `$ct : u32`, `$ct' : u32` |
 | 0xe2   | `suspend $t`             | `$t : u32` |
-| 0xe3   | `resume $ct (on $t $h)*` | `$ct : u32`, `($t : u32 and $h : u32)*` |
-| 0xe4   | `resume_throw $ct $e (on $t $h)` | `$ct : u32`, `$e : u32`, `($t : u32 and $h : u32)*` |
+| 0xe3   | `resume $ct hdl*` | `$ct : u32` (for hdl see below) |
+| 0xe4   | `resume_throw $ct $e hdl*` | `$ct : u32`, `$e : u32` (for hdl see below) |
 | 0xe5   | `switch $ct $e`          | `$ct : u32`, `$e : u32` |
-<!--| 0xe5   | `barrier $l $bt instr* end` | `$l : u32`, `$bt : u32` |-->
+
+In the case of `resume` and `resume_throw` we use a leading byte to
+indicate the shape of `hdl` as follows.
+
+| Opcode | On clause shape | Immediates |
+| ------ | --------------- | ---------- |
+| 0x00   | `(on $t $h)`    | `$t : u32`, `$h : u32` |
+| 0x01   | `(on $t switch)` | `$t : u32` |
