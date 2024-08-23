@@ -1083,7 +1083,7 @@ The opcode for heap types is encoded as an `s33`.
 | -0x0b  | `nocont`        |            | new  |
 | -0x18  | `cont`          |            | new  |
 
-### Instructions
+#### Instructions
 
 We use the use the opcode space `0xe0-0xe5` for the seven new instructions.
 
