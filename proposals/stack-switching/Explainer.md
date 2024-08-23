@@ -483,19 +483,6 @@ enqueued in the task list, but should instead be cancelled. Cancellation
 can be implemented using another instruction, `resume_throw`, which is
 described later in the document.
 
-
-### Lightweight threads
-
-TODO
-
-#### Asymmetric variation
-
-TODO
-
-#### Symmetric variation
-
-TODO -->
-
 ## Instruction set extension
 
 Here we give an informal account of the proposed instruction set
@@ -819,13 +806,6 @@ This abbreviation will be formalised with an auxiliary function or other means i
   - `suspend $t : [t1*] -> [t2*]`
     - iff `C.tags[$t] = tag $ft`
     - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
-
-<!-- - `barrier <typeidx <typeidx> instr* end` -->
-<!--   - Prevents suspensions propagating beyond this program point. -->
-<!--   - `barrier $l $ft instr* end : t2*` -->
-<!--     - iff `C.labels[$l] = [t2*]` -->
-<!--     - and `C.types[$ft] ~~ func [t1*] -> [t2*]` -->
-<!--     - and `instr* : t2*` -->
 
 - `switch <typeidx> <tagidx>`
   - Switch to executing a given continuation directly, suspending the current execution.
