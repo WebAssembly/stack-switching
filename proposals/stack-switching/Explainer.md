@@ -117,7 +117,7 @@ The overall module implementing our example has the following shape.
 (module $generator
   (type $ft (func))
   ;; Types of continuations used by the generator:
-  ;; No need for param or result types: No data data passed back to the
+  ;; No need for param or result types: No data passed back to the
   ;; generator when resuming it, and $generator function has no return
   ;; values.
   (type $ct (cont $ft))
