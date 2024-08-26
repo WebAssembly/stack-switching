@@ -299,7 +299,7 @@ This approach is illustrated by the following skeleton code.
       (block $on_yield
         (resume $ct (on $yield $on_yield) (local.get $next_task))
         ;; task finished execution
-        (br $schedule_next)
+        (br $resume_next)
       )
       ;; task suspended: continuation in queue, then loop to determine next one
       ;; to resume.
@@ -380,7 +380,7 @@ code.
       ...
       (resume $ct (on $yield switch) (ref.null $ct) (local.get $next_task))
       ;; task finished execution: loop to pick next one
-      (br $schedule_next)
+      (br $resume_next)
       ...
     )
   )
