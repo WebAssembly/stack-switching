@@ -385,7 +385,7 @@ code.
     )
   )
 
-  (func $task_0 (param $c (ref null $ct))
+  (func $task_0 (type $ft)
     ;; If $c is not null, put in task_queue.
     ...
     ;; To yield execution, call $yield_to_next
@@ -395,7 +395,7 @@ code.
 
   ...
 
-  (func $task_n (param (ref null $ct)) ...)
+  (func $task_n (type $ft) ...)
 
   ;; Determines next task to switch to directly.
   (func $yield_to_next
