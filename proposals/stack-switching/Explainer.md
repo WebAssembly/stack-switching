@@ -336,13 +336,17 @@ instruction, which also relies on tags, to transfer control from the
 original continuation directly to `$c`, thus avoiding the need for an
 intermediate stack switch to the parent.
 
-Concretely, executing `switch $yield (local.get $c)` in our example
-behaves equivalently to `(suspend $yield)`, assuming that the active
-(ordinary) handler for `$yield` immediately resumes `$c` and
+Concretely, executing `switch $ct $ct $yield (local.get $c)` in our
+example behaves equivalently to `(suspend $yield)`, assuming that the
+active (ordinary) handler for `$yield` immediately resumes `$c` and
 additionally passes the continuation obtained from handling `$yield`
 along as an argument to `$c`. However, as mentioned above, using a
 `switch` instruction here has the advantage that a Wasm engine can
 implement it directly using only a single stack switch.
+Each `switch` instruction is annotated with the type of the
+continuation switched to and the type of the continuation that arises
+from the current context, respectively. Both types are identical in
+our example.
 
 The key idea is to inline scheduling logic in the tasks themselves in
 order to reduce (or avoid altogether) the need to switch stacks to the
@@ -456,8 +460,8 @@ in the task list.
 
 Note that installing a switch handler for `$yield` in `entry` is
 strictly necessary. It acts as a delimiter, determining the extent of
-the suspended continuation created when performing `switch
-$yield`. This form of stack-switching is symmetric in the following
+the suspended continuation created when performing `switch` with tag
+`$yield`. This form of stack-switching is symmetric in the following
 sense. Rather than switching back to the parent (as `suspend` would),
 `switch` effectively replaces the continuation under the handler for
 `yield` in the event loop with a different continuation.
@@ -808,7 +812,7 @@ This abbreviation will be formalised with an auxiliary function or other means i
     - iff `C.tags[$t] = tag $ft`
     - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
 
-- `switch <typeidx> <tagidx>`
+- `switch <typeidx> <typeidx> <tagidx>`
   - Switch to executing a given continuation directly, suspending the current execution.
   - The suspension and switch are performed from the perspective of a parent `(on $e switch)` handler, determined by the annotated control tag.
   - `switch $ct1 $ct2 $e : [t1* (ref null $ct1)] -> [t2*]`
