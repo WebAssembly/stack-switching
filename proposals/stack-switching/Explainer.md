@@ -296,13 +296,13 @@ This approach is illustrated by the following skeleton code.
     (loop $resume_next
       ;; pick $next_task from queue, or return if no more tasks.
       ...
-      (block $on_yield
+      (block $on_yield (result (ref $ct))
         (resume $ct (on $yield $on_yield) (local.get $next_task))
         ;; task finished execution
         (br $resume_next)
       )
-      ;; task suspended: continuation in queue, then loop to determine next one
-      ;; to resume.
+      ;; task suspended: put continuation in queue, then loop to determine next
+      ;; one to resume.
       ...
     )
   )
