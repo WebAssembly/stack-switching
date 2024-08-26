@@ -307,7 +307,7 @@ This approach is illustrated by the following skeleton code.
     )
   )
 
-  (func $task_0 (param (ref null $ct))
+  (func $task_0
     ...
     ;; To yield execution, simply suspend to scheduling logic in $entry.
     (suspend $yield)
@@ -316,7 +316,7 @@ This approach is illustrated by the following skeleton code.
 
   ...
 
-  (func $task_n (param (ref null $ct)) ...)
+  (func $task_n ...)
 
 )
 ```
