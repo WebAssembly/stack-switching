@@ -77,19 +77,22 @@
 
   ;; Entry point, becomes parent of all tasks.
   ;; Only acts as scheduler when tasks finish.
-  (func $entry (param $next_task (ref null $ct)) (result i32)
-    (local $default (ref null $ct))
-    (local.set $default (ref.null $ct))
+  (func $entry (param $initial_task (ref $ft))
+    (local $next_task (ref null $ct))
+
+    ;; initialise $task_queue with initial task
+    (call $task-enqueue (cont.new $ct (local.get $initial_task)))
+
     (loop $resume_next
-      (resume $ct (on $yield switch)
-        (local.get $default) (local.get $next_task))
-      ;; task finished execution: loop to pick next one
       (if (call $task-queue-empty)
-        (then)
-        (else (local.set $next_task (call $task-dequeue))
-              (br $resume_next)))
+        (then (return))
+        (else (local.set $next_task (call $task-dequeue)))
+      )
+      (resume $ct (on $yield switch)
+        (ref.null $ct) (local.get $next_task))
+      ;; task finished execution: loop to pick next one
+      (br $resume_next)
     )
-    (return (i32.const 41))
   )
 
   (func $task_impl
@@ -186,8 +189,8 @@
     ;; a noop.
   )
 
-  (func (export "main") (result i32)
-    (call $entry (cont.new $ct (ref.func $task_1)))
-    (return (i32.add (i32.const 1))))
+  (func (export "main")
+    (call $entry (ref.func $task_1))
+  )
 )
-(assert_return (invoke "main") (i32.const 42))
+(invoke "main")
