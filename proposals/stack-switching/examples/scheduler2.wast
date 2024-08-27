@@ -10,13 +10,13 @@
   (global $qback (mut i32) (i32.const 0))
   (global $qfront (mut i32) (i32.const 0))
 
-  (func $queue-empty (export "queue-empty") (result i32)
+  (func $queue_empty (export "queue-empty") (result i32)
     (i32.eq (global.get $qfront) (global.get $qback))
   )
 
   (func $dequeue (export "dequeue") (result (ref null $ct))
     (local $i i32)
-    (if (call $queue-empty)
+    (if (call $queue_empty)
       (then (return (ref.null $ct)))
     )
     (local.set $i (global.get $qfront))
@@ -65,10 +65,10 @@
     (type $ct (cont $ft))
   )
 
-  (func $task-enqueue (import "queue" "enqueue") (param (ref null $ct)))
-  (func $task-dequeue (import "queue" "dequeue") (result (ref null $ct)))
-  (func $task-queue-empty (import "queue" "queue-empty") (result i32))
-  (func $print-i32 (import "spectest" "print_i32") (param i32))
+  (func $task_enqueue (import "queue" "enqueue") (param (ref null $ct)))
+  (func $task_dequeue (import "queue" "dequeue") (result (ref null $ct)))
+  (func $task_queue-empty (import "queue" "queue-empty") (result i32))
+  (func $print_i32 (import "spectest" "print_i32") (param i32))
 
   ;; Tag used to yield execution in one task and resume another one.
   (tag $yield)
@@ -79,12 +79,12 @@
     (local $next_task (ref null $ct))
 
     ;; initialise $task_queue with initial task
-    (call $task-enqueue (cont.new $ct (local.get $initial_task)))
+    (call $task_enqueue (cont.new $ct (local.get $initial_task)))
 
     (loop $resume_next
-      (if (call $task-queue-empty)
+      (if (call $task_queue-empty)
         (then (return))
-        (else (local.set $next_task (call $task-dequeue)))
+        (else (local.set $next_task (call $task_dequeue)))
       )
       (resume $ct (on $yield switch)
         (ref.null $ct) (local.get $next_task))
@@ -100,15 +100,15 @@
 
     (if (ref.is_null (local.get $c))
       (then)
-      (else (call $task-enqueue (local.get $c))))
+      (else (call $task_enqueue (local.get $c))))
 
     (if (ref.is_null (local.get $to_spawn))
       (then)
-      (else (call $task-enqueue (cont.new $ct (local.get $to_spawn)))))
+      (else (call $task_enqueue (cont.new $ct (local.get $to_spawn)))))
 
-    (call $print-i32 (local.get $id))
+    (call $print_i32 (local.get $id))
     (call $yield_to_next)
-    (call $print-i32 (local.get $id))
+    (call $print_i32 (local.get $id))
   )
 
 
@@ -149,16 +149,16 @@
   (func $yield_to_next
     (local $next_task (ref null $ct))
     (block $done
-      (br_if $done (call $task-queue-empty))
+      (br_if $done (call $task_queue-empty))
       ;; Switch to $next_task.
       ;; The switch instruction implicitly passes a reference to the currently
       ;; executing continuation as an argument to $next_task.
-      (local.set $next_task (call $task-dequeue))
+      (local.set $next_task (call $task_dequeue))
       (switch $ct $ct $yield (local.get $next_task))
       (local.set $next_task)
       (if (ref.is_null (local.get $next_task))
         (then)
-        (else (call $task-enqueue (local.get $next_task))))
+        (else (call $task_enqueue (local.get $next_task))))
       ;; If we get here, some other continuation switch-ed directly to us, or
       ;; $entry resumed us.
       ;; In the first case, we receive the continuation that switched to us here
