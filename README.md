@@ -1,44 +1,27 @@
 # Stack-Switching Proposal for WebAssembly
 
-This repository is a clone of
-[`WebAssembly/spec`](https://github.com/WebAssembly/spec/). It is meant for
-discussion, prototype specification, and implementation of a proposal to add
+This repository is a clone of [`WebAssembly/spec`](https://github.com/WebAssembly/spec/). It is meant for discussion, prototype specification, and implementation of a proposal to add
 support for stack-switching.
 
-There are currently two active stack-switching proposals: Typed Continuations
-(aka WasmFX) and Bag of Stacks. Documentation about each proposal is available
-in separate directories of the `main` branch of this repository (as detailed
-below).
+See the [explainer](proposals/stack-switching/Explainer.md) for a high-level summary of the proposal.
 
-In order to minimise future difficulties merging upstream, the two
-corresponding extensions to the reference interpreter will be
-maintained in separate branches (as detailed below).
+## Previous proposals
 
-## Typed Continuations Proposal
+The current explainer represents the unification of two previous proposals: Typed Continuations (wasmfx) and Bag of Stacks (bos). (The explainers have now been unified. Once the reference interpreter and examples are adapted for the unified proposal this section will be removed from the README.)
 
-* See the [explainer](proposals/continuations/Explainer.md) for a high-level
-  summary of the proposal.
+#### Typed Continuations
 
-* See the [overview](proposals/continuations/Overview.md) for a more formal
-  description of the proposal.
+* See the [explainer](proposals/continuations/Explainer.md) for a high-level summary of the proposal.
 
-* See the [examples](proposals/continuations/examples) for Wasm code for
-  implementing various different features including lightweight threads, actors,
-  and async/await.
+* See the [overview](proposals/continuations/Overview.md) for a more formal description of the proposal.
 
-* An
-[implementation](https://github.com/WebAssembly/stack-switching/tree/wasmfx) is
-available as an extension to the reference interpreter. It is accesible from the
-`wasmfx` branch.
+* An [implementation](https://github.com/WebAssembly/stack-switching/tree/wasmfx) is available as an extension to the reference interpreter. It is accesible from the `wasmfx` branch of this repository.
 
-## Bag of Stacks Proposal
+* See the [examples](proposals/continuations/examples) for Wasm code for implementing various different features including lightweight threads, actors, and async/await.
 
-* See the [explainer](proposals/bag-o-stacks/Explainer.md) for a high-level
-  summary of the proposal.
+#### Bag of Stacks Proposal
 
-* An extension to the reference interpreter will be made available in the
-`bag-o-stacks` branch in due course.
-
+* See the [explainer](proposals/bag-o-stacks/Explainer.md) for a high-level summary of the proposal.
 
 Original README from upstream repository follows.
 
