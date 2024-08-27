@@ -70,8 +70,6 @@
   (func $task-queue-empty (import "queue" "queue-empty") (result i32))
   (func $print-i32 (import "spectest" "print_i32") (param i32))
 
-  (global $taskid (mut i32) (i32.const 0))
-
   ;; Tag used to yield execution in one task and resume another one.
   (tag $yield)
 
@@ -113,24 +111,6 @@
     (call $print-i32 (local.get $id))
   )
 
-  ;; (func $task (type $ft)
-  ;;   (local $id i32)
-  ;;   (local $c (ref null $ct))
-  ;;   (local.set $c (local.get 0))
-  ;;   (if (ref.is_null (local.get $c))
-  ;;     (then)
-  ;;     (else (call $task-enqueue (local.get $c))))
-  ;;   (local.set $id (global.get $taskid))
-  ;;   (global.set $taskid (i32.add (local.get $id) (i32.const 1)))
-
-  ;;   (if (i32.lt_u (local.get $id) (i32.const 4))
-  ;;     (then (call $task-enqueue (cont.new $ct (ref.func $task))))
-  ;;     (else))
-
-  ;;   (call $print-i32 (local.get $id))
-  ;;   (call $yield_to_next)
-  ;;   (call $print-i32 (local.get $id))
-  ;; )
 
   (func $task_4 (type $ft)
     (i32.const 4)
