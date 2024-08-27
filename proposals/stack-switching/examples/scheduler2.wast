@@ -93,6 +93,14 @@
     )
   )
 
+  ;; To simplify the example, all task_i functions execute this function. Each
+  ;; task has an $id, but this is only used for printing.
+  ;; $to_spawn represents another task that this function will add to the task
+  ;; queue, unless the reference is null.
+  ;; $c corresponds to the continuation parameter of the original $task_i
+  ;; functions.
+  ;; This means that it is the previous continuation we just switch-ed away
+  ;; from, or a null reference if the task was resumed from $entry.
   (func $task_impl
         (param $id i32)
         (param $to_spawn (ref null $ft))
@@ -111,6 +119,14 @@
     (call $print_i32 (local.get $id))
   )
 
+  ;; The actual $task_i functions simply call $task_impl, with i as the value
+  ;; for $id, and $task_(i+1) as the task to spawn, except for $task_4, which
+  ;; does not spawn another task.
+  ;;
+  ;; The observant reader may note that all $task_i functions may be seen as
+  ;; partial applications of $task_impl.
+  ;; Indeed, we could obtain *continuations* running each $task_i from a
+  ;; continuation running $task_impl and cont.bind.
 
   (func $task_4 (type $ft)
     (i32.const 4)
