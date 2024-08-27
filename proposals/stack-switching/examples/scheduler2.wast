@@ -5,7 +5,7 @@
     (type $ct (cont $ft)))
 
   ;; Table as simple queue (keeping it simple, no ring buffer)
-  (table $queue 0 (ref null $ct))
+  (table $task_queue 0 (ref null $ct))
   (global $qdelta i32 (i32.const 10))
   (global $qback (mut i32) (i32.const 0))
   (global $qfront (mut i32) (i32.const 0))
@@ -21,28 +21,28 @@
     )
     (local.set $i (global.get $qfront))
     (global.set $qfront (i32.add (local.get $i) (i32.const 1)))
-    (table.get $queue (local.get $i))
+    (table.get $task_queue (local.get $i))
   )
 
   (func $enqueue (export "enqueue") (param $k (ref null $ct))
     ;; Check if queue is full
-    (if (i32.eq (global.get $qback) (table.size $queue))
+    (if (i32.eq (global.get $qback) (table.size $task_queue))
       (then
         ;; Check if there is enough space in the front to compact
         (if (i32.lt_u (global.get $qfront) (global.get $qdelta))
           (then
             ;; Space is below threshold, grow table instead
-            (drop (table.grow $queue (ref.null $ct) (global.get $qdelta)))
+            (drop (table.grow $task_queue (ref.null $ct) (global.get $qdelta)))
           )
           (else
             ;; Enough space, move entries up to head of table
             (global.set $qback (i32.sub (global.get $qback) (global.get $qfront)))
-            (table.copy $queue $queue
+            (table.copy $task_queue $task_queue
               (i32.const 0)         ;; dest = new front = 0
               (global.get $qfront)  ;; src = old front
               (global.get $qback)   ;; len = new back = old back - old front
             )
-            (table.fill $queue      ;; null out old entries to avoid leaks
+            (table.fill $task_queue      ;; null out old entries to avoid leaks
               (global.get $qback)   ;; start = new back
               (ref.null $ct)      ;; init value
               (global.get $qfront)  ;; len = old front = old front - new front
@@ -52,7 +52,7 @@
         )
       )
     )
-    (table.set $queue (global.get $qback) (local.get $k))
+    (table.set $task_queue (global.get $qback) (local.get $k))
     (global.set $qback (i32.add (global.get $qback) (i32.const 1)))
   )
 )
