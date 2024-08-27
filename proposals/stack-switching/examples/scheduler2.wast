@@ -92,24 +92,74 @@
     (return (i32.const 41))
   )
 
-  (func $task (type $ft)
-    (local $id i32)
-    (local $c (ref null $ct))
-    (local.set $c (local.get 0))
+  (func $task_impl
+        (param $id i32)
+        (param $to_spawn (ref null $ft))
+        (param $c (ref null $ct))
+
     (if (ref.is_null (local.get $c))
       (then)
       (else (call $task-enqueue (local.get $c))))
-    (local.set $id (global.get $taskid))
-    (global.set $taskid (i32.add (local.get $id) (i32.const 1)))
 
-    (if (i32.lt_u (local.get $id) (i32.const 4))
-      (then (call $task-enqueue (cont.new $ct (ref.func $task))))
-      (else))
+    (if (ref.is_null (local.get $to_spawn))
+      (then)
+      (else (call $task-enqueue (cont.new $ct (local.get $to_spawn)))))
 
     (call $print-i32 (local.get $id))
     (call $yield_to_next)
     (call $print-i32 (local.get $id))
   )
+
+  ;; (func $task (type $ft)
+  ;;   (local $id i32)
+  ;;   (local $c (ref null $ct))
+  ;;   (local.set $c (local.get 0))
+  ;;   (if (ref.is_null (local.get $c))
+  ;;     (then)
+  ;;     (else (call $task-enqueue (local.get $c))))
+  ;;   (local.set $id (global.get $taskid))
+  ;;   (global.set $taskid (i32.add (local.get $id) (i32.const 1)))
+
+  ;;   (if (i32.lt_u (local.get $id) (i32.const 4))
+  ;;     (then (call $task-enqueue (cont.new $ct (ref.func $task))))
+  ;;     (else))
+
+  ;;   (call $print-i32 (local.get $id))
+  ;;   (call $yield_to_next)
+  ;;   (call $print-i32 (local.get $id))
+  ;; )
+
+  (func $task_4 (type $ft)
+    (i32.const 4)
+    (ref.null $ft)
+    (local.get 0)
+    (call $task_impl)
+  )
+  (elem declare func $task_4)
+
+  (func $task_3 (type $ft)
+    (i32.const 3)
+    (ref.func $task_4)
+    (local.get 0)
+    (call $task_impl)
+  )
+  (elem declare func $task_3)
+
+  (func $task_2 (type $ft)
+    (i32.const 2)
+    (ref.func $task_3)
+    (local.get 0)
+    (call $task_impl)
+  )
+  (elem declare func $task_2)
+
+  (func $task_1 (type $ft)
+    (i32.const 1)
+    (ref.func $task_2)
+    (local.get 0)
+    (call $task_impl)
+  )
+  (elem declare func $task_1)
 
 
   ;; Determines next task to switch to directly.
@@ -135,10 +185,9 @@
     ;; Just return if no other task in queue, making the $yield_to_next call
     ;; a noop.
   )
-  (elem declare func $task)
 
   (func (export "main") (result i32)
-    (call $entry (cont.new $ct (ref.func $task)))
+    (call $entry (cont.new $ct (ref.func $task_1)))
     (return (i32.add (i32.const 1))))
 )
 (assert_return (invoke "main") (i32.const 42))
