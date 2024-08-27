@@ -122,7 +122,7 @@
   )
 
   ;; The actual $task_i functions simply call $task_impl, with i as the value
-  ;; for $id, and $task_(i+1) as the task to spawn, except for $task_4, which
+  ;; for $id, and $task_(i+1) as the task to spawn, except for $task_3, which
   ;; does not spawn another task.
   ;;
   ;; The observant reader may note that all $task_i functions may be seen as
@@ -130,17 +130,9 @@
   ;; Indeed, we could obtain *continuations* running each $task_i from a
   ;; continuation running $task_impl and cont.bind.
 
-  (func $task_4 (type $ft)
-    (i32.const 4)
-    (ref.null $ft)
-    (local.get 0)
-    (call $task_impl)
-  )
-  (elem declare func $task_4)
-
   (func $task_3 (type $ft)
     (i32.const 3)
-    (ref.func $task_4)
+    (ref.null $ft)
     (local.get 0)
     (call $task_impl)
   )
@@ -161,6 +153,14 @@
     (call $task_impl)
   )
   (elem declare func $task_1)
+
+  (func $task_0 (type $ft)
+    (i32.const 0)
+    (ref.func $task_1)
+    (local.get 0)
+    (call $task_impl)
+  )
+  (elem declare func $task_0)
 
 
   ;; Determines next task to switch to directly.
@@ -192,7 +192,7 @@
   )
 
   (func (export "main")
-    (call $entry (ref.func $task_1))
+    (call $entry (ref.func $task_0))
   )
 )
 (invoke "main")
