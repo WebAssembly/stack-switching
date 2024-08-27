@@ -82,6 +82,8 @@
     (call $task_enqueue (cont.new $ct (local.get $initial_task)))
 
     (loop $resume_next
+      ;; pick $next_task from queue, or return if no more tasks.
+      ;; Note that there is no suspend handler for $yield
       (if (call $task_queue-empty)
         (then (return))
         (else (local.set $next_task (call $task_dequeue)))
@@ -164,22 +166,26 @@
   ;; Determines next task to switch to directly.
   (func $yield_to_next
     (local $next_task (ref null $ct))
+    (local $received_task (ref null $ct))
+
+    ;; determine $next_task
+    (local.set $next_task (call $task_dequeue))
+
     (block $done
-      (br_if $done (call $task_queue-empty))
+      (br_if $done (ref.is_null (local.get $next_task)))
       ;; Switch to $next_task.
       ;; The switch instruction implicitly passes a reference to the currently
       ;; executing continuation as an argument to $next_task.
-      (local.set $next_task (call $task_dequeue))
       (switch $ct $ct $yield (local.get $next_task))
-      (local.set $next_task)
-      (if (ref.is_null (local.get $next_task))
-        (then)
-        (else (call $task_enqueue (local.get $next_task))))
       ;; If we get here, some other continuation switch-ed directly to us, or
       ;; $entry resumed us.
       ;; In the first case, we receive the continuation that switched to us here
       ;; and we need to enqueue it in the task list.
       ;; In the second case, the passed continuation reference will be null.
+      (local.set $received_task)
+      (if (ref.is_null (local.get $received_task))
+        (then)
+        (else (call $task_enqueue (local.get $received_task))))
     )
     ;; Just return if no other task in queue, making the $yield_to_next call
     ;; a noop.
