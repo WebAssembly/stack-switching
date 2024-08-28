@@ -344,9 +344,7 @@ along as an argument to `$c`. However, as mentioned above, using a
 `switch` instruction here has the advantage that a Wasm engine can
 implement it directly using only a single stack switch.
 Each `switch` instruction is annotated with the type of the
-continuation switched to and the type of the continuation that arises
-from the current context, respectively. Both types are identical in
-our example.
+continuation switched to.
 
 The key idea is to inline scheduling logic in the tasks themselves in
 order to reduce (or avoid altogether) the need to switch stacks to the
