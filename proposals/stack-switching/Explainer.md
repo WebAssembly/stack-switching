@@ -290,8 +290,8 @@ This approach is illustrated by the following skeleton code.
 
   ;; Entry point, becomes parent of all tasks.
   ;; Also acts as scheduler when tasks yield or finish.
-  (func $entry
-    ;; initialise $task_queue with initial task
+  (func $entry (param $initial_task (ref $ft))
+    ;; initialise $task_queue with $initial_task
     ...
     (loop $resume_next
       ;; pick $next_task from queue, or return if no more tasks.
