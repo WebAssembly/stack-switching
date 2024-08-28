@@ -336,7 +336,7 @@ instruction, which also relies on tags, to transfer control from the
 original continuation directly to `$c`, thus avoiding the need for an
 intermediate stack switch to the parent.
 
-Concretely, executing `switch $ct $ct $yield (local.get $c)` in our
+Concretely, executing `switch $ct $yield (local.get $c)` in our
 example behaves equivalently to `(suspend $yield)`, assuming that the
 active (ordinary) handler for `$yield` immediately resumes `$c` and
 additionally passes the continuation obtained from handling `$yield`
@@ -406,7 +406,7 @@ code.
       ;; Switch to $next_task.
       ;; The switch instruction implicitly passes a reference to the currently
       ;; executing continuation as an argument to $next_task.
-      (switch $ct $ct $yield (local.get $next_task))
+      (switch $ct $yield (local.get $next_task))
       ;; If we get here, some other continuation switch-ed directly to us, or
       ;; $entry resumed us.
       ;; In the first case, we receive the continuation that switched to us here
@@ -599,7 +599,7 @@ The third way to invoke a continuation is to perform a symmetric
 switch.
 
 ```wast
-  switch $ct1 $ct2 $e : [t1* (ref $ct1)] -> [t2*]
+  switch $ct1 $e : [t1* (ref $ct1)] -> [t2*]
   where:
   - $e : [] -> [t*]
   - $ct1 = cont [t1* (ref $ct2)] -> [t*]
@@ -607,8 +607,7 @@ switch.
 ```
 
 The `switch` instruction is parameterised by the type of the
-continuation argument (`$ct1`), the type of the continuation arising
-from suspending the current context (`$ct2`), and a control tag
+continuation argument (`$ct1`) and a control tag
 (`$e`). It suspends the current continuation (of type `$ct2`), then
 performs a direct switch to the suspended peer continuation (of type
 `$ct1`), passing in the required parameters (including the just
@@ -812,10 +811,10 @@ This abbreviation will be formalised with an auxiliary function or other means i
     - iff `C.tags[$t] = tag $ft`
     - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
 
-- `switch <typeidx> <typeidx> <tagidx>`
+- `switch <typeidx> <tagidx>`
   - Switch to executing a given continuation directly, suspending the current execution.
   - The suspension and switch are performed from the perspective of a parent `(on $e switch)` handler, determined by the annotated control tag.
-  - `switch $ct1 $ct2 $e : [t1* (ref null $ct1)] -> [t2*]`
+  - `switch $ct1 $e : [t1* (ref null $ct1)] -> [t2*]`
     - iff `C.tags[$e] = tag $ft`
     - and `C.types[$ft] ~~ func [] -> [t*]`
     - and `C.types[$ct1] ~~ cont [t1* (ref null? $ct2)] -> [te1*]`
@@ -865,7 +864,7 @@ We use the use the opcode space `0xe0-0xe5` for the seven new instructions.
 | 0xe2   | `suspend $t`             | `$t : u32` |
 | 0xe3   | `resume $ct hdl*` | `$ct : u32` (for hdl see below) |
 | 0xe4   | `resume_throw $ct $e hdl*` | `$ct : u32`, `$e : u32` (for hdl see below) |
-| 0xe5   | `switch $ct1 $ct2 $e`          | `$ct1 : u32`, `$ct2 : u32`, `$e : u32` |
+| 0xe5   | `switch $ct1 $e`          | `$ct1 : u32`, `$e : u32` |
 
 In the case of `resume` and `resume_throw` we use a leading byte to
 indicate the shape of `hdl` as follows.
