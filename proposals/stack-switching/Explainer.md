@@ -487,6 +487,9 @@ enqueued in the task list, but should instead be cancelled. Cancellation
 can be implemented using another instruction, `resume_throw`, which is
 described later in the document.
 
+Full versions of `$scheduler1` and  `$scheduler2` can be found
+[here](examples/scheduler1.wast) and [here](examples/scheduler2.wast).
+
 ## Instruction set extension
 
 Here we give an informal account of the proposed instruction set
