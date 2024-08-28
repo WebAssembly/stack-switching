@@ -176,7 +176,7 @@
       ;; Switch to $next_task.
       ;; The switch instruction implicitly passes a reference to the currently
       ;; executing continuation as an argument to $next_task.
-      (switch $ct $ct $yield (local.get $next_task))
+      (switch $ct $yield (local.get $next_task))
       ;; If we get here, some other continuation switch-ed directly to us, or
       ;; $entry resumed us.
       ;; In the first case, we receive the continuation that switched to us here
