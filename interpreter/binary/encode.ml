@@ -231,7 +231,6 @@ struct
   let end_ () = op 0x0b
 
   let var x = u32 x.it
-  let var_pair (x, y) = var x; var y
 
   let memop x {align; offset; _} =
     let has_var = x.it <> 0l in
@@ -254,6 +253,16 @@ struct
         (n + 1, loc') :: nlocs'
       | nlocs -> (1, loc) :: nlocs
     in vec local (List.fold_right combine locs [])
+
+  let on_clause (x, y) =
+    match y with
+    | OnSwitch ->
+       byte 0x01; var x
+    | OnLabel y ->
+       byte 0x00; var x; var y
+
+  let resumetable xls =
+    vec on_clause xls
 
   let rec instr e =
     match e.it with
@@ -291,9 +300,10 @@ struct
     | ContNew x -> op 0xe0; var x
     | ContBind (x, y) -> op 0xe1; var x; var y
     | Suspend x -> op 0xe2; var x
-    | Resume (x, xls) -> op 0xe3; var x; vec var_pair xls
-    | ResumeThrow (x, y, xls) -> op 0xe4; var x; var y; vec var_pair xls
-    | Barrier (bt, es) -> op 0xe5; block_type bt; list instr es; end_ ()
+    | Resume (x, xls) -> op 0xe3; var x; resumetable xls
+    | ResumeThrow (x, y, xls) -> op 0xe4; var x; var y; resumetable xls
+    | Switch (x, y) -> op 0xe5; var x; var y
+    | Barrier (bt, es) -> op 0xe6; block_type bt; list instr es; end_ ()
 
     | Throw x -> op 0x08; var x
     | ThrowRef -> op 0x0a

@@ -231,6 +231,7 @@ rule token = parse
       | "resume" -> RESUME
       | "resume_throw" -> RESUME_THROW
       | "barrier" -> BARRIER
+      | "switch" -> SWITCH
 
 
       | "local.get" -> LOCAL_GET

@@ -141,6 +141,10 @@ let block_type = function
   | VarBlockType x -> types (idx x)
   | ValBlockType t -> opt val_type t
 
+let hdl = function
+  | OnLabel x -> labels (idx x)
+  | OnSwitch -> empty
+
 let rec instr (e : instr) =
   match e.it with
   | Unreachable | Nop | Drop -> empty
@@ -176,9 +180,10 @@ let rec instr (e : instr) =
      tables (idx x) ++ types (idx y)
   | ContNew x -> types (idx x)
   | ContBind (x, y) -> types (idx x) ++ types (idx y)
-  | ResumeThrow (x, y, xys) -> types (idx x) ++ tags (idx y) ++ list (fun (x, y) -> tags (idx x) ++ labels (idx y)) xys
-  | Resume (x, xys) -> types (idx x) ++ list (fun (x, y) -> tags (idx x) ++ labels (idx y)) xys
+  | ResumeThrow (x, y, xys) -> types (idx x) ++ tags (idx y) ++ list (fun (x, y) -> tags (idx x) ++ hdl y) xys
+  | Resume (x, xys) -> types (idx x) ++ list (fun (x, y) -> tags (idx x) ++ hdl y) xys
   | Suspend x -> tags (idx x)
+  | Switch (x, z) -> types (idx x) ++ tags (idx z)
   | Throw x -> tags (idx x)
   | ThrowRef -> empty
   | TryTable (bt, cs, es) ->
