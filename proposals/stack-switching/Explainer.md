@@ -290,8 +290,8 @@ This approach is illustrated by the following skeleton code.
 
   ;; Entry point, becomes parent of all tasks.
   ;; Also acts as scheduler when tasks yield or finish.
-  (func $entry
-    ;; initialise $task_queue with initial task
+  (func $entry (param $initial_task (ref $ft))
+    ;; initialise $task_queue with $initial_task
     ...
     (loop $resume_next
       ;; pick $next_task from queue, or return if no more tasks.
@@ -369,8 +369,8 @@ code.
 
   ;; Entry point, becomes parent of all tasks.
   ;; Only acts as scheduler when tasks finish.
-  (func $entry
-    ;; initialise $task_queue with initial task
+  (func $entry (param $initial_task (ref $ft))
+    ;; initialise $task_queue with $initial_task
     ...
     (loop $resume_next
       ;; pick $next_task from queue, or return if no more tasks.
@@ -484,6 +484,9 @@ continuation to indicate that the source continuation should not be
 enqueued in the task list, but should instead be cancelled. Cancellation
 can be implemented using another instruction, `resume_throw`, which is
 described later in the document.
+
+Full versions of `$scheduler1` and  `$scheduler2` can be found
+[here](examples/scheduler1.wast) and [here](examples/scheduler2.wast).
 
 ## Instruction set extension
 
