@@ -50,6 +50,7 @@ let cont_bind x y = ContBind (x, y)
 let suspend x = Suspend x
 let resume x xys = Resume (x, xys)
 let resume_throw x y xys = ResumeThrow (x, y, xys)
+let switch x y = Switch (x, y)
 let barrier bt es = Barrier (bt, es)
 let throw x = Throw x
 let throw_ref = ThrowRef

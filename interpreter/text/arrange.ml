@@ -489,6 +489,15 @@ let block_type = function
   | VarBlockType x -> [Node ("type " ^ var x, [])]
   | ValBlockType ts -> decls "result" (list_of_opt ts)
 
+let hdl = function
+  | OnLabel x -> var x
+  | OnSwitch -> "switch"
+
+let resumetable xys =
+  List.map
+    (fun (x, y) -> Node ("on " ^ var x ^ " " ^ hdl y, []))
+    xys
+
 let rec instr e =
   let head, inner =
     match e.it with
@@ -526,11 +535,11 @@ let rec instr e =
     | ContBind (x, y) -> "cont.bind " ^ var x ^ " " ^ var y, []
     | Suspend x -> "suspend " ^ var x, []
     | Resume (x, xys) ->
-      "resume " ^ var x,
-      List.map (fun (x, y) -> Node ("on " ^ var x ^ " " ^ var y, [])) xys
+      "resume " ^ var x, resumetable xys
     | ResumeThrow (x, y, xys) ->
-      "resume_throw " ^ var x ^ " " ^ var y,
-      List.map (fun (x, y) -> Node ("on " ^ var x ^ " " ^ var y, [])) xys
+      "resume_throw " ^ var x ^ " " ^ var y, resumetable xys
+    | Switch (x, z) ->
+      "switch " ^ var x ^ " " ^ var z, []
     | Barrier (bt, es) -> "barrier", block_type bt @ list instr es
     | Throw x -> "throw " ^ var x, []
     | ThrowRef -> "throw_ref", []

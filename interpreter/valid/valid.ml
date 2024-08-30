@@ -96,13 +96,13 @@ let refer_func (c : context) x = refer "function" c.refs.Free.funcs x
 
 let cont_type_of_heap_type (c : context) (ht : heap_type) at : cont_type =
   match ht with
-  | DefHT dt -> assert false
+  | DefHT dt -> as_cont_str_type (expand_def_type dt)
   | VarHT (StatX x) -> cont_type c (x @@ at)
   | _ -> assert false
 
 let func_type_of_heap_type (c : context) (ht : heap_type) at : func_type =
   match ht with
-  | DefHT dt -> assert false
+  | DefHT dt -> as_func_str_type (expand_def_type dt)
   | VarHT (StatX x) -> func_type c (x @@ at)
   | _ -> assert false
 
@@ -421,22 +421,28 @@ let check_memop (c : context) (memop : ('t, 's) memop) ty_size get_sz at =
  * declarative typing rules.
  *)
 
-let check_resume_table (c : context) ts2 (xys : (idx * idx) list) at =
+let check_resume_table (c : context) ts2 (xys : (idx * hdl) list) at =
   List.iter (fun (x1, x2) ->
-    let FuncT (ts3, ts4) = func_type_of_tag_type c (tag c x1) x1.at in
-    let ts' = label c x2 in
-    match Lib.List.last_opt ts' with
-    | Some (RefT (nul', ht)) ->
-      let ct = cont_type_of_heap_type c ht x2.at in
-      let ft' = func_type_of_cont_type c ct x2.at in
-      require (match_func_type c.types (FuncT (ts4, ts2)) ft') x2.at
-        "type mismatch in continuation type";
-      match_stack c (ts3 @ [RefT (nul', ht)]) ts' x2.at
-    | _ ->
-      error at
-        ("type mismatch: instruction requires continuation reference type" ^
-          " but label has " ^ string_of_result_type ts')
-  ) xys
+      match x2 with
+      | OnLabel x2 ->
+        let FuncT (ts3, ts4) = func_type_of_tag_type c (tag c x1) x1.at in
+        let ts' = label c x2 in
+        (match Lib.List.last_opt ts' with
+        | Some (RefT (nul', ht)) ->
+          let ct = cont_type_of_heap_type c ht x2.at in
+          let ft' = func_type_of_cont_type c ct x2.at in
+          require (match_func_type c.types (FuncT (ts4, ts2)) ft') x2.at
+            "type mismatch in continuation type";
+          match_stack c (ts3 @ [RefT (nul', ht)]) ts' x2.at
+        | _ ->
+           error at
+             ("type mismatch: instruction requires continuation reference type" ^
+                " but label has " ^ string_of_result_type ts'))
+      | OnSwitch ->
+        let FuncT (ts3, ts4) = func_type_of_tag_type c (tag c x1) x1.at in
+        require (match_result_type c.types ts3 []) x1.at
+          "type mismatch tag type"
+    ) xys
 
 let check_block_type (c : context) (bt : block_type) at : instr_type =
   match bt with
@@ -598,7 +604,7 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
   | ContNew x ->
     let ContT ht = cont_type c x in
     [RefT (Null, ht)] -->
-    [RefT (NoNull, DefHT (type_ c x))], []
+    [RefT (NoNull, VarHT (StatX x.it))], []
 
   | ContBind (x, y) ->
     let ct = cont_type c x in
@@ -631,6 +637,28 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
     let FuncT (ts0, _) = func_type_of_tag_type c tag y.at in
     check_resume_table c ts2 xys e.at;
     (ts0 @ [RefT (Null, VarHT (StatX x.it))]) --> ts2, []
+
+  | Switch (x, y) ->
+     let ct1 = cont_type c x in
+     let FuncT (ts11, ts12) = func_type_of_cont_type c ct1 x.at in
+     let FuncT (ts21, ts22) =
+       match Lib.List.last_opt ts11 with
+       | Some (RefT (nul', ht)) ->
+         func_type_of_cont_type c (cont_type_of_heap_type c ht x.at) x.at
+       | _ ->
+         error x.at
+           ("type mismatch: instruction requires continuation reference type" ^
+              " but the type annotation has " ^ string_of_result_type ts11)
+     in
+     let et = tag c y in
+     let FuncT (_, t) as ft = func_type_of_tag_type c et y.at in
+     require (match_func_type c.types (FuncT ([], t)) ft) y.at
+       "type mismatch in switch tag";
+     require (match_result_type c.types ts12 t) y.at
+       "type mismatch in continuation types";
+     require (match_result_type c.types t ts22) y.at
+       "type mismatch in continuation types";
+     ts11 --> ts21, []
 
   | Barrier (bt, es) ->
     let InstrT (ts1, ts2, xs) as ft = check_block_type c bt e.at in

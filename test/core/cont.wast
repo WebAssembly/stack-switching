@@ -670,3 +670,126 @@
     (global.set $k (cont.new $ct (ref.func $f))))
 )
 (assert_return (invoke "set-global"))
+
+;; Switch
+(module
+  (rec
+    (type $ft (func (param (ref null $ct))))
+    (type $ct (cont $ft)))
+
+  (func $print-i32 (import "spectest" "print_i32") (param i32))
+
+  (global $fi (mut i32) (i32.const 0))
+  (global $gi (mut i32) (i32.const 1))
+
+  (tag $swap)
+
+  (func $init (export "init") (result i32)
+    (resume $ct (on $swap switch)
+      (cont.new $ct (ref.func $g))
+      (cont.new $ct (ref.func $f)))
+    (return (i32.const 42)))
+  (func $f (type $ft)
+    (local $nextk (ref null $ct))
+    (local.set $nextk (local.get 0))
+    (call $print-i32 (global.get $fi))
+    (switch $ct $swap (local.get $nextk))
+    (local.set $nextk)
+    (call $print-i32 (global.get $fi))
+    (switch $ct $swap (local.get $nextk))
+    (drop))
+  (func $g (type $ft)
+    (local $nextk (ref null $ct))
+    (local.set $nextk (local.get 0))
+    (call $print-i32 (global.get $gi))
+    (switch $ct $swap (local.get $nextk))
+    (local.set $nextk)
+    (call $print-i32 (global.get $gi)))
+  (elem declare func $f $g)
+)
+(assert_return (invoke "init") (i32.const 42))
+
+(assert_invalid
+  (module
+    (rec
+      (type $ft (func (param (ref null $ct))))
+      (type $ct (cont $ft)))
+    (type $ft2 (func))
+    (type $ct2 (cont $ft2))
+
+    (tag $swap)
+    (func $f (type $ft)
+      (switch $ct $swap (cont.new $ct2 (ref.null $ft2)))
+      (drop)))
+   "type mismatch")
+
+(assert_invalid
+  (module
+    (rec
+      (type $ft (func (param i32) (param (ref null $ct))))
+      (type $ct (cont $ft)))
+
+    (tag $swap)
+    (func $f (type $ft)
+      (switch $ct $swap (i64.const 0) (local.get 1))
+      (drop)
+      (drop)))
+   "type mismatch")
+
+(module
+  (type $ft1 (func))
+  (type $ct1 (cont $ft1))
+  (rec
+    (type $ft2 (func (param (ref null $ct2))))
+    (type $ct2 (cont $ft2)))
+
+  (tag $t)
+
+  (func $suspend (type $ft2)
+    (suspend $t))
+
+  (func $switch (type $ft2)
+    (switch $ct2 $t (local.get 0))
+    (drop))
+
+  (func (export "unhandled-suspend-t")
+    (resume $ct2 (on $t switch)
+      (cont.new $ct2 (ref.func $suspend))
+      (cont.new $ct2 (ref.func $suspend))))
+  (func (export "unhandled-switch-t")
+    (block $l (result (ref $ct1))
+      (resume $ct2 (on $t $l)
+        (cont.new $ct2 (ref.func $switch))
+        (cont.new $ct2 (ref.func $switch)))
+      (unreachable)
+    )
+    (unreachable))
+
+  (elem declare func $suspend $switch)
+)
+(assert_suspension (invoke "unhandled-suspend-t") "unhandled tag")
+(assert_suspension (invoke "unhandled-switch-t") "unhandled tag")
+
+(module
+  (rec
+    (type $ft (func (param (ref null $ct))))
+    (type $ct (cont $ft)))
+
+  (tag $t)
+
+  (func
+    (cont.new $ct (ref.null $ft))
+    (unreachable))
+  (func
+    (cont.bind $ct $ct (ref.null $ct))
+    (unreachable))
+  (func
+    (resume $ct (ref.null $ct) (ref.null $ct))
+    (unreachable))
+  (func
+    (resume_throw $ct $t (ref.null $ct))
+    (unreachable))
+  (func
+    (switch $ct $t (ref.null $ct))
+    (unreachable))
+)

@@ -305,7 +305,7 @@ let parse_annots (m : module_) : Custom.section list =
 %token MUT FIELD STRUCT ARRAY SUB FINAL REC
 %token UNREACHABLE NOP DROP SELECT
 %token BLOCK END IF THEN ELSE LOOP
-%token CONT_NEW CONT_BIND SUSPEND RESUME RESUME_THROW BARRIER
+%token CONT_NEW CONT_BIND SUSPEND RESUME RESUME_THROW BARRIER SWITCH
 %token BR BR_IF BR_TABLE BR_ON_NON_NULL
 %token<Ast.idx -> Ast.instr'> BR_ON_NULL
 %token<Ast.idx -> Types.ref_type -> Types.ref_type -> Ast.instr'> BR_ON_CAST
@@ -669,6 +669,7 @@ plain_instr :
   | STRUCT_NEW var { fun c -> $1 ($2 c type_) }
   | STRUCT_GET var var { fun c -> let x = $2 c type_ in $1 x ($3 c (field x.it)) }
   | STRUCT_SET var var { fun c -> let x = $2 c type_ in struct_set x ($3 c (field x.it)) }
+  | SWITCH var var { fun c -> let x = $2 c type_ in let tag = $3 c tag in switch x tag }
   | ARRAY_NEW var { fun c -> $1 ($2 c type_) }
   | ARRAY_NEW_FIXED var nat32 { fun c -> array_new_fixed ($2 c type_) $3 }
   | ARRAY_NEW_ELEM var var { fun c -> array_new_elem ($2 c type_) ($3 c elem) }
@@ -783,7 +784,9 @@ resume_instr_instr :
 
 resume_instr_handler_instr :
   | LPAR ON var var RPAR resume_instr_handler_instr
-    { fun c -> let hs, es = $6 c in ($3 c tag, $4 c label) :: hs, es }
+    { fun c -> let hs, es = $6 c in ($3 c tag, OnLabel ($4 c label)) :: hs, es }
+  | LPAR ON var SWITCH RPAR resume_instr_handler_instr
+    { fun c -> let hs, es = $6 c in ($3 c tag, OnSwitch) :: hs, es }
   | instr1
     { fun c -> [], $1 c }
 
@@ -941,7 +944,9 @@ call_expr_results :
 
 resume_expr_handler :
   | LPAR ON var var RPAR resume_expr_handler
-    { fun c -> let hs, es = $6 c in ($3 c tag, $4 c label) :: hs, es }
+    { fun c -> let hs, es = $6 c in ($3 c tag, OnLabel ($4 c label)) :: hs, es }
+  | LPAR ON var SWITCH RPAR resume_expr_handler
+    { fun c -> let hs, es = $6 c in ($3 c tag, OnSwitch) :: hs, es }
   | expr_list
     { fun c -> [], $1 c }
 

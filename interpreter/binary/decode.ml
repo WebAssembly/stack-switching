@@ -337,11 +337,6 @@ let block_type s =
     (fun s -> ValBlockType (Some (val_type s)));
   ] s
 
-let var_pair s =
-  let x = at var s in
-  let y = at var s in
-  x, y
-
 let local s =
   let n = u32 s in
   let t = at val_type s in
@@ -355,6 +350,16 @@ let locals s =
     s pos "too many locals";
   List.flatten (List.map (Lib.Fun.uncurry Lib.List32.make) nts)
 
+let on_clause s =
+  match byte s with
+  | 0x00 ->
+    let x = at var s in
+    let y = at var s in
+    (x, OnLabel y)
+  | 0x01 ->
+    let x = at var s in
+    (x, OnSwitch)
+  | _ -> error s (pos s) "ON opcode expected"
 
 let rec instr s =
   let pos = pos s in
@@ -633,14 +638,18 @@ let rec instr s =
   | 0xe2 -> suspend (at var s)
   | 0xe3 ->
     let x = at var s in
-    let xls = vec var_pair s in
+    let xls = vec on_clause s in
     resume x xls
   | 0xe4 ->
     let x   = at var s in
     let tag = at var s in
-    let xls = vec var_pair s in
+    let xls = vec on_clause s in
     resume_throw x tag xls
   | 0xe5 ->
+    let x = at var s in
+    let y = at var s in
+    switch x y
+  | 0xe6 ->
     let bt = block_type s in
     let es' = instr_block s in
     end_ s;
