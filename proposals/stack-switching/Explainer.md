@@ -815,7 +815,7 @@ This abbreviation will be formalised with an auxiliary function or other means i
 - `switch <typeidx> <tagidx>`
   - Switch to executing a given continuation directly, suspending the current execution.
   - The suspension and switch are performed from the perspective of a parent `(on $e switch)` handler, determined by the annotated control tag.
-  - `switch $ct1 $e : [t1* (ref null $ct1)] -> [t2*]`
+  - `switch $ct1 $e : [t1* (ref null? $ct1)] -> [t2*]`
     - iff `C.tags[$e] = tag $ft`
     - and `C.types[$ft] ~~ func [] -> [t*]`
     - and `C.types[$ct1] ~~ cont [t1* (ref null? $ct2)] -> [te1*]`
