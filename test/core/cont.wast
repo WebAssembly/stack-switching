@@ -709,6 +709,48 @@
 )
 (assert_return (invoke "init") (i32.const 42))
 
+(module
+  (rec
+    (type $ft (func (param i32) (param (ref null $ct)) (result i32)))
+    (type $ct (cont $ft)))
+
+  (func $print-i32 (import "spectest" "print_i32") (param i32))
+
+  (tag $swap (result i32))
+
+  (func $init (export "init") (result i32)
+    (resume $ct (on $swap switch)
+      (i32.const 1)
+      (cont.new $ct (ref.func $g))
+      (cont.new $ct (ref.func $f))))
+  (func $f (type $ft)
+    (local $i i32)
+    (local $nextk (ref null $ct))
+    (local.set $i (local.get 0))
+    (local.set $nextk (local.get 1))
+    (call $print-i32 (local.get $i))
+    (switch $ct $swap (i32.add (i32.const 1) (local.get $i)) (local.get $nextk))
+    (local.set $nextk)
+    (local.set $i)
+    (call $print-i32 (local.get $i))
+    (switch $ct $swap (i32.add (i32.const 1) (local.get $i)) (local.get $nextk))
+    (unreachable))
+  (func $g (type $ft)
+    (local $i i32)
+    (local $nextk (ref null $ct))
+    (local.set $i (local.get 0))
+    (local.set $nextk (local.get 1))
+    (call $print-i32 (local.get $i))
+    (switch $ct $swap (i32.add (i32.const 1) (local.get $i)) (local.get $nextk))
+    (local.set $nextk)
+    (local.set $i)
+    (call $print-i32 (local.get $i))
+    (return (local.get $i)))
+  (elem declare func $f $g)
+)
+(assert_return (invoke "init") (i32.const 4))
+
+
 (assert_invalid
   (module
     (rec
