@@ -403,7 +403,7 @@ let rec step (c : config) : config =
         let hs = handle_table c xls in
         let args, vs' = i32_split (Lib.List32.length ts) vs e.at in
         cont := None;
-        vs', [Handle (Some hs, ctxt (args, [Plain (Throw x) @@ e.at])) @@ e.at]
+        vs', [Handle (Some hs, ctxt ([], [Throwing (tagt, args) @@ e.at])) @@ e.at]
 
       | Switch (x, y), Ref (NullRef _) :: vs ->
          vs, [Trapping "null continuation reference" @@ e.at]
