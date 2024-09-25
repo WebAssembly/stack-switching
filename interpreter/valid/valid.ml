@@ -358,7 +358,7 @@ let check_memop (c : context) (memop : ('t, 's) memop) ty_size get_sz at =
       check_pack sz (ty_size memop.ty) at;
       Pack.packed_size sz
   in
-  require (1 lsl memop.align <= size) at
+  require (1 lsl memop.align >= 1 && 1 lsl memop.align <= size) at
     "alignment must not be larger than natural";
   memop.ty
 
@@ -939,11 +939,11 @@ and check_catch (c : context) (cc : catch) (ts : val_type list) at =
   | CatchRef (x1, x2) ->
     let TagT dt = tag c x1 in
     let FuncT (ts1, ts2) = as_func_str_type (expand_def_type dt) in
-    match_target c (ts1 @ [RefT (Null, ExnHT)]) (label c x2) cc.at
+    match_target c (ts1 @ [RefT (NoNull, ExnHT)]) (label c x2) cc.at
   | CatchAll x ->
     match_target c [] (label c x) cc.at
   | CatchAllRef x ->
-    match_target c [RefT (Null, ExnHT)] (label c x) cc.at
+    match_target c [RefT (NoNull, ExnHT)] (label c x) cc.at
 
 
 (* Functions & Constants *)
@@ -1118,3 +1118,7 @@ let check_module (m : module_) =
   List.iter (check_func_body c) m.it.funcs;
   Option.iter (check_start c) m.it.start;
   ignore (List.fold_left (check_export c) NameSet.empty m.it.exports)
+
+let check_module_with_custom ((m : module_), (cs : Custom.section list)) =
+  check_module m;
+  List.iter (fun (module S : Custom.Section) -> S.Handler.check m S.it) cs

@@ -181,7 +181,7 @@ It decodes into a vector of :ref:`imports <syntax-import>` that represent the |M
      \hex{01}~~\X{tt}{:}\Btabletype &\Rightarrow& \IDTABLE~\X{tt} \\ &&|&
      \hex{02}~~\X{mt}{:}\Bmemtype &\Rightarrow& \IDMEM~\X{mt} \\ &&|&
      \hex{03}~~\X{gt}{:}\Bglobaltype &\Rightarrow& \IDGLOBAL~\X{gt} \\ &&|&
-     \hex{04}~~\X{tt}{:}\Btag &\Rightarrow& \IDTAG~\X{tt} \\
+     \hex{04}~~x{:}\Btagtype &\Rightarrow& \IDTAG~x \\
    \end{array}
 
 
@@ -350,7 +350,7 @@ It decodes into a vector of :ref:`element segments <syntax-elem>` that represent
    \production{element segment} & \Belem &::=&
      0{:}\Bu32~~e{:}\Bexpr~~y^\ast{:}\Bvec(\Bfuncidx)
        &\Rightarrow& \\&&&\quad
-       \{ \ETYPE~(\REF~\NULL~\FUNC), \EINIT~((\REFFUNC~y)~\END)^\ast, \EMODE~\EACTIVE~\{ \ETABLE~0, \EOFFSET~e \} \} \\ &&|&
+       \{ \ETYPE~(\REF~\FUNC), \EINIT~((\REFFUNC~y)~\END)^\ast, \EMODE~\EACTIVE~\{ \ETABLE~0, \EOFFSET~e \} \} \\ &&|&
      1{:}\Bu32~~\X{et}:\Belemkind~~y^\ast{:}\Bvec(\Bfuncidx)
        &\Rightarrow& \\&&&\quad
        \{ \ETYPE~\X{et}, \EINIT~((\REFFUNC~y)~\END)^\ast, \EMODE~\EPASSIVE \} \\ &&|&
@@ -373,12 +373,12 @@ It decodes into a vector of :ref:`element segments <syntax-elem>` that represent
        &\Rightarrow& \\&&&\quad
        \{ \ETYPE~et, \EINIT~\X{el}^\ast, \EMODE~\EDECLARATIVE \} \\
    \production{element kind} & \Belemkind &::=&
-     \hex{00} &\Rightarrow& \FUNCREF \\
+     \hex{00} &\Rightarrow& (\REF~\FUNC) \\
    \end{array}
 
 .. note::
    The initial integer can be interpreted as a bitfield.
-   Bit 0 indicates a passive or declarative segment,
+   Bit 0 distinguishes a passive or declarative segment from an active segment,
    bit 1 indicates the presence of an explicit table index for an active segment and otherwise distinguishes passive from declarative segments,
    bit 2 indicates the use of element type and element :ref:`expressions <binary-expr>` instead of element kind and element indices.
 

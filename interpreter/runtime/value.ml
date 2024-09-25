@@ -18,7 +18,6 @@ type value = Num of num | Vec of vec | Ref of ref_
 type t = value
 
 type ref_ += NullRef of heap_type
-type ref_ += ExnRef of Tag.t * value list
 
 
 (* Injection & projection *)
@@ -95,27 +94,20 @@ let is_null_ref = function
 (* Typing *)
 
 let type_of_op = function
-  | I32 _ -> Types.I32T
-  | I64 _ -> Types.I64T
-  | F32 _ -> Types.F32T
-  | F64 _ -> Types.F64T
-
-let type_of_vecop = function
-  | V128 _ -> Types.V128T
-
-let type_of_num = function
   | I32 _ -> I32T
   | I64 _ -> I64T
   | F32 _ -> F32T
   | F64 _ -> F64T
 
-let type_of_vec = function
+let type_of_vecop = function
   | V128 _ -> V128T
+
+let type_of_num = type_of_op
+let type_of_vec = type_of_vecop
 
 let type_of_ref' = ref (function _ -> assert false)
 let type_of_ref = function
   | NullRef t -> (Null, Match.bot_of_heap_type [] t)
-  | ExnRef _ -> (NoNull, ExnHT)
   | r -> (NoNull, !type_of_ref' r)
 
 let type_of_value = function
@@ -310,7 +302,6 @@ let hex_string_of_vec = function
 let string_of_ref' = ref (function _ -> "ref")
 let string_of_ref = function
   | NullRef _ -> "null"
-  | ExnRef _ -> "exn"
   | r -> !string_of_ref' r
 
 let string_of_value = function

@@ -10,6 +10,8 @@ open Script
 
 let error at msg = raise (Parse_error.Syntax (at, msg))
 
+let thd (_, _, x) = x
+
 
 (* Position handling *)
 
@@ -75,17 +77,19 @@ let nanop f nan =
   | F64 _ -> F64 nan.it @@ nan.at
   | I32 _ | I64 _ -> error nan.at "NaN pattern with non-float type"
 
-let nat s loc =
-  try
-    let n = int_of_string s in
-    if n >= 0 then n else raise (Failure "")
-  with Failure _ -> error (at loc) "integer constant out of range"
-
 let nat32 s loc =
   try I32.of_string_u s with Failure _ -> error (at loc) "i32 constant out of range"
 
+let nat64 s loc =
+  try I64.of_string_u s with Failure _ -> error (at loc) "i64 constant out of range"
+
 let name s loc =
   try Utf8.decode s with Utf8.Utf8 -> error (at loc) "malformed UTF-8 encoding"
+
+let var s loc =
+  let r = at loc in
+  try ignore (Utf8.decode s); Source.(s @@ r)
+  with Utf8.Utf8 -> error r "malformed UTF-8 encoding"
 
 
 (* Symbolic variables *)
@@ -144,9 +148,24 @@ let force_locals (c : context) =
   c.deferred_locals := []
 
 
+let print_char = function
+  | 0x09 -> "\\t"
+  | 0x0a -> "\\n"
+  | 0x22 -> "\\\""
+  | 0x5c -> "\\\\"
+  | c when 0x20 <= c && c < 0x7f -> String.make 1 (Char.chr c)
+  | c -> Printf.sprintf "\\u{%02x}" c
+
+let print x =
+  "$" ^
+  if String.for_all (fun c -> Lib.Char.is_alphanum_ascii c || c = '_') x.it
+  then x.it
+  else "\"" ^ String.concat "" (List.map print_char (Utf8.decode x.it)) ^ "\""
+
+
 let lookup category space x =
   try VarMap.find x.it space.map
-  with Not_found -> error x.at ("unknown " ^ category ^ " " ^ x.it)
+  with Not_found -> error x.at ("unknown " ^ category ^ " " ^ print x)
 
 let type_ (c : context) x = lookup "type" c.types.space x
 let func (c : context) x = lookup "function" c.funcs x
@@ -170,7 +189,7 @@ let func_type (c : context) x =
 
 let bind_abs category space x =
   if VarMap.mem x.it space.map then
-    error x.at ("duplicate " ^ category ^ " " ^ x.it);
+    error x.at ("duplicate " ^ category ^ " " ^ print x);
   let i = bind category space 1l x.at in
   space.map <- VarMap.add x.it i space.map;
   i
@@ -245,6 +264,30 @@ let inline_func_type_explicit (c : context) x ft loc =
     error (at loc) "inline function type does not match explicit type";
   x
 
+
+(* Custom annotations *)
+
+let parse_annots (m : module_) : Custom.section list =
+  let bs = Annot.get_source () in
+  let annots = Annot.get m.at in
+  let secs =
+    Annot.NameMap.fold (fun name anns secs ->
+      match Custom.handler name with
+      | Some (module Handler) ->
+        let secs' = Handler.parse m bs anns in
+        List.map (fun fmt ->
+          let module S = struct module Handler = Handler let it = fmt end in
+          (module S : Custom.Section)
+        ) secs' @ secs
+      | None ->
+        if !Flags.custom_reject then
+          raise (Custom.Syntax ((List.hd anns).at,
+            "unknown annotation @" ^ Utf8.encode name))
+        else []
+    ) annots []
+  in
+   List.stable_sort Custom.compare_section secs
+
 %}
 
 %token LPAR RPAR
@@ -292,10 +335,11 @@ let inline_func_type_explicit (c : context) x ft loc =
 %token<int -> Ast.instr'> VEC_EXTRACT VEC_REPLACE
 %token FUNC START TYPE PARAM RESULT LOCAL GLOBAL
 %token TABLE ELEM MEMORY TAG DATA DECLARE OFFSET ITEM IMPORT EXPORT
-%token MODULE BIN QUOTE
+%token MODULE BIN QUOTE DEFINITION INSTANCE
 %token SCRIPT REGISTER INVOKE GET
 %token ASSERT_MALFORMED ASSERT_INVALID ASSERT_UNLINKABLE
 %token ASSERT_RETURN ASSERT_TRAP ASSERT_EXCEPTION ASSERT_EXHAUSTION
+%token ASSERT_MALFORMED_CUSTOM ASSERT_INVALID_CUSTOM
 %token<Script.nan> NAN
 %token INPUT OUTPUT
 %token EOF
@@ -448,7 +492,7 @@ num :
 
 var :
   | NAT { fun c lookup -> nat32 $1 $sloc @@ $sloc }
-  | VAR { fun c lookup -> lookup c ($1 @@ $sloc) @@ $sloc }
+  | VAR { fun c lookup -> lookup c (var $1 $sloc) @@ $sloc }
 
 var_opt :
   | /* empty */ { fun c lookup at -> 0l @@ at }
@@ -467,7 +511,7 @@ bind_var_opt :
   | bind_var { fun c anon bind -> bind c $1 }  /* Sugar */
 
 bind_var :
-  | VAR { $1 @@ $sloc }
+  | VAR { var $1 $sloc }
 
 labeling_opt :
   | /* empty */
@@ -493,10 +537,10 @@ offset_opt :
 
 align :
   | ALIGN_EQ_NAT
-    { let n = nat $1 $sloc in
-      if not (Lib.Int.is_power_of_two n) then
+    { let n = nat64 $1 $sloc in
+      if not (Lib.Int64.is_power_of_two_unsigned n) then
         error (at $sloc) "alignment must be a power of two";
-      Some (Lib.Int.log2 n) }
+      Some (Int64.to_int (Lib.Int64.log2_unsigned n)) }
 
 align_opt :
   | /* empty */ { None }
@@ -925,7 +969,7 @@ func_fields :
   | type_use func_fields_body
     { fun c x loc ->
       let c' = enter_func c loc in
-      let y = inline_func_type_explicit c' ($1 c') (fst $2 c') loc in
+      let y = inline_func_type_explicit c' ($1 c') (fst $2 c') $loc($1) in
       [{(snd $2 c') with ftype = y} @@ loc], [], [] }
   | func_fields_body  /* Sugar */
     { fun c x loc ->
@@ -934,7 +978,7 @@ func_fields :
       [{(snd $1 c') with ftype = y} @@ loc], [], [] }
   | inline_import type_use func_fields_import  /* Sugar */
     { fun c x loc ->
-      let y = inline_func_type_explicit c ($2 c) ($3 c) loc in
+      let y = inline_func_type_explicit c ($2 c) ($3 c) $loc($2) in
       [],
       [{ module_name = fst $1; item_name = snd $1;
          idesc = FuncImport y @@ loc } @@ loc ], [] }
@@ -1142,43 +1186,29 @@ tag :
 
 tag_fields :
   | type_use func_type
-    { fun c x at ->
-      let tgtype = inline_func_type_explicit c ($1 c) ($2 c) at in
-      [{tgtype} @@ at], [], [] }
+    { fun c x loc ->
+      let tgtype = inline_func_type_explicit c ($1 c) ($2 c) $loc($1) in
+      [{tgtype} @@ loc], [], [] }
   | func_type  /* Sugar */
-    { fun c x at ->
-      let tgtype = inline_func_type c ($1 c) at in
-      [{tgtype} @@ at], [], [] }
-  | inline_import type_use tag_fields_import  /* Sugar */
-    { fun c x at ->
-      let y = inline_func_type_explicit c ($2 c) ($3 c) at in
+    { fun c x loc ->
+      let tgtype = inline_func_type c ($1 c) $sloc in
+      [{tgtype} @@ loc], [], [] }
+  | inline_import type_use func_type  /* Sugar */
+    { fun c x loc ->
+      let y = inline_func_type_explicit c ($2 c) ($3 c) $loc($2) in
       [],
       [{ module_name = fst $1; item_name = snd $1;
-         idesc = TagImport y @@ at } @@ at ], [] }
-  | inline_import tag_fields_import  /* Sugar */
-    { fun c x at ->
-      let y = inline_func_type c ($2 c) at in
+         idesc = TagImport y @@ loc } @@ loc ], [] }
+  | inline_import func_type  /* Sugar */
+    { fun c x loc ->
+      let y = inline_func_type c ($2 c) $loc($2) in
       [],
       [{ module_name = fst $1; item_name = snd $1;
-         idesc = TagImport y @@ at } @@ at ], [] }
+         idesc = TagImport y @@ loc } @@ loc ], [] }
   | inline_export tag_fields  /* Sugar */
-    { fun c x at ->
-      let tgs, ims, exs = $2 c x at in tgs, ims, $1 (TagExport x) c :: exs }
+    { fun c x loc ->
+      let tgs, ims, exs = $2 c x loc in tgs, ims, $1 (TagExport x) c :: exs }
 
-tag_fields_import :  /* Sugar */
-  | tag_fields_import_result { $1 }
-  | LPAR PARAM val_type_list RPAR tag_fields_import
-    { fun c -> let FuncT (ts1, ts2) = $5 c in
-      FuncT (snd $3 c @ ts1, ts2) }
-  | LPAR PARAM bind_var val_type RPAR tag_fields_import  /* Sugar */
-    { fun c -> let FuncT (ts1, ts2) = $6 c in
-      FuncT ($4 c :: ts1, ts2) }
-
-tag_fields_import_result :  /* Sugar */
-  | /* empty */ { fun c -> FuncT ([], []) }
-  | LPAR RESULT val_type_list RPAR tag_fields_import_result
-    { fun c ->
-      let FuncT (ts1, ts2) = $5 c in FuncT (ts1, snd $3 c @ ts2) }
 
 global :
   | LPAR GLOBAL bind_var_opt global_fields RPAR
@@ -1360,61 +1390,109 @@ module_fields1 :
       {m with exports = $1 c :: m.exports} }
 
 module_var :
-  | VAR { $1 @@ $sloc }  /* Sugar */
+  | VAR { var $1 $sloc }  /* Sugar */
 
 module_ :
   | LPAR MODULE option(module_var) module_fields RPAR
-    { $3, Textual ($4 (empty_context ()) () () @@ $sloc) @@ $sloc }
+    { let m = $4 (empty_context ()) () () @@ $sloc in
+      $3, Textual (m, parse_annots m) @@ $sloc }
 
 inline_module :  /* Sugar */
-  | module_fields { Textual ($1 (empty_context ()) () () @@ $sloc) @@ $sloc }
+  | module_fields
+    { let m = $1 (empty_context ()) () () @@ $sloc in
+      (* Hack to handle annotations before first and after last token *)
+      let all = all_region (at $sloc).left.file in
+      Textual (m, parse_annots Source.(m.it @@ all)) @@ $sloc }
 
 inline_module1 :  /* Sugar */
-  | module_fields1 { Textual ($1 (empty_context ()) () () @@ $sloc) @@ $sloc }
+  | module_fields1
+    { let m = $1 (empty_context ()) () () @@ $sloc in
+      (* Hack to handle annotations before first and after last token *)
+      let all = all_region (at $sloc).left.file in
+      Textual (m, parse_annots Source.(m.it @@ all)) @@ $sloc }
 
 
 /* Scripts */
 
 script_var :
-  | VAR { $1 @@ $sloc }  /* Sugar */
+  | VAR { var $1 $sloc }  /* Sugar */
+
+instance_var :
+  | VAR { var $1 $sloc }  /* Sugar */
+
+definition_opt :
+  | DEFINITION { true }
+  | /* empty */ { false }
 
 script_module :
-  | module_ { $1 }
-  | LPAR MODULE option(module_var) BIN string_list RPAR
-    { $3, Encoded ("binary:" ^ string_of_pos (at $sloc).left, $5) @@ $sloc }
-  | LPAR MODULE option(module_var) QUOTE string_list RPAR
-    { $3, Quoted ("quote:" ^ string_of_pos (at $sloc).left, $5) @@ $sloc }
+  | LPAR MODULE definition_opt option(module_var) module_fields RPAR
+    { let m = $5 (empty_context ()) () () @@ $sloc in
+      $3, $4, Textual (m, parse_annots m) @@ $sloc }
+  | LPAR MODULE definition_opt option(module_var) BIN string_list RPAR
+    { let s = $6 @@ $loc($5) in
+      $3, $4, Encoded ("binary:" ^ string_of_pos (at $sloc).left, s) @@ $sloc }
+  | LPAR MODULE definition_opt option(module_var) QUOTE string_list RPAR
+    { let s = $6 @@ $loc($5) in
+      $3, $4, Quoted ("quote:" ^ string_of_pos (at $sloc).left, s) @@ $sloc }
+
+script_instance :
+  | instance { [], $1 }
+  | script_module  /* sugar */
+    { let isdef, var_opt, m = $1 in
+      if isdef then error (at $sloc) "misplaced module definition";
+      [Module (None, m) @@ $sloc], (var_opt, None) }
+
+instance :
+  | LPAR MODULE INSTANCE instance_var module_var RPAR
+    { Some $4, Some $5 }
+  | LPAR MODULE INSTANCE module_var RPAR
+    { None, Some $4 }
+  | LPAR MODULE INSTANCE RPAR
+    { None, None }
 
 action :
-  | LPAR INVOKE option(module_var) name list(literal) RPAR
+  | LPAR INVOKE option(instance_var) name list(literal) RPAR
     { Invoke ($3, $4, $5) @@ $sloc }
-  | LPAR GET option(module_var) name RPAR
+  | LPAR GET option(instance_var) name RPAR
     { Get ($3, $4) @@ $sloc }
 
 assertion :
   | LPAR ASSERT_MALFORMED script_module STRING RPAR
-    { AssertMalformed (snd $3, $4) @@ $sloc }
+    { [], AssertMalformed (thd $3, $4) @@ $sloc }
   | LPAR ASSERT_INVALID script_module STRING RPAR
-    { AssertInvalid (snd $3, $4) @@ $sloc }
-  | LPAR ASSERT_UNLINKABLE script_module STRING RPAR
-    { AssertUnlinkable (snd $3, $4) @@ $sloc }
-  | LPAR ASSERT_TRAP script_module STRING RPAR
-    { AssertUninstantiable (snd $3, $4) @@ $sloc }
-  | LPAR ASSERT_RETURN action list(result) RPAR { AssertReturn ($3, $4) @@ $sloc }
+    { [], AssertInvalid (thd $3, $4) @@ $sloc }
+  | LPAR ASSERT_MALFORMED_CUSTOM script_module STRING RPAR
+    { [], AssertMalformedCustom (thd $3, $4) @@ $sloc }
+  | LPAR ASSERT_INVALID_CUSTOM script_module STRING RPAR
+    { [], AssertInvalidCustom (thd $3, $4) @@ $sloc }
+  | LPAR ASSERT_UNLINKABLE script_instance STRING RPAR
+    { fst $3, AssertUnlinkable (snd (snd $3), $4) @@ $sloc }
+  | LPAR ASSERT_TRAP script_instance STRING RPAR
+    { fst $3, AssertUninstantiable (snd (snd $3), $4) @@ $sloc }
+  | LPAR ASSERT_RETURN action list(result) RPAR
+    { [], AssertReturn ($3, $4) @@ $sloc }
   | LPAR ASSERT_EXCEPTION action RPAR
-    { AssertException $3 @@ $sloc }
-  | LPAR ASSERT_TRAP action STRING RPAR { AssertTrap ($3, $4) @@ $sloc }
-  | LPAR ASSERT_EXHAUSTION action STRING RPAR { AssertExhaustion ($3, $4) @@ $sloc }
+    { [], AssertException $3 @@ $sloc }
+  | LPAR ASSERT_TRAP action STRING RPAR
+    { [], AssertTrap ($3, $4) @@ $sloc }
+  | LPAR ASSERT_EXHAUSTION action STRING RPAR
+    { [], AssertExhaustion ($3, $4) @@ $sloc }
 
 cmd :
-  | action { Action $1 @@ $sloc }
-  | assertion { Assertion $1 @@ $sloc }
-  | script_module { Module (fst $1, snd $1) @@ $sloc }
-  | LPAR REGISTER name option(module_var) RPAR { Register ($3, $4) @@ $sloc }
-  | meta { Meta $1 @@ $sloc }
+  | action { [Action $1 @@ $sloc] }
+  | assertion { fst $1 @ [Assertion (snd $1) @@ $sloc] }
+  | script_module
+    { let isdef, var_opt, m = $1 in
+      if isdef then
+        [Module (var_opt, m) @@ $sloc]
+      else (* sugar *)
+        [Module (var_opt, m) @@ $sloc; Instance (var_opt, var_opt) @@ $sloc] }
+  | instance { [Instance (fst $1, snd $1) @@ $sloc] }
+  | LPAR REGISTER name option(instance_var) RPAR { [Register ($3, $4) @@ $sloc] }
+  | meta { [Meta $1 @@ $sloc] }
 
 meta :
-  | LPAR SCRIPT option(script_var) list(cmd) RPAR { Script ($3, $4) @@ $sloc }
+  | LPAR SCRIPT option(script_var) list(cmd) RPAR { Script ($3, List.concat $4) @@ $sloc }
   | LPAR INPUT option(script_var) STRING RPAR { Input ($3, $4) @@ $sloc }
   | LPAR OUTPUT option(script_var) STRING RPAR { Output ($3, Some $4) @@ $sloc }
   | LPAR OUTPUT option(script_var) RPAR { Output ($3, None) @@ $sloc }
@@ -1449,7 +1527,7 @@ result :
   | LPAR REF_STRUCT RPAR { RefResult (RefTypePat StructHT) @@ $sloc }
   | LPAR REF_ARRAY RPAR { RefResult (RefTypePat ArrayHT) @@ $sloc }
   | LPAR REF_FUNC RPAR { RefResult (RefTypePat FuncHT) @@ $sloc }
-/*| LPAR REF_EXN RPAR { RefResult (RefTypePat ExnRefType) @@ $sloc }*/
+  | LPAR REF_EXN RPAR { RefResult (RefTypePat ExnHT) @@ $sloc }
   | LPAR REF_EXTERN RPAR { RefResult (RefTypePat ExternHT) @@ $sloc }
   | LPAR REF_NULL RPAR { RefResult NullPat @@ $sloc }
   | LPAR VEC_CONST VEC_SHAPE list(numpat) RPAR
@@ -1459,11 +1537,11 @@ result :
         (Value.V128 ($3, List.map (fun lit -> lit $3) $4))) @@ $sloc }
 
 script :
-  | list(cmd) EOF { $1 }
+  | list(cmd) EOF { List.concat $1 }
   | inline_module1 EOF { [Module (None, $1) @@ $sloc] }  /* Sugar */
 
 script1 :
-  | cmd { [$1] }
+  | cmd { $1 }
 
 module1 :
   | module_ EOF { $1 }
