@@ -654,6 +654,13 @@
   )
 )
 
+(module
+    (type $f1 (sub (func (result anyref))))
+    (type $f2 (sub $f1 (func (result eqref))))
+    (type $c1 (sub (cont $f1)))
+    (type $c2 (sub $c1 (cont $f2)))
+)
+
 ;; Globals
 (module
   (type $ft (func))
