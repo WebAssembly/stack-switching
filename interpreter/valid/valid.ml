@@ -660,11 +660,6 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
        "type mismatch in continuation types";
      ts11 --> ts21, []
 
-  | Barrier (bt, es) ->
-    let InstrT (ts1, ts2, xs) as ft = check_block_type c bt e.at in
-    check_block {c with labels = ts2 :: c.labels} es ft e.at;
-    ts1 --> ts2, List.map (fun x -> x @@ e.at) xs
-
   | Throw x ->
     let FuncT (ts1, ts2) = func_type_of_tag_type c (tag c x) x.at in
     ts1 -->... [], []

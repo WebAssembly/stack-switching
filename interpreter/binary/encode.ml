@@ -303,7 +303,6 @@ struct
     | Resume (x, xls) -> op 0xe3; var x; resumetable xls
     | ResumeThrow (x, y, xls) -> op 0xe4; var x; var y; resumetable xls
     | Switch (x, y) -> op 0xe5; var x; var y
-    | Barrier (bt, es) -> op 0xe6; block_type bt; list instr es; end_ ()
 
     | Throw x -> op 0x08; var x
     | ThrowRef -> op 0x0a

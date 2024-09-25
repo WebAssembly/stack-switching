@@ -72,7 +72,7 @@ and admin_instr' =
   | Label of int * instr list * code
   | Frame of int * frame * code
   | Handler of int * catch list * code
-  | Handle of handle_table option * code
+  | Handle of handle_table * code
   | Suspending of tag_inst * value stack * ref_ option * ctxt
 
 and ctxt = code -> code
@@ -389,7 +389,7 @@ let rec step (c : config) : config =
         let hs = handle_table c xls in
         let args, vs' = i32_split n vs e.at in
         cont := None;
-        vs', [Handle (Some hs, ctxt (args, [])) @@ e.at]
+        vs', [Handle (hs, ctxt (args, [])) @@ e.at]
 
       | ResumeThrow (x, y, xls), Ref (NullRef _) :: vs ->
         vs, [Trapping "null continuation reference" @@ e.at]
@@ -403,7 +403,7 @@ let rec step (c : config) : config =
         let hs = handle_table c xls in
         let args, vs' = i32_split (Lib.List32.length ts) vs e.at in
         cont := None;
-        vs', [Handle (Some hs, ctxt ([], [Throwing (tagt, args) @@ e.at])) @@ e.at]
+        vs', [Handle (hs, ctxt ([], [Throwing (tagt, args) @@ e.at])) @@ e.at]
 
       | Switch (x, y), Ref (NullRef _) :: vs ->
          vs, [Trapping "null continuation reference" @@ e.at]
@@ -415,15 +415,6 @@ let rec step (c : config) : config =
          let tagt = tag c.frame.inst y in
          let args, vs' = i32_split (Int32.sub n 1l) vs e.at in
          vs', [Suspending (tagt, args, Some cont, fun code -> code) @@ e.at]
-
-      | Barrier (bt, es'), vs ->
-        let InstrT (ts1, _, _xs) = block_type c.frame.inst bt e.at in
-        let args, vs' = i32_split (Lib.List32.length ts1) vs e.at in
-        vs', [
-          Handle (None,
-            (args, [Plain (Block (bt, es')) @@ e.at])
-          ) @@ e.at
-        ]
 
       | ReturnCall x, vs ->
         (match (step {c with code = (vs, [Plain (Call x) @@ e.at])}).code with
@@ -1264,17 +1255,14 @@ let rec step (c : config) : config =
     | Handle (hso, (vs', [])), vs ->
       vs' @ vs, []
 
-    | Handle (None, (vs', {it = Suspending _; at} :: es')), vs ->
-      vs, [Trapping "barrier hit by suspension" @@ at]
-
-    | Handle (Some (hs, _), (vs', {it = Suspending (tagt, vs1, None, ctxt); at} :: es')), vs
+    | Handle ((hs, _), (vs', {it = Suspending (tagt, vs1, None, ctxt); at} :: es')), vs
       when List.mem_assq tagt hs ->
       let FuncT (_, ts) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
       let ctxt' code = compose (ctxt code) (vs', es') in
       [Ref (ContRef (ref (Some (Lib.List32.length ts, ctxt'))))] @ vs1 @ vs,
       [Plain (Br (List.assq tagt hs)) @@ e.at]
 
-    | Handle (Some (_, hs) as hso, (vs', {it = Suspending (tagt, vs1, Some (ContRef ({contents = Some (_, ctxt)} as cont)), ctxt'); at} :: es')), vs
+    | Handle ((_, hs) as hso, (vs', {it = Suspending (tagt, vs1, Some (ContRef ({contents = Some (_, ctxt)} as cont)), ctxt'); at} :: es')), vs
        when List.memq tagt hs ->
        let FuncT (_, ts) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
        let ctxt'' code = compose (ctxt' code) (vs', es') in

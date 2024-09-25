@@ -55,13 +55,13 @@
 
   (elem declare func $f3)
   (func $f3
-    (barrier (call $f4))
+    (call $f4)
   )
   (func $f4
     (suspend $e1)
   )
 
-  (func (export "barrier")
+  (func (export "uncaught-3")
     (block $h (result (ref $k1))
       (resume $k1 (on $e1 $h) (cont.new $k1 (ref.func $f3)))
       (unreachable)
@@ -125,8 +125,7 @@
 
 (assert_exception (invoke "uncaught-1"))
 (assert_exception (invoke "uncaught-2"))
-
-(assert_trap (invoke "barrier") "barrier")
+(assert_exception (invoke "uncaught-3"))
 
 (assert_trap (invoke "non-linear-1") "continuation already consumed")
 (assert_trap (invoke "non-linear-2") "continuation already consumed")

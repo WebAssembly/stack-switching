@@ -304,7 +304,7 @@ let parse_annots (m : module_) : Custom.section list =
 %token MUT FIELD STRUCT ARRAY SUB FINAL REC
 %token UNREACHABLE NOP DROP SELECT
 %token BLOCK END IF THEN ELSE LOOP
-%token CONT_NEW CONT_BIND SUSPEND RESUME RESUME_THROW BARRIER SWITCH
+%token CONT_NEW CONT_BIND SUSPEND RESUME RESUME_THROW SWITCH
 %token BR BR_IF BR_TABLE BR_ON_NON_NULL
 %token<Ast.idx -> Ast.instr'> BR_ON_NULL
 %token<Ast.idx -> Types.ref_type -> Types.ref_type -> Ast.instr'> BR_ON_CAST
@@ -799,8 +799,6 @@ block_instr :
   | IF labeling_opt block ELSE labeling_end_opt instr_list END labeling_end_opt
     { fun c -> let c' = $2 c ($5 @ $8) in
       let ts, es1 = $3 c' in if_ ts es1 ($6 c') }
-  | BARRIER labeling_opt block END labeling_end_opt
-    { fun c -> let c' = $2 c $5 in let bt, es = $3 c' in barrier bt es }
   | TRY_TABLE labeling_opt handler_block END labeling_end_opt
     { fun c -> let c' = $2 c $5 in
       let bt, (cs, es) = $3 c c' in try_table bt cs es }
@@ -907,8 +905,6 @@ expr1 :  /* Sugar */
   | IF labeling_opt if_block
     { fun c -> let c' = $2 c [] in
       let bt, (es, es1, es2) = $3 c c' in es, if_ bt es1 es2 }
-  | BARRIER labeling_opt block
-    { fun c -> let c' = $2 c [] in let bt, es = $3 c' in [], barrier bt es }
   | TRY_TABLE labeling_opt try_block
     { fun c -> let c' = $2 c [] in
       let bt, (cs, es) = $3 c c' in [], try_table bt cs es }

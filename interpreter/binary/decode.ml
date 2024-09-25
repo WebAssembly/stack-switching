@@ -648,11 +648,6 @@ let rec instr s =
     let x = at var s in
     let y = at var s in
     switch x y
-  | 0xe6 ->
-    let bt = block_type s in
-    let es' = instr_block s in
-    end_ s;
-    barrier bt es'
 
   | 0xfb as b ->
     (match u32 s with

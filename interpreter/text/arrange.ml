@@ -541,7 +541,6 @@ let rec instr e =
       "resume_throw " ^ var x ^ " " ^ var y, resumetable xys
     | Switch (x, z) ->
       "switch " ^ var x ^ " " ^ var z, []
-    | Barrier (bt, es) -> "barrier", block_type bt @ list instr es
     | Throw x -> "throw " ^ var x, []
     | ThrowRef -> "throw_ref", []
     | TryTable (bt, cs, es) ->

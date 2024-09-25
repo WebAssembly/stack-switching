@@ -167,7 +167,7 @@ let rec instr (e : instr) =
   | ArrayInitElem (x, y) -> types (idx x) ++ elems (idx y)
   | ExternConvert _ -> empty
   | Const _ | Test _ | Compare _ | Unary _ | Binary _ | Convert _ -> empty
-  | Block (bt, es) | Loop (bt, es) | Barrier (bt, es) -> block_type bt ++ block es
+  | Block (bt, es) | Loop (bt, es) -> block_type bt ++ block es
   | If (bt, es1, es2) -> block_type bt ++ block es1 ++ block es2
   | Br x | BrIf x | BrOnNull x | BrOnNonNull x -> labels (idx x)
   | BrOnCast (x, t1, t2) | BrOnCastFail (x, t1, t2) ->
