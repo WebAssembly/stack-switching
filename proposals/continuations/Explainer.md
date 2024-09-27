@@ -234,7 +234,7 @@ abortive action" which causes the stack to be unwound.
 
 
 ```wast
-  resume_throw $ct $exn (tag $e $l)* : [tp* (ref $ct)])] -> [tr*]
+  resume_throw $ct $exn (on $e $l)* : [tp* (ref $ct)])] -> [tr*]
   where:
   - $ct = cont [ta*] -> [tr*]
   - $exn : [tp*] -> []
@@ -423,7 +423,7 @@ We now define a scheduler.
     (loop $l
       (if (call $queue-empty) (then (return)))
       (block $on_yield (result (ref $cont))
-        (resume $cont (tag $yield $on_yield)
+        (resume $cont (on $yield $on_yield)
                       (call $dequeue)
         )
         (br $l)  ;; thread terminated
@@ -598,8 +598,8 @@ thread to completion without actually yielding.
       (if (ref.is_null (local.get $nextk)) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_fork (result (ref $cont) (ref $cont))
-          (resume $cont (tag $yield $on_yield)
-                        (tag $fork $on_fork)
+          (resume $cont (on $yield $on_yield)
+                        (on $fork $on_fork)
                         (local.get $nextk)
           )
           (local.set $nextk (call $dequeue))
@@ -673,8 +673,8 @@ schedulers.
       (if (ref.is_null (local.get $nextk)) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_fork (result (ref $cont) (ref $cont))
-          (resume $cont (tag $yield $on_yield)
-                        (tag $fork $on_fork)
+          (resume $cont (on $yield $on_yield)
+                        (on $fork $on_fork)
                         (local.get $nextk)
           )
           (local.set $nextk (call $dequeue))
@@ -697,8 +697,8 @@ schedulers.
       (if (ref.is_null (local.get $nextk)) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_fork (result (ref $cont) (ref $cont))
-          (resume $cont (tag $yield $on_yield)
-                        (tag $fork $on_fork)
+          (resume $cont (on $yield $on_yield)
+                        (on $fork $on_fork)
                         (local.get $nextk)
           )
           (local.set $nextk (call $dequeue))
@@ -721,8 +721,8 @@ schedulers.
       (if (ref.is_null (local.get $nextk)) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_fork (result (ref $cont) (ref $cont))
-          (resume $cont (tag $yield $on_yield)
-                        (tag $fork $on_fork)
+          (resume $cont (on $yield $on_yield)
+                        (on $fork $on_fork)
                         (local.get $nextk)
           )
           (local.set $nextk (call $dequeue))
@@ -746,8 +746,8 @@ schedulers.
       (if (ref.is_null (local.get $nextk)) (then (return)))
       (block $on_yield (result (ref $cont))
         (block $on_fork (result (ref $cont) (ref $cont))
-          (resume $cont (tag $yield $on_yield)
-                        (tag $fork $on_fork)
+          (resume $cont (on $yield $on_yield)
+                        (on $fork $on_fork)
                         (local.get $nextk)
           )
           (local.set $nextk (call $dequeue))
@@ -933,7 +933,7 @@ First we implement control/prompt.
   (tag $control (export "control") (param (ref $cont-func)))    ;; control : [([contref ([] -> [])] -> [])] -> []
   (func $prompt (export "prompt") (param $nextk (ref null $cont)) ;; prompt : [(contref ([] -> []))] -> []
     (block $on_control (result (ref $cont-func) (ref $cont))
-       (resume $cont (tag $control $on_control)
+       (resume $cont (on $control $on_control)
                      (local.get $nextk))
        (return)
     ) ;;   $on_control (param (ref $cont-func) (ref $cont))
