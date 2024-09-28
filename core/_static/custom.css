@@ -15,10 +15,16 @@ body {
   font-size: 15px;
 }
 
-div.document { width: 1000px; }
+div.document {
+  width: unset;
+  max-width: 1000px;
+}
 div.bodywrapper { margin: 0 0 0 200px; }
 div.body { padding: 0 10px 0 10px; }
-div.footer { width: 1000px; }
+div.footer {
+  width: unset;
+  max-width: 1000px;
+}
 
 div.body h1 { font-size: 200%; }
 div.body h2 { font-size: 150%; }
@@ -44,6 +50,8 @@ div.admonition p.admonition-title {
 div.math {
   background-color: #F0F0F0;
   padding: 3px 0 3px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 div.relations {
