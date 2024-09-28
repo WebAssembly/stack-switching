@@ -97,8 +97,8 @@ let kDeclFunctionImport = 0x02;
 let kDeclFunctionLocals = 0x04;
 let kDeclFunctionExport = 0x08;
 
-// Local types
-let kWasmStmt = 0x40;
+// Value types and related
+let kWasmVoid = 0x40;
 let kWasmI32 = 0x7f;
 let kWasmI64 = 0x7e;
 let kWasmF32 = 0x7d;
@@ -118,28 +118,32 @@ let kWasmEqRef = -0x13;
 let kWasmI31Ref = -0x14;
 let kWasmStructRef = -0x15;
 let kWasmArrayRef = -0x16;
+let kWasmExnRef = -0x17;
+let kWasmNullExnRef = -0x0c;
 
 // Use the positive-byte versions inside function bodies.
 let kLeb128Mask = 0x7f;
 let kFuncRefCode = kWasmFuncRef & kLeb128Mask;
 let kAnyFuncCode = kFuncRefCode;  // Alias named as in the JS API spec
 let kExternRefCode = kWasmExternRef & kLeb128Mask;
+let kExnRefCode = kWasmExnRef & kLeb128Mask;
 let kAnyRefCode = kWasmAnyRef & kLeb128Mask;
 let kEqRefCode = kWasmEqRef & kLeb128Mask;
 let kI31RefCode = kWasmI31Ref & kLeb128Mask;
 let kNullExternRefCode = kWasmNullExternRef & kLeb128Mask;
 let kNullFuncRefCode = kWasmNullFuncRef & kLeb128Mask;
+let kNullExnRefCode = kWasmNullExnRef & kLeb128Mask;
 let kStructRefCode = kWasmStructRef & kLeb128Mask;
 let kArrayRefCode = kWasmArrayRef & kLeb128Mask;
 let kNullRefCode = kWasmNullRef & kLeb128Mask;
 
 let kWasmRefNull = 0x63;
 let kWasmRef = 0x64;
-function wasmRefNullType(heap_type) {
-  return {opcode: kWasmRefNull, heap_type: heap_type};
+function wasmRefNullType(heap_type, is_shared = false) {
+  return {opcode: kWasmRefNull, heap_type: heap_type, is_shared: is_shared};
 }
-function wasmRefType(heap_type) {
-  return {opcode: kWasmRef, heap_type: heap_type};
+function wasmRefType(heap_type, is_shared = false) {
+  return {opcode: kWasmRef, heap_type: heap_type, is_shared: is_shared};
 }
 
 let kExternalFunction = 0;
@@ -152,7 +156,7 @@ let kTableZero = 0;
 let kMemoryZero = 0;
 let kSegmentZero = 0;
 
-let kTagAttribute = 0;
+let kExceptionAttribute = 0;
 
 // Useful signatures
 let kSig_i_i = makeSig([kWasmI32], [kWasmI32]);
@@ -232,10 +236,9 @@ let kExprIf = 0x04;
 let kExprElse = 0x05;
 let kExprTry = 0x06;
 let kExprCatch = 0x07;
-let kExprCatchAll = 0x19;
 let kExprThrow = 0x08;
 let kExprRethrow = 0x09;
-let kExprBrOnExn = 0x0a;
+let kExprThrowRef = 0x0a;
 let kExprEnd = 0x0b;
 let kExprBr = 0x0c;
 let kExprBrIf = 0x0d;
@@ -245,8 +248,10 @@ let kExprCallFunction = 0x10;
 let kExprCallIndirect = 0x11;
 let kExprReturnCall = 0x12;
 let kExprReturnCallIndirect = 0x13;
+let kExprCatchAll = 0x19;
 let kExprDrop = 0x1a;
 let kExprSelect = 0x1b;
+let kExprTryTable = 0x1f;
 let kExprLocalGet = 0x20;
 let kExprLocalSet = 0x21;
 let kExprLocalTee = 0x22;
@@ -456,7 +461,7 @@ let kExprBrOnCast = 0x18;
 let kExprBrOnCastFail = 0x19;
 let kExprExternInternalize = 0x1a;
 let kExprExternExternalize = 0x1b;
-let kExprI31New = 0x1c;
+let kExprRefI31 = 0x1c;
 let kExprI31GetS = 0x1d;
 let kExprI31GetU = 0x1e;
 
@@ -548,6 +553,12 @@ let kExprI32x4Splat = 0x0c;
 let kExprI32x4Eq = 0x2c;
 let kExprS1x4AllTrue = 0x75;
 let kExprF32x4Min = 0x9e;
+
+// Exception handling with exnref.
+let kCatchNoRef = 0x0;
+let kCatchRef = 0x1;
+let kCatchAllNoRef = 0x2;
+let kCatchAllRef = 0x3;
 
 class Binary {
   constructor() {
@@ -923,7 +934,7 @@ class WasmModuleBuilder {
 
   addTable(type, initial_size, max_size = undefined, init_expr = undefined) {
     if (type == kWasmI32 || type == kWasmI64 || type == kWasmF32 ||
-        type == kWasmF64 || type == kWasmS128 || type == kWasmStmt) {
+        type == kWasmF64 || type == kWasmS128 || type == kWasmVoid) {
       throw new Error('Tables must be of a reference type');
     }
     if (init_expr != undefined) checkExpr(init_expr);
@@ -1173,7 +1184,7 @@ class WasmModuleBuilder {
             section.emit_u32v(imp.initial); // initial
             if (has_max) section.emit_u32v(imp.maximum); // maximum
           } else if (imp.kind == kExternalTag) {
-            section.emit_u32v(kTagAttribute);
+            section.emit_u32v(kExceptionAttribute);
             section.emit_u32v(imp.type);
           } else {
             throw new Error("unknown/unsupported import kind " + imp.kind);
@@ -1199,6 +1210,10 @@ class WasmModuleBuilder {
       binary.emit_section(kTableSectionCode, section => {
         section.emit_u32v(wasm.tables.length);
         for (let table of wasm.tables) {
+          if (table.has_init) {
+            section.emit_u8(0x40);  // "has initializer"
+            section.emit_u8(0x00);  // Reserved byte.
+          }
           section.emit_type(table.type);
           section.emit_u8(table.has_max);
           section.emit_u32v(table.initial_size);
@@ -1245,7 +1260,7 @@ class WasmModuleBuilder {
       binary.emit_section(kTagSectionCode, section => {
         section.emit_u32v(wasm.tags.length);
         for (let type of wasm.tags) {
-          section.emit_u32v(kTagAttribute);
+          section.emit_u32v(kExceptionAttribute);
           section.emit_u32v(type);
         }
       });

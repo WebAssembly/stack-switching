@@ -379,7 +379,7 @@ Aggregate Reference Instructions
      \qquad
      \X{ft}^\ast[y] = \mut~\X{st}
      \qquad
-     \sx = \epsilon \Leftrightarrow \X{st} = \unpacktype(\X{st})
+     \sx^? = \epsilon \Leftrightarrow \X{st} = \unpacktype(\X{st})
    }{
      C \vdashinstr \STRUCTGET\K{\_}\sx^?~x~y : [(\REF~\NULL~x)] \to [\unpacktype(\X{st})]
    }
@@ -508,7 +508,7 @@ Aggregate Reference Instructions
      \qquad
      C \vdashreftypematch C.\CELEMS[y] \matchesreftype \X{rt}
    }{
-     C \vdashinstr \ARRAYNEWELEM~x~n : [\I32~\I32] \to [(\REF~x)]
+     C \vdashinstr \ARRAYNEWELEM~x~y : [\I32~\I32] \to [(\REF~x)]
    }
 
 
@@ -539,7 +539,7 @@ Aggregate Reference Instructions
      \qquad
      C.\CDATAS[y] = {\ok}
    }{
-     C \vdashinstr \ARRAYNEWDATA~x~n : [\I32~\I32] \to [(\REF~x)]
+     C \vdashinstr \ARRAYNEWDATA~x~y : [\I32~\I32] \to [(\REF~x)]
    }
 
 
@@ -566,7 +566,7 @@ Aggregate Reference Instructions
    \frac{
      \expanddt(C.\CTYPES[x]) = \TARRAY~(\mut~\X{st})
      \qquad
-     \sx = \epsilon \Leftrightarrow \X{st} = \unpacktype(\X{st})
+     \sx^? = \epsilon \Leftrightarrow \X{st} = \unpacktype(\X{st})
    }{
      C \vdashinstr \ARRAYGET\K{\_}\sx^?~x : [(\REF~\NULL~x)~\I32] \to [\unpacktype(\X{st})]
    }
@@ -806,7 +806,7 @@ External Reference Instructions
    single: abstract syntax; instruction
 
 .. _valid-instr-vec:
-.. _aux-unpacked:
+.. _aux-unpackshape:
 
 Vector Instructions
 ~~~~~~~~~~~~~~~~~~~
@@ -815,9 +815,7 @@ Vector instructions can have a prefix to describe the :ref:`shape <syntax-vec-sh
 
 .. math::
    \begin{array}{lll@{\qquad}l}
-   \unpacked(\K{i8x16}) &=& \I32 \\
-   \unpacked(\K{i16x8}) &=& \I32 \\
-   \unpacked(t\K{x}N) &=& t
+   \unpackshape(t\K{x}N) &=& \unpacktype(t)
    \end{array}
 
 
@@ -937,14 +935,14 @@ The following auxiliary function denotes the number of lanes in a vector shape, 
 :math:`\shape\K{.}\SPLAT`
 .........................
 
-* Let :math:`t` be :math:`\unpacked(\shape)`.
+* Let :math:`t` be :math:`\unpackshape(\shape)`.
 
 * The instruction is valid with type :math:`[t] \to [\V128]`.
 
 .. math::
    \frac{
    }{
-     C \vdashinstr \shape\K{.}\SPLAT : [\unpacked(\shape)] \to [\V128]
+     C \vdashinstr \shape\K{.}\SPLAT : [\unpackshape(\shape)] \to [\V128]
    }
 
 
@@ -955,13 +953,13 @@ The following auxiliary function denotes the number of lanes in a vector shape, 
 
 * The lane index :math:`\laneidx` must be smaller than :math:`\dim(\shape)`.
 
-* The instruction is valid with type :math:`[\V128] \to [\unpacked(\shape)]`.
+* The instruction is valid with type :math:`[\V128] \to [\unpackshape(\shape)]`.
 
 .. math::
    \frac{
      \laneidx < \dim(\shape)
    }{
-     C \vdashinstr \shape\K{.}\EXTRACTLANE\K{\_}\sx^?~\laneidx : [\V128] \to [\unpacked(\shape)]
+     C \vdashinstr \shape\K{.}\EXTRACTLANE\K{\_}\sx^?~\laneidx : [\V128] \to [\unpackshape(\shape)]
    }
 
 
@@ -972,7 +970,7 @@ The following auxiliary function denotes the number of lanes in a vector shape, 
 
 * The lane index :math:`\laneidx` must be smaller than :math:`\dim(\shape)`.
 
-* Let :math:`t` be :math:`\unpacked(\shape)`.
+* Let :math:`t` be :math:`\unpackshape(\shape)`.
 
 * The instruction is valid with type :math:`[\V128~t] \to [\V128]`.
 
@@ -980,7 +978,7 @@ The following auxiliary function denotes the number of lanes in a vector shape, 
    \frac{
      \laneidx < \dim(\shape)
    }{
-     C \vdashinstr \shape\K{.}\REPLACELANE~\laneidx : [\V128~\unpacked(\shape)] \to [\V128]
+     C \vdashinstr \shape\K{.}\REPLACELANE~\laneidx : [\V128~\unpackshape(\shape)] \to [\V128]
    }
 
 
@@ -1662,7 +1660,7 @@ Memory Instructions
    \frac{
      C.\CMEMS[x] = \memtype
      \qquad
-     2^{\memarg.\ALIGN} < N/8
+     2^{\memarg.\ALIGN} \leq N/8
      \qquad
      \laneidx < 128/N
    }{
@@ -1687,7 +1685,7 @@ Memory Instructions
    \frac{
      C.\CMEMS[x] = \memtype
      \qquad
-     2^{\memarg.\ALIGN} < N/8
+     2^{\memarg.\ALIGN} \leq N/8
      \qquad
      \laneidx < 128/N
    }{
@@ -1974,7 +1972,7 @@ Control Instructions
 
 * The tag :math:`C.\CTAGS[x]` must be defined in the context.
 
-* Let :math:`[t^\ast] \to [{t'}^\ast]` be the :ref:`tag type <syntax-tagtype>` :math:`C.\CTAGS[x]`.
+* Let :math:`[t^\ast] \to [{t'}^\ast]` be the :ref:`expansion <aux-expand-deftype>` of the :ref:`tag type <syntax-tagtype>` :math:`C.\CTAGS[x]`.
 
 * The :ref:`result type <syntax-resulttype>` :math:`[{t'}^\ast]` must be empty.
 
@@ -1986,7 +1984,7 @@ Control Instructions
 
 .. math::
    \frac{
-     C.\CTAGS[x] = [t^\ast] \toF []
+     \expanddt(C.\CTAGS[x]) = [t^\ast] \toF []
      \qquad
      C.\CLABELS[l] = [t^\ast]
    }{
@@ -1998,21 +1996,21 @@ Control Instructions
 
 * The tag :math:`C.\CTAGS[x]` must be defined in the context.
 
-* Let :math:`[t^\ast] \to [{t'}^\ast]` be the :ref:`tag type <syntax-tagtype>` :math:`C.\CTAGS[x]`.
+* Let :math:`[t^\ast] \to [{t'}^\ast]` be the :ref:`expansion <aux-expand-deftype>` of the :ref:`tag type <syntax-tagtype>` :math:`C.\CTAGS[x]`.
 
 * The :ref:`result type <syntax-resulttype>` :math:`[{t'}^\ast]` must be empty.
 
 * The label :math:`C.\CLABELS[l]` must be defined in the context.
 
-* The :ref:`result type <syntax-resulttype>` :math:`[t^\ast]` must be the same as :math:`C.\CLABELS[l]` with |EXNREF| appended.
+* The :ref:`result type <syntax-resulttype>` :math:`[t^\ast~(\REF~\EXN)]` must :ref:`match <match-resulttype>` :math:`C.\CLABELS[l]`.
 
 * Then the catch clause is valid.
 
 .. math::
    \frac{
-     C.\CTAGS[x] = [t^\ast] \toF []
+     \expanddt(C.\CTAGS[x]) = [t^\ast] \toF []
      \qquad
-     C.\CLABELS[l] = [t^\ast~\EXNREF]
+     C \vdashresulttypematch [t^\ast~(\REF~\EXN)] \matchesresulttype C.\CLABELS[l]
    }{
      C \vdashcatch \CATCHREF~x~l \ok
    }
@@ -2038,13 +2036,13 @@ Control Instructions
 
 * The label :math:`C.\CLABELS[l]` must be defined in the context.
 
-* The :ref:`result type <syntax-resulttype>` :math:`C.\CLABELS[l] must be :math:`[\EXNREF]`.
+* The :ref:`result type <syntax-resulttype>` :math:`[(\REF~\EXN)]` must :ref:`match <match-resulttype>` :math:`C.\CLABELS[l]`.
 
 * Then the catch clause is valid.
 
 .. math::
    \frac{
-     C.\CLABELS[l] = [\EXNREF]
+     C \vdashresulttypematch [(\REF~\EXN)] \matchesresulttype C.\CLABELS[l]
    }{
      C \vdashcatch \CATCHALLREF~l \ok
    }
@@ -2273,7 +2271,7 @@ Control Instructions
 
 * Let :math:`[t^\ast]` be the :ref:`result type <syntax-resulttype>` of :math:`C.\CRETURN`.
 
-* Then the instruction is valid with any :ref:`valid <valid-instrtype>` type of the form :math:`[t_1^\ast] \to [t_2^\ast]`.
+* Then the instruction is valid with any :ref:`valid <valid-instrtype>` type of the form :math:`[t_1^\ast~t^\ast] \to [t_2^\ast]`.
 
 .. math::
    \frac{
