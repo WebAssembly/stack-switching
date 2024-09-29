@@ -2110,15 +2110,10 @@ Control Instructions
 
 * There must be a sequence :math:`t^\ast` of :ref:`value types <syntax-valtype>`, such that:
 
-  * The length of the sequence :math:`t^\ast` is the same as the length of the sequence :math:`C.\CLABELS[l_N]`.
+  * The result type :math:`[t^\ast]` :ref:`matches <match-resulttype>` :math:`C.\CLABELS[l_N]`.
 
-  * For each :ref:`operand type <syntax-opdtype>` :math:`t_j` in :math:`t^\ast` and corresponding type :math:`t'_{Nj}` in :math:`C.\CLABELS[l_N]`, :math:`t_j` :ref:`matches <match-opdtype>` :math:`t'_{Nj}`.
-
-  * For each :ref:`label <syntax-label>` :math:`l_i` in :math:`l^\ast`:
-
-    * The length of the sequence :math:`t^\ast` is the same as the length of the sequence :math:`C.\CLABELS[l_i]`.
-
-    * For each :ref:`operand type <syntax-opdtype>` :math:`t_j` in :math:`t^\ast` and corresponding type :math:`t'_{ij}` in :math:`C.\CLABELS[l_i]`, :math:`t_j` :ref:`matches <match-opdtype>` :math:`t'_{ij}`.
+  * For all :math:`l_i` in :math:`l^\ast`,
+    the result type :math:`[t^\ast]` :ref:`matches <match-resulttype>` :math:`C.\CLABELS[l_i]`.
 
 * Then the instruction is valid with any :ref:`valid <valid-instrtype>` type of the form :math:`[t_1^\ast~t^\ast~\I32] \to [t_2^\ast]`.
 

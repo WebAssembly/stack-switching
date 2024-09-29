@@ -1469,7 +1469,7 @@ The internal methods of an [=Exported GC Object=] use the following implementati
     1. Return keys.
 </div>
 
-<div algorithm="gc">
+<div algorithm>
   To create <dfn>a new Exported GC Object</dfn> from a WebAssembly [=object address=] |objectaddr| and a string |objectkind|, perform the following steps:
 
     1. Assert: |objectkind| is either "array" or "struct".
