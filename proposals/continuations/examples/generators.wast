@@ -50,7 +50,7 @@
     (loop $l
       (block $on_yield (result i32 (ref $cont))
         (if (local.get $n)
-          (then (resume $cont (tag $yield $on_yield) (local.get $k)))
+          (then (resume $cont (on $yield $on_yield) (local.get $k)))
         )
         (return)
       ) ;;   $on_yield (result i32 (ref $cont))
@@ -67,7 +67,7 @@
     (loop $l
       (block $on_yield (result i32 (ref $cont))
         (if (local.get $n)
-          (then (resume $cont (tag $yield $on_yield) (local.get $k)))
+          (then (resume $cont (on $yield $on_yield) (local.get $k)))
         )
         (return (local.get $sum))
       ) ;;   $on_yield (result i32 (ref $cont))
@@ -99,7 +99,7 @@
     (local $next_k (ref $cont))
     (local $next_v i32)
     (block $on_yield (result i32 (ref $cont))
-      (resume $cont (tag $yield $on_yield)
+      (resume $cont (on $yield $on_yield)
                     (table.get $active (local.get $g))
       )
       (return (i32.const -1))

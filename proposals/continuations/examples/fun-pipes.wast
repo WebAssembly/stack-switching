@@ -10,7 +10,7 @@
 
   (func $piper (param $n i32) (param $p (ref $producer)) (param $c (ref $consumer))
      (block $on-receive (result (ref $consumer))
-        (resume $consumer (tag $receive $on-receive) (local.get $n) (local.get $c))
+        (resume $consumer (on $receive $on-receive) (local.get $n) (local.get $c))
         (return)
      ) ;; receive
      (local.set $c)
@@ -20,7 +20,7 @@
   (func $copiper (param $c (ref $consumer)) (param $p (ref $producer))
      (local $n i32)
      (block $on-send (result i32 (ref $producer))
-        (resume $producer (tag $send $on-send) (local.get $p))
+        (resume $producer (on $send $on-send) (local.get $p))
         (return)
      ) ;; send
      (local.set $p)

@@ -19,6 +19,7 @@ type heap_type =
   | FuncHT | NoFuncHT
   | ExnHT | NoExnHT
   | ExternHT | NoExternHT
+  | ContHT | NoContHT
   | VarHT of var
   | DefHT of def_type
   | BotHT
@@ -34,11 +35,13 @@ and field_type = FieldT of mut * storage_type
 and struct_type = StructT of field_type list
 and array_type = ArrayT of field_type
 and func_type = FuncT of result_type * result_type
+and cont_type = ContT of heap_type
 
 and str_type =
   | DefStructT of struct_type
   | DefArrayT of array_type
   | DefFuncT of func_type
+  | DefContT of cont_type
 
 and sub_type = SubT of final * heap_type list * str_type
 and rec_type = RecT of sub_type list
@@ -47,8 +50,8 @@ and def_type = DefT of rec_type * int32
 type table_type = TableT of Int32.t limits * ref_type
 type memory_type = MemoryT of Int32.t limits
 type global_type = GlobalT of mut * val_type
-type tag_type = TagT of def_type
 type local_type = LocalT of init * val_type
+type tag_type = TagT of def_type
 type extern_type =
   | ExternFuncT of def_type
   | ExternTableT of table_type
@@ -110,34 +113,6 @@ let defaultable = function
   | BotT -> assert false
 
 
-(* Projections *)
-
-let unpacked_storage_type = function
-  | ValStorageT t -> t
-  | PackStorageT _ -> NumT I32T
-
-let unpacked_field_type (FieldT (_mut, t)) = unpacked_storage_type t
-
-
-let as_func_str_type (st : str_type) : func_type =
-  match st with
-  | DefFuncT ft -> ft
-  | _ -> assert false
-
-let as_struct_str_type (st : str_type) : struct_type =
-  match st with
-  | DefStructT st -> st
-  | _ -> assert false
-
-let as_array_str_type (st : str_type) : array_type =
-  match st with
-  | DefArrayT at -> at
-  | _ -> assert false
-
-let extern_type_of_import_type (ImportT (et, _, _)) = et
-let extern_type_of_export_type (ExportT (et, _)) = et
-
-
 (* Filters *)
 
 let funcs = List.filter_map (function ExternFuncT ft -> Some ft | _ -> None)
@@ -173,6 +148,8 @@ let subst_heap_type s = function
   | NoExnHT -> NoExnHT
   | ExternHT -> ExternHT
   | NoExternHT -> NoExternHT
+  | ContHT -> ContHT
+  | NoContHT -> NoContHT
   | VarHT x -> s x
   | DefHT dt -> DefHT dt  (* assume closed *)
   | BotHT -> BotHT
@@ -206,10 +183,14 @@ let subst_array_type s = function
 let subst_func_type s = function
   | FuncT (ts1, ts2) -> FuncT (subst_result_type s ts1, subst_result_type s ts2)
 
+let subst_cont_type s = function
+  | ContT ht -> ContT (subst_heap_type s ht)
+
 let subst_str_type s = function
   | DefStructT st -> DefStructT (subst_struct_type s st)
   | DefArrayT at -> DefArrayT (subst_array_type s at)
   | DefFuncT ft -> DefFuncT (subst_func_type s ft)
+  | DefContT ct -> DefContT (subst_cont_type s ct)
 
 let subst_sub_type s = function
   | SubT (fin, hts, st) ->
@@ -239,8 +220,7 @@ let subst_extern_type s = function
   | ExternTableT tt -> ExternTableT (subst_table_type s tt)
   | ExternMemoryT mt -> ExternMemoryT (subst_memory_type s mt)
   | ExternGlobalT gt -> ExternGlobalT (subst_global_type s gt)
-  | ExternTagT tt -> ExternTagT (subst_tag_type s tt)
-
+  | ExternTagT et -> ExternTagT (subst_tag_type s et)
 
 let subst_export_type s = function
   | ExportT (et, name) -> ExportT (subst_extern_type s et, name)
@@ -288,6 +268,37 @@ let unroll_def_type (dt : def_type) : sub_type =
 let expand_def_type (dt : def_type) : str_type =
   let SubT (_, _, st) = unroll_def_type dt in
   st
+
+(* Projections *)
+
+let unpacked_storage_type = function
+  | ValStorageT t -> t
+  | PackStorageT _ -> NumT I32T
+
+let unpacked_field_type (FieldT (_mut, t)) = unpacked_storage_type t
+
+let as_func_str_type (st : str_type) : func_type =
+  match st with
+  | DefFuncT ft -> ft
+  | _ -> assert false
+
+let as_cont_str_type (dt : str_type) : cont_type =
+  match dt with
+  | DefContT ct -> ct
+  | _ -> assert false
+
+let as_struct_str_type (st : str_type) : struct_type =
+  match st with
+  | DefStructT st -> st
+  | _ -> assert false
+
+let as_array_str_type (st : str_type) : array_type =
+  match st with
+  | DefArrayT at -> at
+  | _ -> assert false
+
+let extern_type_of_import_type (ImportT (et, _, _)) = et
+let extern_type_of_export_type (ExportT (et, _)) = et
 
 
 (* String conversion *)
@@ -348,6 +359,8 @@ let rec string_of_heap_type = function
   | NoExnHT -> "noexn"
   | ExternHT -> "extern"
   | NoExternHT -> "noextern"
+  | ContHT -> "cont"
+  | NoContHT -> "nocont"
   | VarHT x -> string_of_var x
   | DefHT dt -> "(" ^ string_of_def_type dt ^ ")"
   | BotHT -> "something"
@@ -384,10 +397,18 @@ and string_of_func_type = function
   | FuncT (ts1, ts2) ->
     string_of_result_type ts1 ^ " -> " ^ string_of_result_type ts2
 
+and string_of_cont_type = function
+  | ContT ht -> string_of_heap_type ht
+
 and string_of_str_type = function
   | DefStructT st -> "struct " ^ string_of_struct_type st
   | DefArrayT at -> "array " ^ string_of_array_type at
   | DefFuncT ft -> "func " ^ string_of_func_type ft
+  | DefContT ct -> "cont " ^ string_of_cont_type ct
+
+
+and string_of_tag_type = function
+  | TagT dt -> string_of_def_type dt
 
 and string_of_sub_type = function
   | SubT (Final, [], st) -> string_of_str_type st
@@ -421,9 +442,6 @@ let string_of_table_type = function
 let string_of_global_type = function
   | GlobalT (mut, t) -> string_of_mut (string_of_val_type t) mut
 
-let string_of_tag_type = function
-  | TagT dt -> string_of_def_type dt
-
 let string_of_local_type = function
   | LocalT (Set, t) -> string_of_val_type t
   | LocalT (Unset, t) -> "(unset " ^ string_of_val_type t ^ ")"
@@ -433,8 +451,7 @@ let string_of_extern_type = function
   | ExternTableT tt -> "table " ^ string_of_table_type tt
   | ExternMemoryT mt -> "memory " ^ string_of_memory_type mt
   | ExternGlobalT gt -> "global " ^ string_of_global_type gt
-  | ExternTagT tt -> "tag " ^ string_of_tag_type tt
-
+  | ExternTagT t -> "tag " ^ string_of_tag_type t
 
 let string_of_export_type = function
   | ExportT (et, name) ->
@@ -450,4 +467,4 @@ let string_of_module_type = function
     String.concat "" (
       List.map (fun it -> "import " ^ string_of_import_type it ^ "\n") its @
       List.map (fun et -> "export " ^ string_of_export_type et ^ "\n") ets
-    )
+      )

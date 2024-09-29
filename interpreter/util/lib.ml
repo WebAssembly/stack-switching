@@ -80,6 +80,11 @@ struct
     | n, y::ys' when n > 0 -> split' (n - 1) (y::xs) ys'
     | _ -> failwith "split"
 
+  let rec last_opt = function
+    | x::[] -> Some x
+    | _::xs -> last_opt xs
+    | [] -> None
+
   let rec lead = function
     | x::[] -> []
     | x::xs -> x :: lead xs
@@ -108,6 +113,13 @@ struct
     | [] -> []
     | x1::x2::xs -> f x1 x2 :: pairwise f xs
     | _ -> failwith "pairwise"
+
+  let rec map_filter f = function
+    | [] -> []
+    | x::xs ->
+      match f x with
+      | None -> map_filter f xs
+      | Some y -> y :: map_filter f xs
 end
 
 module List32 =

@@ -110,7 +110,7 @@
     (loop $l
       (if (call $queue-empty) (then (return)))
       (block $on_yield (result (ref $cont))
-        (resume $cont (tag $yield $on_yield)
+        (resume $cont (on $yield $on_yield)
                       (call $dequeue)
         )
         (br $l)  ;; thread terminated

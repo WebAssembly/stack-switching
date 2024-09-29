@@ -28,6 +28,7 @@ val match_str_type : context -> str_type -> str_type -> bool
 val match_def_type : context -> def_type -> def_type -> bool
 
 val match_func_type : context -> func_type -> func_type -> bool
+val match_cont_type : context -> cont_type -> cont_type -> bool
 
 val match_table_type : context -> table_type -> table_type -> bool
 val match_memory_type : context -> memory_type -> memory_type -> bool
