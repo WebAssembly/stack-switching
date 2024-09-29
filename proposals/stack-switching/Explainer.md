@@ -767,12 +767,12 @@ This abbreviation will be formalised with an auxiliary function or other means i
 
 - `cont.new <typeidx>`
   - Create a new continuation from a given typed funcref.
-  - `cont.new $ct : [(ref null? $ft)] -> [(ref $ct)]`
+  - `cont.new $ct : [(ref null $ft)] -> [(ref $ct)]`
     - iff `C.types[$ct] ~~ cont [t1*] -> [t2*]`
 
 - `cont.bind <typeidx> <typeidx>`
   - Partially apply a continuation.
-  - `cont.bind $ct $ct' : [t3* (ref null? $ct)] -> [(ref $ct')]`
+  - `cont.bind $ct $ct' : [t3* (ref null $ct)] -> [(ref $ct')]`
     - iff `C.types[$ct] ~~ cont [t3* t1*] -> [t2*]`
     - and `C.types[$ct'] ~~ cont [t1'*] -> [t2'*]`
     - and `[t1*] -> [t2*] <: [t1'*] -> [t2'*]`
@@ -780,14 +780,14 @@ This abbreviation will be formalised with an auxiliary function or other means i
 - `resume <typeidx> hdl*`
   - Execute a given continuation.
     - If the executed continuation suspends with a control tag `$t`, the corresponding handler `(on $t H)` is executed.
-  - `resume $ct hdl* : [t1* (ref null? $ct)] -> [t2*]`
+  - `resume $ct hdl* : [t1* (ref null $ct)] -> [t2*]`
     - iff `C.types[$ct] ~~ cont [t1*] -> [t2*]`
     - and `(hdl : t2*)*`
 
 - `resume_throw <typeidx> <exnidx> hdl*`
   - Execute a given continuation, but force it to immediately throw the annotated exception.
   - Used to abort a continuation.
-  - `resume_throw $ct $e hdl* : [te* (ref null? $ct)] -> [t2*]`
+  - `resume_throw $ct $e hdl* : [te* (ref null $ct)] -> [t2*]`
     - iff `C.types[$ct] ~~ cont [t1*] -> [t2*]`
     - and `C.tags[$e] : tag $ft`
     - and `C.types[$ft] ~~ func [te*] -> []`
