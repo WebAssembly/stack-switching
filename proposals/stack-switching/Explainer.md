@@ -842,7 +842,7 @@ We extend the binary format of composite types, heap types, and instructions.
 | Opcode | Type            | Parameters | Note |
 | ------ | --------------- | ---------- |------|
 | -0x20  | `func t1* t2*`  | `t1* : vec(valtype)` `t2* : vec(valtype)` | from Wasm 1.0 |
-| -0x23  | `cont $ft`      | `$ft : typeidx` | new |
+| -0x23  | `cont $ft`      | `$ft : s33` | new |
 
 #### Heap Types
 
