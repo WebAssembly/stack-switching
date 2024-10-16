@@ -99,11 +99,15 @@ let array_type (ArrayT ft) =
 let func_type (FuncT (ts1, ts2)) =
   Node ("func", decls "param" ts1 @ decls "result" ts2)
 
+let cont_type (ContT ct) =
+  Node ("cont", [atom heap_type ct])
+
 let str_type st =
   match st with
   | DefStructT st -> struct_type st
   | DefArrayT at -> array_type at
   | DefFuncT ft -> func_type ft
+  | DefContT ct -> cont_type ct
 
 let sub_type = function
   | SubT (Final, [], st) -> str_type st
@@ -486,6 +490,15 @@ let block_type = function
   | VarBlockType x -> [Node ("type " ^ var x, [])]
   | ValBlockType ts -> decls "result" (list_of_opt ts)
 
+let hdl = function
+  | OnLabel x -> var x
+  | OnSwitch -> "switch"
+
+let resumetable xys =
+  List.map
+    (fun (x, y) -> Node ("on " ^ var x ^ " " ^ hdl y, []))
+    xys
+
 let rec instr e =
   let head, inner =
     match e.it with
@@ -519,6 +532,15 @@ let rec instr e =
     | ReturnCallRef x -> "return_call_ref " ^ var x, []
     | ReturnCallIndirect (x, y) ->
       "return_call_indirect " ^ var x, [Node ("type " ^ var y, [])]
+    | ContNew x -> "cont.new " ^ var x, []
+    | ContBind (x, y) -> "cont.bind " ^ var x ^ " " ^ var y, []
+    | Suspend x -> "suspend " ^ var x, []
+    | Resume (x, xys) ->
+      "resume " ^ var x, resumetable xys
+    | ResumeThrow (x, y, xys) ->
+      "resume_throw " ^ var x ^ " " ^ var y, resumetable xys
+    | Switch (x, z) ->
+      "switch " ^ var x ^ " " ^ var z, []
     | Throw x -> "throw " ^ var x, []
     | ThrowRef -> "throw_ref", []
     | TryTable (bt, cs, es) ->
@@ -717,8 +739,8 @@ let export_desc d =
   | FuncExport x -> Node ("func", [atom var x])
   | TableExport x -> Node ("table", [atom var x])
   | MemoryExport x -> Node ("memory", [atom var x])
-  | TagExport x -> Node ("tag", [atom var x])
   | GlobalExport x -> Node ("global", [atom var x])
+  | TagExport x -> Node ("tag", [atom var x])
 
 let export ex =
   let {name = n; edesc} = ex.it in
@@ -902,10 +924,12 @@ let assertion mode ass =
     [Node ("assert_trap", [instance (None, x_opt); Atom (string re)])]
   | AssertReturn (act, results) ->
     [Node ("assert_return", action mode act :: List.map (result mode) results)]
-  | AssertTrap (act, re) ->
-    [Node ("assert_trap", [action mode act; Atom (string re)])]
   | AssertException act ->
     [Node ("assert_exception", [action mode act])]
+  | AssertTrap (act, re) ->
+    [Node ("assert_trap", [action mode act; Atom (string re)])]
+  | AssertSuspension (act, re) ->
+    [Node ("assert_suspension", [action mode act; Atom (string re)])]
   | AssertExhaustion (act, re) ->
     [Node ("assert_exhaustion", [action mode act; Atom (string re)])]
 

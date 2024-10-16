@@ -9,16 +9,18 @@ open Instance
 (* Errors *)
 
 module Link = Error.Make ()
-module Exception = Error.Make ()
 module Trap = Error.Make ()
-module Crash = Error.Make ()
+module Exception = Error.Make ()
+module Suspension = Error.Make ()
 module Exhaustion = Error.Make ()
+module Crash = Error.Make ()
 
 exception Link = Link.Error
-exception Exception = Exception.Error
 exception Trap = Trap.Error
-exception Crash = Crash.Error (* failure that cannot happen in valid code *)
+exception Exception = Exception.Error
+exception Suspension = Suspension.Error
 exception Exhaustion = Exhaustion.Error
+exception Crash = Crash.Error (* failure that cannot happen in valid code *)
 
 let table_error at = function
   | Table.Bounds -> "out of bounds table access"
@@ -45,7 +47,7 @@ let numeric_error at = function
   | exn -> raise exn
 
 
-(* Administrative Expressions & Configurations *)
+(* Administrative Expressions & Continuations *)
 
 type 'a stack = 'a list
 
@@ -70,6 +72,40 @@ and admin_instr' =
   | Label of int * instr list * code
   | Frame of int * frame * code
   | Handler of int * catch list * code
+  | Handle of handle_table * code
+  | Suspending of tag_inst * value stack * ref_ option * ctxt
+
+and ctxt = code -> code
+and handle_table = (tag_inst * idx) list * tag_inst list
+
+type cont = int32 * ctxt  (* TODO: represent type properly *)
+type ref_ += ContRef of cont option ref
+
+let () =
+  let type_of_ref' = !Value.type_of_ref' in
+  Value.type_of_ref' := function
+    | ContRef _ -> ContHT
+    | r -> type_of_ref' r
+
+let () =
+  let string_of_ref' = !Value.string_of_ref' in
+  Value.string_of_ref' := function
+    | ContRef _ -> "cont"
+    | r -> string_of_ref' r
+
+let plain e = Plain e.it @@ e.at
+
+let is_jumping e =
+  match e.it with
+  | Returning _ | ReturningInvoke _ | Breaking _
+  | Throwing _ | Trapping _ | Suspending _ -> true
+  | _ -> false
+
+
+let compose (vs1, es1) (vs2, es2) = vs1 @ vs2, es1 @ es2
+
+
+(* Configurations *)
 
 type config =
 {
@@ -82,19 +118,11 @@ let frame inst locals = {inst; locals}
 let config inst vs es =
   {frame = frame inst []; code = vs, es; budget = !Flags.budget}
 
-let plain e = Plain e.it @@ e.at
-
 let admin_instr_of_value (v : value) at : admin_instr' =
   match v with
   | Num n -> Plain (Const (n @@ at))
   | Vec v -> Plain (VecConst (v @@ at))
   | Ref r -> Refer r
-
-let is_jumping e =
-  match e.it with
-  | Returning _ | ReturningInvoke _ | Breaking _
-  | Throwing _ | Trapping _ -> true
-  | _ -> false
 
 let lookup category list x =
   try Lib.List32.nth list x.it with Failure _ ->
@@ -104,8 +132,8 @@ let type_ (inst : module_inst) x = lookup "type" inst.types x
 let func (inst : module_inst) x = lookup "function" inst.funcs x
 let table (inst : module_inst) x = lookup "table" inst.tables x
 let memory (inst : module_inst) x = lookup "memory" inst.memories x
-let tag (inst : module_inst) x = lookup "tag" inst.tags x
 let global (inst : module_inst) x = lookup "global" inst.globals x
+let tag (inst : module_inst) x = lookup "tag" inst.tags x
 let elem (inst : module_inst) x = lookup "element segment" inst.elems x
 let data (inst : module_inst) x = lookup "data segment" inst.datas x
 let local (frame : frame) x = lookup "local" frame.locals x
@@ -114,6 +142,7 @@ let str_type (inst : module_inst) x = expand_def_type (type_ inst x)
 let func_type (inst : module_inst) x = as_func_str_type (str_type inst x)
 let struct_type (inst : module_inst) x = as_struct_str_type  (str_type inst x)
 let array_type (inst : module_inst) x = as_array_str_type (str_type inst x)
+let cont_type (inst : module_inst) x = as_cont_str_type (str_type inst x)
 
 let subst_of (inst : module_inst) = function
   | StatX x when x < Lib.List32.length inst.types ->
@@ -144,6 +173,24 @@ let drop n (vs : 'a stack) at =
   try Lib.List.drop n vs with Failure _ -> Crash.error at "stack underflow"
 
 let split n (vs : 'a stack) at = take n vs at, drop n vs at
+
+let i32_split n (vs : 'a stack) at =
+  try
+    Lib.List32.take n vs, Lib.List32.drop n vs
+  with
+    Failure _ -> Crash.error at "stack underflow"
+
+let str_type_of_heap_type (inst : module_inst) ht : str_type =
+  match ht with
+  | VarHT (StatX x) -> str_type inst (x @@ Source.no_region)
+  | DefHT dt -> expand_def_type dt
+  | _ -> assert false
+
+let func_type_of_cont_type (inst : module_inst) (ContT ht) : func_type =
+  as_func_str_type (str_type_of_heap_type inst ht)
+
+let func_type_of_tag_type (_inst : module_inst) (TagT dt) : func_type =
+  as_func_str_type (expand_def_type dt)
 
 
 (* Evaluation *)
@@ -177,6 +224,24 @@ let array_oob a i n =
   I64.gt_u (I64.add (I64_convert.extend_i32_u i) (I64_convert.extend_i32_u n))
     (I64_convert.extend_i32_u (Aggr.array_length a))
 
+let handle_table (c : config) xls : handle_table =
+  let suspend =
+    List.filter_map
+      (fun (x, hdl) ->
+        match hdl with
+        | OnLabel l -> Some (tag c.frame.inst x, l)
+        | _ -> None)
+      xls
+  in
+  let switch =
+    List.filter_map
+      (fun (x, hdl) ->
+        match hdl with
+        | OnSwitch -> Some (tag c.frame.inst x)
+        | _ -> None)
+      xls
+  in
+  (suspend, switch)
 
 let rec step (c : config) : config =
   let vs, es = c.code in
@@ -185,7 +250,7 @@ let rec step (c : config) : config =
     match e.it, vs with
     | Plain e', vs ->
       (match e', vs with
-      | Unreachable, vs ->
+       | Unreachable, vs ->
         vs, [Trapping "unreachable executed" @@ e.at]
 
       | Nop, vs ->
@@ -272,12 +337,6 @@ let rec step (c : config) : config =
             string_of_def_type (type_ c.frame.inst y) ^ " but got " ^
             string_of_def_type (Func.type_of f)) @@ e.at]
 
-      | ReturnCall x, vs ->
-        (match (step {c with code = (vs, [Plain (Call x) @@ e.at])}).code with
-        | vs', [{it = Invoke a; at}] -> vs', [ReturningInvoke (vs', a) @@ at]
-        | _ -> assert false
-        )
-
       | ReturnCallRef _x, Ref (NullRef _) :: vs ->
         vs, [Trapping "null function reference" @@ e.at]
 
@@ -285,6 +344,81 @@ let rec step (c : config) : config =
         (match (step {c with code = (vs, [Plain (CallRef x) @@ e.at])}).code with
         | vs', [{it = Invoke a; at}] -> vs', [ReturningInvoke (vs', a) @@ at]
         | vs', [{it = Trapping s; at}] -> vs', [Trapping s @@ at]
+        | _ -> assert false
+        )
+
+      | ContNew x, Ref (NullRef _) :: vs ->
+        vs, [Trapping "null function reference" @@ e.at]
+
+      | ContNew x, Ref (FuncRef f) :: vs ->
+        let FuncT (ts, _) = as_func_str_type (expand_def_type (Func.type_of f)) in
+        let ctxt code = compose code ([], [Invoke f @@ e.at]) in
+        Ref (ContRef (ref (Some (Lib.List32.length ts, ctxt)))) :: vs, []
+
+      | ContBind (x, y), Ref (NullRef _) :: vs ->
+        vs, [Trapping "null continuation reference" @@ e.at]
+
+      | ContBind (x, y), Ref (ContRef {contents = None}) :: vs ->
+        vs, [Trapping "continuation already consumed" @@ e.at]
+
+      | ContBind (x, y), Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
+        let ct = cont_type c.frame.inst y in
+        let ct = subst_cont_type (subst_of c.frame.inst) ct in
+        let FuncT (ts', _) = func_type_of_cont_type c.frame.inst ct in
+        let args, vs' =
+          try i32_split (I32.sub n (Lib.List32.length ts')) vs e.at
+          with Failure _ -> Crash.error e.at "type mismatch at continuation bind"
+        in
+        cont := None;
+        let ctxt' code = ctxt (compose code (args, [])) in
+        Ref (ContRef (ref (Some (I32.sub n (Lib.List32.length args), ctxt')))) :: vs', []
+
+      | Suspend x, vs ->
+        let tagt = tag c.frame.inst x in
+        let FuncT (ts, _) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
+        let args, vs' = i32_split (Lib.List32.length ts) vs e.at in
+        vs', [Suspending (tagt, args, None, fun code -> code) @@ e.at]
+
+      | Resume (x, xls), Ref (NullRef _) :: vs ->
+        vs, [Trapping "null continuation reference" @@ e.at]
+
+      | Resume (x, xls), Ref (ContRef {contents = None}) :: vs ->
+        vs, [Trapping "continuation already consumed" @@ e.at]
+
+      | Resume (x, xls), Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
+        let hs = handle_table c xls in
+        let args, vs' = i32_split n vs e.at in
+        cont := None;
+        vs', [Handle (hs, ctxt (args, [])) @@ e.at]
+
+      | ResumeThrow (x, y, xls), Ref (NullRef _) :: vs ->
+        vs, [Trapping "null continuation reference" @@ e.at]
+
+      | ResumeThrow (x, y, xls), Ref (ContRef {contents = None}) :: vs ->
+        vs, [Trapping "continuation already consumed" @@ e.at]
+
+      | ResumeThrow (x, y, xls), Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
+        let tagt = tag c.frame.inst y in
+        let FuncT (ts, _) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
+        let hs = handle_table c xls in
+        let args, vs' = i32_split (Lib.List32.length ts) vs e.at in
+        cont := None;
+        vs', [Handle (hs, ctxt ([], [Throwing (tagt, args) @@ e.at])) @@ e.at]
+
+      | Switch (x, y), Ref (NullRef _) :: vs ->
+         vs, [Trapping "null continuation reference" @@ e.at]
+
+      | Switch (x, y), Ref (ContRef {contents = None}) :: vs ->
+         vs, [Trapping "continuation already consumed" @@ e.at]
+
+      | Switch (x, y), Ref (ContRef {contents = Some (n, ctxt)} as cont) :: vs ->
+         let tagt = tag c.frame.inst y in
+         let args, vs' = i32_split (Int32.sub n 1l) vs e.at in
+         vs', [Suspending (tagt, args, Some cont, fun code -> code) @@ e.at]
+
+      | ReturnCall x, vs ->
+        (match (step {c with code = (vs, [Plain (Call x) @@ e.at])}).code with
+        | vs', [{it = Invoke a; at}] -> vs', [ReturningInvoke (vs', a) @@ at]
         | _ -> assert false
         )
 
@@ -299,8 +433,7 @@ let rec step (c : config) : config =
 
       | Throw x, vs ->
         let t = tag c.frame.inst x in
-        let TagT dt = Tag.type_of t in
-        let FuncT (ts, _) = as_func_str_type (expand_def_type dt) in
+        let FuncT (ts, _) = func_type_of_tag_type c.frame.inst (Tag.type_of t) in
         let n = List.length ts in
         let args, vs' = split n vs e.at in
         vs', [Throwing (t, args) @@ e.at]
@@ -653,7 +786,7 @@ let rec step (c : config) : config =
         let args, vs'' =
           match initop with
           | Explicit ->
-            let args, vs'' = split (List.length fts) vs' e.at in
+            let args, vs'' = i32_split (Lib.List32.length fts) vs' e.at in
             List.rev args, vs''
           | Implicit ->
             let ts = List.map unpacked_field_type fts in
@@ -702,7 +835,7 @@ let rec step (c : config) : config =
         in Ref (Aggr.ArrayRef array) :: vs'', []
 
       | ArrayNewFixed (x, n), vs' ->
-        let args, vs'' = split (I32.to_int_u n) vs' e.at in
+        let args, vs'' = i32_split n vs' e.at in
         let array =
           try Aggr.alloc_array (type_ c.frame.inst x) (List.rev args)
           with Failure _ -> Crash.error e.at "type mismatch packing value"
@@ -1014,6 +1147,13 @@ let rec step (c : config) : config =
     | Label (n, es0, (vs', [])), vs ->
       vs' @ vs, []
 
+    | Label (n, es0, (vs', {it = Suspending (tagt, vs1, contref, ctxt); at} :: es')), vs ->
+      let ctxt' code = [], [Label (n, es0, compose (ctxt code) (vs', es')) @@ e.at] in
+      vs, [Suspending (tagt, vs1, contref, ctxt') @@ at]
+
+    | Label (n, es0, (vs', {it = ReturningInvoke (vs0, f); at} :: es')), vs ->
+      vs, [ReturningInvoke (vs0, f) @@ at]
+
     | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es')), vs ->
       take n vs0 e.at @ vs, List.map plain es0
 
@@ -1029,6 +1169,16 @@ let rec step (c : config) : config =
 
     | Frame (n, frame', (vs', [])), vs ->
       vs' @ vs, []
+
+    | Frame (n, frame', (vs', {it = Trapping msg; at} :: es')), vs ->
+      vs, [Trapping msg @@ at]
+
+    | Frame (n, frame', (vs', {it = Throwing (a, vs0); at} :: es')), vs ->
+      vs, [Throwing (a, vs0) @@ at]
+
+    | Frame (n, frame', (vs', {it = Suspending (tagt, vs1, contref, ctxt); at} :: es')), vs ->
+      let ctxt' code = [], [Frame (n, frame', compose (ctxt code) (vs', es')) @@ e.at] in
+      vs, [Suspending (tagt, vs1, contref, ctxt') @@ at]
 
     | Frame (n, frame', (vs', {it = Returning vs0; at} :: es')), vs ->
       take n vs0 e.at @ vs, []
@@ -1068,6 +1218,10 @@ let rec step (c : config) : config =
     | Handler (n, [], (vs', {it = Throwing (a, vs0); at} :: es')), vs ->
       vs, [Throwing (a, vs0) @@ at]
 
+    | Handler (n, cs, (vs', {it = Suspending (tagt, vs1, contref, ctxt); at} :: es')), vs ->
+      let ctxt' code = [], [Handler (n, cs, compose (ctxt code) (vs', es')) @@ e.at] in
+      vs, [Suspending (tagt, vs1, contref, ctxt') @@ at]
+
     | Handler (n, cs, (vs', e' :: es')), vs when is_jumping e' ->
       vs, [e']
 
@@ -1083,7 +1237,7 @@ let rec step (c : config) : config =
       let n1, n2 = List.length ts1, List.length ts2 in
       let args, vs' = split n1 vs e.at in
       (match f with
-      | Func.AstFunc (_, inst', func) ->
+       | Func.AstFunc (_, inst', func) ->
         let {locals; body; _} = func.it in
         let m = Lib.Promise.value inst' in
         let s = subst_of m in
@@ -1097,6 +1251,39 @@ let rec step (c : config) : config =
         (try List.rev (f (List.rev args)) @ vs', []
         with Crash (_, msg) -> Crash.error e.at msg)
       )
+
+    | Handle (hso, (vs', [])), vs ->
+      vs' @ vs, []
+
+    | Handle ((hs, _), (vs', {it = Suspending (tagt, vs1, None, ctxt); at} :: es')), vs
+      when List.mem_assq tagt hs ->
+      let FuncT (_, ts) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
+      let ctxt' code = compose (ctxt code) (vs', es') in
+      [Ref (ContRef (ref (Some (Lib.List32.length ts, ctxt'))))] @ vs1 @ vs,
+      [Plain (Br (List.assq tagt hs)) @@ e.at]
+
+    | Handle ((_, hs) as hso, (vs', {it = Suspending (tagt, vs1, Some (ContRef ({contents = Some (_, ctxt)} as cont)), ctxt'); at} :: es')), vs
+       when List.memq tagt hs ->
+       let FuncT (_, ts) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
+       let ctxt'' code = compose (ctxt' code) (vs', es') in
+       let cont' = Ref (ContRef (ref (Some (Int32.add (Lib.List32.length ts) 1l, ctxt'')))) in
+       let args = cont' :: vs1 in
+       cont := None;
+       vs' @ vs, [Handle (hso, ctxt (args, [])) @@ e.at]
+
+    | Handle (hso, (vs', {it = Suspending (tagt, vs1, contref, ctxt); at} :: es')), vs ->
+      let ctxt' code = [], [Handle (hso, compose (ctxt code) (vs', es')) @@ e.at] in
+      vs, [Suspending (tagt, vs1, contref, ctxt') @@ at]
+
+    | Handle (hso, (vs', e' :: es')), vs when is_jumping e' ->
+      vs, [e']
+
+    | Handle (hso, code'), vs ->
+      let c' = step {c with code = code'} in
+      vs, [Handle (hso, c'.code) @@ e.at]
+
+    | Suspending (_, _, _, _), _ -> assert false
+
   in {c with code = vs', es' @ List.tl es}
 
 
@@ -1105,8 +1292,15 @@ let rec eval (c : config) : value stack =
   | vs, [] ->
     vs
 
-  | vs, {it = Trapping msg; at} :: _ ->
-    Trap.error at msg
+  | vs, e::_ when is_jumping e ->
+    (match e.it with
+    | Trapping msg ->  Trap.error e.at msg
+    | Throwing _ -> Exception.error e.at "unhandled exception"
+    | Suspending _ -> Suspension.error e.at "unhandled tag"
+    | Returning _ | ReturningInvoke _ -> Crash.error e.at "undefined frame"
+    | Breaking _ -> Crash.error e.at "undefined label"
+    | _ -> assert false
+    )
 
   | vs, {it = Throwing (a, args); at} :: _ ->
     let msg = "uncaught exception with args (" ^ string_of_values args ^ ")" in
@@ -1176,10 +1370,6 @@ let init_func (inst : module_inst) (f : func) : module_inst =
   let func = Func.alloc (type_ inst f.it.ftype) (Lib.Promise.make ()) f in
   {inst with funcs = inst.funcs @ [func]}
 
-let init_tag (inst : module_inst) (t : tag) : module_inst =
-  let tag = Tag.alloc (TagT (type_ inst t.it.tgtype)) in
-  {inst with tags = inst.tags @ [tag]}
-
 let init_global (inst : module_inst) (glob : global) : module_inst =
   let {gtype; ginit} = glob.it in
   let gt = subst_global_type (subst_of inst) gtype in
@@ -1209,6 +1399,10 @@ let init_elem (inst : module_inst) (seg : elem_segment) : module_inst =
   let elem = Elem.alloc (List.map (fun c -> as_ref (eval_const inst c)) einit) in
   {inst with elems = inst.elems @ [elem]}
 
+let init_tag (inst : module_inst) (t : tag) : module_inst =
+  let tag = Tag.alloc (TagT (type_ inst t.it.tgtype)) in
+  {inst with tags = inst.tags @ [tag]}
+
 let init_data (inst : module_inst) (seg : data_segment) : module_inst =
   let {dinit; _} = seg.it in
   let data = Data.alloc dinit in
@@ -1225,7 +1419,6 @@ let init_export (inst : module_inst) (ex : export) : module_inst =
     | TagExport x -> ExternTag (tag inst x)
   in
   {inst with exports = inst.exports @ [(name, ext)]}
-
 
 let init_func_inst (inst : module_inst) (func : func_inst) =
   match func with
@@ -1281,6 +1474,7 @@ let init (m : module_) (exts : extern list) : module_inst =
     |> init_list2 init_import exts m.it.imports
     |> init_list init_func m.it.funcs
     |> init_list init_global m.it.globals
+    |> init_list init_tag m.it.tags
     |> init_list init_table m.it.tables
     |> init_list init_memory m.it.memories
     |> init_list init_tag m.it.tags

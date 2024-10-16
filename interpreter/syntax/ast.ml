@@ -139,6 +139,7 @@ type vec = Value.vec Source.phrase
 type name = Utf8.unicode
 
 type block_type = VarBlockType of idx | ValBlockType of val_type option
+type hdl = OnLabel of idx | OnSwitch
 
 type instr = instr' Source.phrase
 and instr' =
@@ -163,6 +164,12 @@ and instr' =
   | ReturnCall of idx                 (* tail-call function *)
   | ReturnCallRef of idx              (* tail call through reference *)
   | ReturnCallIndirect of idx * idx   (* tail-call function through table *)
+  | ContNew of idx                    (* create continuation *)
+  | ContBind of idx * idx             (* bind continuation arguments *)
+  | Suspend of idx                    (* suspend continuation *)
+  | Resume of idx * (idx * hdl) list  (* resume continuation *)
+  | ResumeThrow of idx * idx * (idx * hdl) list (* abort continuation *)
+  | Switch of idx * idx               (* direct switch continuation *)
   | Throw of idx                      (* throw exception *)
   | ThrowRef                          (* rethrow exception *)
   | TryTable of block_type * catch list * instr list  (* handle exceptions *)
@@ -271,6 +278,15 @@ and func' =
 }
 
 
+(* Tags *)
+
+type tag = tag' Source.phrase
+and tag' =
+{
+  tgtype : idx;
+}
+
+
 (* Tables & Memories *)
 
 type table = table' Source.phrase
@@ -285,13 +301,6 @@ and memory' =
 {
   mtype : memory_type;
 }
-
-type tag = tag' Source.phrase
-and tag' =
-{
-  tgtype : idx;
-}
-
 
 type segment_mode = segment_mode' Source.phrase
 and segment_mode' =
@@ -398,6 +407,9 @@ let def_types_of (m : module_) : def_type list =
     let x = Lib.List32.length dts in
     dts @ List.map (subst_def_type (subst_of dts)) (roll_def_types x rt)
   ) [] rts
+
+let ht (m : module_) (x : idx) : heap_type =
+  VarHT (StatX x.it)
 
 let import_type_of (m : module_) (im : import) : import_type =
   let {idesc; module_name; item_name} = im.it in

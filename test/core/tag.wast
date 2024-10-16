@@ -15,10 +15,11 @@
   (import "test" "t3" (tag $t1 (param i32 f32)))
 )
 
-(assert_invalid
-  (module (tag (result i32)))
-  "non-empty tag result type"
-)
+;; NOTE(dhil): This test is invalid as our proposal allows non-empty
+;; (assert_invalid
+;;   (module (tag (result i32)))
+;;   "non-empty tag result type"
+;; )
 
 
 ;; Link-time typing

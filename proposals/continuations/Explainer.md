@@ -216,7 +216,7 @@ a *handler*, which handles subsequent control suspensions within the
 continuation.
 
 ```wast
-  resume $ct (tag $e $l)* : [tp* (ref $ct)] -> [tr*]
+  resume $ct (on $e $l)* : [tp* (ref $ct)] -> [tr*]
   where:
   - $ct = cont [tp*] -> [tr*]
 ```
@@ -440,7 +440,7 @@ We assume a suitable interface to a queue of active threads
 represented as continuations. The scheduler is a loop which repeatedly
 runs the continuation (thread) at the head of the queue. It does so by
 resuming the continuation with a handler for the `$yield` tag. The
-handler `(tag $yield $on_yield)` specifies that the `$yield` tag
+handler `(on $yield $on_yield)` specifies that the `$yield` tag
 is handled by running the code immediately following the block
 labelled with `$on_yield`, the `$on_yield` clause. The result of the
 block `(result (ref $cont))` declares that there will be a
@@ -1439,7 +1439,7 @@ executing a variant of the `resume` instruction and is passed to the
 continuation:
 
 ```wast
-  resume_with $ht $ct (tag $e $l)* : [ t1* (ref $ht) (ref $ct) ] -> [ t2* ]
+  resume_with $ht $ct (on $e $l)* : [ t1* (ref $ht) (ref $ct) ] -> [ t2* ]
   where:
   - $ht = handler t2*
   - $ct = cont ([ (ref $ht) t1* ] -> [ t2* ])
@@ -1491,7 +1491,7 @@ instruction for switching directly to another continuation:
 This behaves as if there was a built-in tag
 
 ```wast
-  (tag $Switch (param t1* (ref $ct1)) (result t3*))
+  (on $Switch (param t1* (ref $ct1)) (result t3*))
 ```
 
 with which the computation suspends to the handler, and the handler

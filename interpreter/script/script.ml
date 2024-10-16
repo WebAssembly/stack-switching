@@ -47,8 +47,9 @@ and assertion' =
   | AssertUnlinkable of var option * string
   | AssertUninstantiable of var option * string
   | AssertReturn of action * result list
-  | AssertException of action
   | AssertTrap of action * string
+  | AssertException of action
+  | AssertSuspension of action * string
   | AssertExhaustion of action * string
 
 type command = command' Source.phrase

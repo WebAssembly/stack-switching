@@ -180,6 +180,7 @@ let heap_type s =
     (fun s -> VarHT (var_type s33 s));
     (fun s ->
       match s7 s with
+      | -0x0b -> NoContHT
       | -0x0c -> NoExnHT
       | -0x0d -> NoFuncHT
       | -0x0e -> NoExternHT
@@ -192,6 +193,7 @@ let heap_type s =
       | -0x15 -> StructHT
       | -0x16 -> ArrayHT
       | -0x17 -> ExnHT
+      | -0x18 -> ContHT
       | _ -> error s pos "malformed heap type"
     )
   ] s
@@ -199,6 +201,7 @@ let heap_type s =
 let ref_type s =
   let pos = pos s in
   match s7 s with
+  | -0x0b -> (Null, NoContHT)
   | -0x0c -> (Null, NoExnHT)
   | -0x0d -> (Null, NoFuncHT)
   | -0x0e -> (Null, NoExternHT)
@@ -211,6 +214,7 @@ let ref_type s =
   | -0x15 -> (Null, StructHT)
   | -0x16 -> (Null, ArrayHT)
   | -0x17 -> (Null, ExnHT)
+  | -0x18 -> (Null, ContHT)
   | -0x1c -> (NoNull, heap_type s)
   | -0x1d -> (Null, heap_type s)
   | _ -> error s pos "malformed reference type"
@@ -253,11 +257,15 @@ let func_type s =
   let ts2 = result_type s in
   FuncT (ts1, ts2)
 
+let cont_type s =
+  ContT (heap_type s)
+
 let str_type s =
   match s7 s with
   | -0x20 -> DefFuncT (func_type s)
   | -0x21 -> DefStructT (struct_type s)
   | -0x22 -> DefArrayT (array_type s)
+  | -0x23 -> DefContT (cont_type s) (* TODO(dhil): See comment in encode.ml *)
   | _ -> error s (pos s - 1) "malformed definition type"
 
 let sub_type s =
@@ -293,13 +301,14 @@ let memory_type s =
   let lim = limits u32 s in
   MemoryT lim
 
+let tag_type s =
+  zero s;
+  at var s
+
 let global_type s =
   let t = val_type s in
   let mut = mutability s in
   GlobalT (mut, t)
-
-let tag_type s =
-  zero s; at var s
 
 
 (* Instructions *)
@@ -340,6 +349,16 @@ let locals s =
     s pos "too many locals";
   List.flatten (List.map (Lib.Fun.uncurry Lib.List32.make) nts)
 
+let on_clause s =
+  match byte s with
+  | 0x00 ->
+    let x = at var s in
+    let y = at var s in
+    (x, OnLabel y)
+  | 0x01 ->
+    let x = at var s in
+    (x, OnSwitch)
+  | _ -> error s (pos s) "ON opcode expected"
 
 let rec instr s =
   let pos = pos s in
@@ -399,7 +418,10 @@ let rec instr s =
   | 0x14 -> call_ref (at var s)
   | 0x15 -> return_call_ref (at var s)
 
-  | 0x16 | 0x17 | 0x18 | 0x19 as b -> illegal s pos b
+  | (0x16 | 0x17) as b -> illegal s pos b
+
+  | 0x18 -> error s pos "misplaced DELEGATE opcode"
+  | 0x19 -> error s pos "misplaced CATCH_ALL opcode"
 
   | 0x1a -> drop
   | 0x1b -> select None
@@ -606,6 +628,26 @@ let rec instr s =
   | 0xd4 -> ref_as_non_null
   | 0xd5 -> br_on_null (at var s)
   | 0xd6 -> br_on_non_null (at var s)
+
+  | 0xe0 -> cont_new (at var s)
+  | 0xe1 ->
+    let x = at var s in
+    let y = at var s in
+    cont_bind x y
+  | 0xe2 -> suspend (at var s)
+  | 0xe3 ->
+    let x = at var s in
+    let xls = vec on_clause s in
+    resume x xls
+  | 0xe4 ->
+    let x   = at var s in
+    let tag = at var s in
+    let xls = vec on_clause s in
+    resume_throw x tag xls
+  | 0xe5 ->
+    let x = at var s in
+    let y = at var s in
+    switch x y
 
   | 0xfb as b ->
     (match u32 s with
@@ -971,11 +1013,11 @@ let rec instr s =
 and instr_block s = List.rev (instr_block' s [])
 and instr_block' s es =
   match peek s with
-  | None | Some (0x05 | 0x0b) -> es
+  | None | Some (0x05 | 0x07 | 0x0b | 0x19) -> es
   | _ ->
     let pos = pos s in
     let e' = instr s in
-    instr_block' s ((e' @@ region s pos pos) :: es)
+    instr_block' s (Source.(e' @@ region s pos pos) :: es)
 
 and catch s =
   match byte s with
@@ -1045,7 +1087,7 @@ let import_desc s =
   | 0x01 -> TableImport (table_type s)
   | 0x02 -> MemoryImport (memory_type s)
   | 0x03 -> GlobalImport (global_type s)
-  | 0x04 -> TagImport (tag_type s)
+  | 0x04 -> TagImport (at var s)
   | _ -> error s (pos s - 1) "malformed import kind"
 
 let import s =
@@ -1104,6 +1146,7 @@ let tag s =
 
 let tag_section s =
   section Custom.Tag (vec (at tag)) [] s
+
 
 
 (* Global section *)
@@ -1335,7 +1378,6 @@ let module_ s =
   { types; tables; memories; tags; globals; funcs;
     imports; exports; elems; datas; start },
   customs
-
 
 let decode_custom m bs custom =
   let open Source in

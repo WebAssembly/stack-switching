@@ -45,6 +45,12 @@ let return_call x = ReturnCall x
 let return_call_ref x = ReturnCallRef x
 let return_call_indirect x y = ReturnCallIndirect (x, y)
 
+let cont_new x = ContNew x
+let cont_bind x y = ContBind (x, y)
+let suspend x = Suspend x
+let resume x xys = Resume (x, xys)
+let resume_throw x y xys = ResumeThrow (x, y, xys)
+let switch x y = Switch (x, y)
 let throw x = Throw x
 let throw_ref = ThrowRef
 let try_table bt cs es = TryTable (bt, cs, es)
