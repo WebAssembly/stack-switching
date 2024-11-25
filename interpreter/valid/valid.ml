@@ -652,7 +652,7 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
      in
      let et = tag c y in
      let FuncT (ts31, t) = func_type_of_tag_type c et y.at in
-     require (match_result_type c.types [] ts31) y.at
+     require (ts31 = []) y.at
        "type mismatch in switch tag";
      require (match_result_type c.types ts12 t) y.at
        "type mismatch in continuation types";
