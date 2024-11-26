@@ -590,7 +590,7 @@ instr_list :
   | instr1 instr_list { fun c -> $1 c @ $2 c }
   | select_instr_instr_list { $1 }
   | call_instr_instr_list { $1 }
-  | resume_instr_instr { fun c -> let e, es = $1 c in e :: es }
+  | resume_instr_instr_list { $1 }
 
 instr1 :
   | plain_instr { fun c -> [$1 c @@ $sloc] }
@@ -768,25 +768,25 @@ call_instr_results_instr_list :
   | instr_list
     { fun c -> [], $1 c }
 
-resume_instr_instr :
+resume_instr_instr_list :
   | RESUME var resume_instr_handler_instr
     { let loc1 = $loc($1) in
       fun c ->
       let x = $2 c type_ in
-      let hs, es = $3 c in resume x hs @@ loc1, es }
+      let hs, es = $3 c in (resume x hs @@ loc1) :: es }
   | RESUME_THROW var var resume_instr_handler_instr
     { let loc1 = $loc($1) in
       fun c ->
       let x  = $2 c type_ in
       let tag = $3 c tag in
-      let hs, es = $4 c in resume_throw x tag hs @@ loc1, es }
+      let hs, es = $4 c in (resume_throw x tag hs @@ loc1) :: es }
 
 resume_instr_handler_instr :
   | LPAR ON var var RPAR resume_instr_handler_instr
     { fun c -> let hs, es = $6 c in ($3 c tag, OnLabel ($4 c label)) :: hs, es }
   | LPAR ON var SWITCH RPAR resume_instr_handler_instr
     { fun c -> let hs, es = $6 c in ($3 c tag, OnSwitch) :: hs, es }
-  | instr1
+  | instr_list
     { fun c -> [], $1 c }
 
 block_instr :
