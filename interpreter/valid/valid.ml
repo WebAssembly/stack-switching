@@ -651,14 +651,15 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
               " but the type annotation has " ^ string_of_result_type ts11)
      in
      let et = tag c y in
-     let FuncT (_, t) as ft = func_type_of_tag_type c et y.at in
-     require (match_func_type c.types (FuncT ([], t)) ft) y.at
+     let FuncT (ts31, t) = func_type_of_tag_type c et y.at in
+     require (ts31 = []) y.at
        "type mismatch in switch tag";
      require (match_result_type c.types ts12 t) y.at
        "type mismatch in continuation types";
      require (match_result_type c.types t ts22) y.at
        "type mismatch in continuation types";
-     ts11 --> ts21, []
+     let ts11' = Lib.List.lead ts11 in
+     (ts11' @ [RefT (Null, VarHT (StatX x.it))]) --> ts21, []
 
   | Throw x ->
     let FuncT (ts1, ts2) = func_type_of_tag_type c (tag c x) x.at in

@@ -1032,3 +1032,38 @@
     suspend $swap
   )
 )
+
+(module
+  (type $ft0 (func))
+  (type $ct0 (cont $ft0))
+
+  (type $ft1 (func (param (ref $ct0))))
+  (type $ct1 (cont $ft1))
+
+  (tag $t)
+
+  (func $f
+    (cont.new $ct1 (ref.func $g))
+    (switch $ct1 $t)
+  )
+  (elem declare func $f)
+
+  (func $g (param (ref $ct0)))
+  (elem declare func $g)
+
+  (func $entry
+    (cont.new $ct0 (ref.func $f))
+    (resume $ct0 (on $t switch))
+  )
+)
+
+(assert_invalid
+  (module
+    (rec
+      (type $ft (func (param (ref $ct))))
+      (type $ct (cont $ft)))
+    (tag $t (param i32))
+
+    (func (param $k (ref $ct))
+      (switch $ct $t)))
+  "type mismatch in switch tag")
