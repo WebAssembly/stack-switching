@@ -1087,7 +1087,7 @@ let import_desc s =
   | 0x01 -> TableImport (table_type s)
   | 0x02 -> MemoryImport (memory_type s)
   | 0x03 -> GlobalImport (global_type s)
-  | 0x04 -> TagImport (at var s)
+  | 0x04 -> TagImport (tag_type s)
   | _ -> error s (pos s - 1) "malformed import kind"
 
 let import s =
