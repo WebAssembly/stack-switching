@@ -951,7 +951,7 @@ struct
     | TableImport t -> byte 0x01; table_type t
     | MemoryImport t -> byte 0x02; memory_type t
     | GlobalImport t -> byte 0x03; global_type t
-    | TagImport t -> byte 0x04; var t
+    | TagImport t -> byte 0x04; tag_type t
 
   let import im =
     let {module_name; item_name; idesc} = im.it in
@@ -1002,8 +1002,8 @@ struct
     section 6 (vec global) gs (gs <> [])
 
   (* Tag section *)
-  let tag tag =
-    tag_type tag.it.tgtype
+  let tag (t : tag) =
+    byte 0x00; var t.it.tgtype
 
   let tag_section ts =
     section 13 (vec tag) ts (ts <> [])
