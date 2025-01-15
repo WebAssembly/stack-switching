@@ -308,7 +308,7 @@ Allowed basic numeric computations in constant expressions. [#proposal-extconst]
   - |GLOBALGET| for any previously declared immutable :ref:`global <syntax-global>`
 
 .. note::
-   The :ref:`garbage collection <extension-gc>` added further constant instructions.
+   The :ref:`garbage collection <extension-gc>` extension added further constant instructions.
 
 
 .. index:: instruction, function, call
@@ -389,6 +389,44 @@ Added the ability to use multiple memories per module. [#proposal-multimem]_
 * :ref:`Data segments <syntax-elem>` take a :ref:`memory index <syntax-memidx>`
 
 
+.. index:: address type, number type, table, memory, instruction
+
+64-bit Address Space
+....................
+
+Added the ability to declare an :math:`\I64` :ref:`address type <syntax-addrtype>` for :ref:`tables <syntax-tabletype>` and :ref:`memories <syntax-memtype>`. [#proposal-addr64]_
+
+* :ref:`Address types <syntax-addrtype>` denote a subset of the integral :ref:`number types <syntax-numtype>`
+
+* :ref:`Table types <syntax-tabletype>` include an :ref:`address type <syntax-addrtype>`
+
+* :ref:`Memory types <syntax-memtype>` include an :ref:`address type <syntax-addrtype>`
+
+* Operand types of :ref:`table <syntax-instr-table>` and :ref:`memory <syntax-instr-memory>` instructions now depend on the subject's declared address type:
+
+  - |TABLEGET|
+  - |TABLESET|
+  - |TABLESIZE|
+  - |TABLEGROW|
+  - |TABLEFILL|
+  - |TABLECOPY|
+  - |TABLEINIT|
+  - |MEMORYSIZE|
+  - |MEMORYGROW|
+  - |MEMORYFILL|
+  - |MEMORYCOPY|
+  - |MEMORYINIT|
+  - :math:`t\K{.load}`
+  - :math:`t\K{.store}`
+  - :math:`t\K{.load}\!N\!\K{\_}\sx`
+  - :math:`t\K{.store}\!N`
+  - :math:`\K{v128.load}\!N\!\K{x}\!M\!\K{\_}\sx`
+  - :math:`\K{v128.load}\!N\!\K{\_zero}`
+  - :math:`\K{v128.load}\!N\!\K{\_splat}`
+  - :math:`\K{v128.load}\!N\!\K{\_lane}`
+  - :math:`\K{v128.store}\!N\!\K{\_lane}`
+
+
 .. index:: reference, reference type, heap type, value type, local, local type, instruction, instruction type, table, function, function type, matching, subtyping
 
 Typeful References
@@ -423,6 +461,8 @@ Added more precise types for references. [#proposal-typedref]_
   - |REFFUNC| with more precise result type
 
 * Refined typing of :ref:`local instructions <valid-instr-variable>` and :ref:`instruction sequences <valid-instr-seq>` to track the :ref:`initialization status <syntax-init>` of :ref:`locals <syntax-local>` with non-:ref:`defaultable <valid-defaultable>` type
+
+* Refined decoding of :ref:`active <syntax-elemmode>` :ref:`element segments <binary-elem>` with implicit element type and plain function indices (opcode :math:`0`) to produce :ref:`non-nullable <syntax-nullable>` :ref:`reference type <syntax-reftype>`.
 
 * Extended :ref:`table definitions <syntax-table>` with optional initializer expression
 
@@ -518,6 +558,48 @@ Added managed reference types. [#proposal-gc]_
   - |EXTERNCONVERTANY|
 
 
+.. index:: instruction, vector instruction, SIMD
+
+Relaxed Vector Instructions
+...........................
+
+Added new *relaxed* vector instructions,
+whose behaviour is non-deterministic and implementation-dependent. [#proposal-relaxed]_
+
+* New binary :ref:`vector instruction <syntax-instr-relaxed>`:
+
+  - :math:`\K{f}\!N\!\K{x}\!M\!\K{.relaxed\_min}`
+  - :math:`\K{f}\!N\!\K{x}\!M\!\K{.relaxed\_max}`
+  - :math:`\K{i16x8.relaxed\_q15mulr\_s}`
+  - :math:`\K{i16x8.relaxed\_dot\_i8x16\_i7x16\_s}`
+
+* New ternary :ref:`vector instruction <syntax-instr-relaxed>`:
+
+  - :math:`\K{f}\!N\!\K{x}\!M\!\K{.relaxed\_madd}`
+  - :math:`\K{f}\!N\!\K{x}\!M\!\K{.relaxed\_nmadd}`
+  - :math:`\K{i}\!N\!\K{x}\!M\!\K{.relaxed\_laneselect}`
+  - :math:`\K{i32x4.relaxed\_dot\_i8x16\_i7x16\_add\_s}`
+
+* New conversion :ref:`vector instructions <syntax-instr-relaxed>`:
+
+  - :math:`\K{i32x4.relaxed\_trunc\_f32x4\_}\sx`
+  - :math:`\K{i32x4.relaxed\_trunc\_f64x2\_}\sx\K{\_zero}`
+
+* New byte reordering :ref:`vector instruction <syntax-instr-relaxed>`:
+
+  - :math:`\K{i8x16.relaxed\_swizzle}`
+
+
+.. index:: determinism, non-determinism, profiles
+
+Profiles
+........
+
+Introduced the concept of :ref:`profile <profiles>` for specifying language subsets.
+
+* A new profile defining a :ref:`deterministic <profile-deterministic>` mode of execution.
+
+
 .. index:: text format, annotation, custom section, identifier, module, type, function, local, structure field
 
 Custom Annotations
@@ -542,7 +624,7 @@ mirroring the role of custom sections in the binary format. [#proposal-annot]_
 
 
 .. [#proposal-extconst]
-   https://github.com/WebAssembly/extended-const/blob/main/proposals/extended-const/
+   https://github.com/WebAssembly/spec/tree/main/proposals/extended-const/
 
 .. [#proposal-tailcall]
    https://github.com/WebAssembly/spec/tree/main/proposals/tail-call/
@@ -551,13 +633,19 @@ mirroring the role of custom sections in the binary format. [#proposal-annot]_
    https://github.com/WebAssembly/spec/tree/main/proposals/exception-handling/
 
 .. [#proposal-multimem]
-   https://github.com/WebAssembly/multi-memory/blob/main/proposals/multi-memory/
+   https://github.com/WebAssembly/spec/tree/main/proposals/multi-memory/
+
+.. [#proposal-addr64]
+   https://github.com/WebAssembly/spec/tree/main/proposals/memory64/
 
 .. [#proposal-typedref]
    https://github.com/WebAssembly/spec/tree/main/proposals/function-references/
 
 .. [#proposal-gc]
    https://github.com/WebAssembly/spec/tree/main/proposals/gc/
+
+.. [#proposal-relaxed]
+   https://github.com/WebAssembly/spec/tree/main/proposals/relaxed-simd/
 
 .. [#proposal-annot]
    https://github.com/WebAssembly/annotations/tree/main/proposals/annotations/
