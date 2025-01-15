@@ -114,44 +114,6 @@ let defaultable = function
   | BotT -> assert false
 
 
-(* Conversions & Projections *)
-
-let num_type_of_addr_type = function
-  | I32AT -> I32T
-  | I64AT -> I64T
-
-let addr_type_of_num_type = function
-  | I32T -> I32AT
-  | I64T -> I64AT
-  | _ -> assert false
-
-
-let unpacked_storage_type = function
-  | ValStorageT t -> t
-  | PackStorageT _ -> NumT I32T
-
-let unpacked_field_type (FieldT (_mut, t)) = unpacked_storage_type t
-
-
-let as_func_str_type (st : str_type) : func_type =
-  match st with
-  | DefFuncT ft -> ft
-  | _ -> assert false
-
-let as_struct_str_type (st : str_type) : struct_type =
-  match st with
-  | DefStructT st -> st
-  | _ -> assert false
-
-let as_array_str_type (st : str_type) : array_type =
-  match st with
-  | DefArrayT at -> at
-  | _ -> assert false
-
-let extern_type_of_import_type (ImportT (et, _, _)) = et
-let extern_type_of_export_type (ExportT (et, _)) = et
-
-
 (* Filters *)
 
 let funcs = List.filter_map (function ExternFuncT ft -> Some ft | _ -> None)
@@ -310,17 +272,59 @@ let expand_def_type (dt : def_type) : str_type =
   st
 
 
-(* Projections *)
+(* Conversions & Projections *)
+
+let num_type_of_addr_type = function
+  | I32AT -> I32T
+  | I64AT -> I64T
+
+let addr_type_of_num_type = function
+  | I32T -> I32AT
+  | I64T -> I64AT
+  | _ -> assert false
 
 let unpacked_storage_type = function
   | ValStorageT t -> t
   | PackStorageT _ -> NumT I32T
+
+let unpacked_field_type (FieldT (_mut, t)) = unpacked_storage_type t
+
+let as_def_heap_type (ht : heap_type) : def_type =
+  match ht with
+  | DefHT def -> def
+  | _ -> assert false
+
+let as_func_str_type (st : str_type) : func_type =
+  match st with
+  | DefFuncT ft -> ft
+  | _ -> assert false
 
 let as_cont_str_type (dt : str_type) : cont_type =
   match dt with
   | DefContT ct -> ct
   | _ -> assert false
 
+let as_struct_str_type (st : str_type) : struct_type =
+  match st with
+  | DefStructT st -> st
+  | _ -> assert false
+
+let as_array_str_type (st : str_type) : array_type =
+  match st with
+  | DefArrayT at -> at
+  | _ -> assert false
+
+let as_cont_func_heap_type (ht : heap_type) : func_type =
+  let ContT ht' = as_cont_str_type (expand_def_type (as_def_heap_type ht)) in
+  as_func_str_type (expand_def_type (as_def_heap_type ht'))
+
+let as_cont_func_ref_type (rt : val_type) : func_type =
+  match rt with
+  | RefT (_, ht) -> as_cont_func_heap_type ht
+  | _ -> assert false
+
+let extern_type_of_import_type (ImportT (et, _, _)) = et
+let extern_type_of_export_type (ExportT (et, _)) = et
 
 (* String conversion *)
 

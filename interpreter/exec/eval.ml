@@ -73,7 +73,7 @@ and admin_instr' =
   | Frame of int * frame * code
   | Handler of int * catch list * code
   | Handle of handle_table * code
-  | Suspending of tag_inst * value stack * ref_ option * ctxt
+  | Suspending of tag_inst * value stack * (int32 * ref_) option * ctxt
 
 and ctxt = code -> code
 and handle_table = (tag_inst * idx) list * tag_inst list
@@ -413,10 +413,13 @@ let rec step (c : config) : config =
       | Switch (x, y), Ref (ContRef {contents = None}) :: vs ->
          vs, [Trapping "continuation already consumed" @@ e.at]
 
-      | Switch (x, y), Ref (ContRef {contents = Some (n, ctxt)} as cont) :: vs ->
+      | Switch (x, y), Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
+         let FuncT (ts, _) = func_type_of_cont_type c.frame.inst (cont_type c.frame.inst x) in
+         let FuncT (ts', _) = as_cont_func_ref_type (Lib.List.last ts) in
+         let arity = Lib.List32.length ts' in
          let tagt = tag c.frame.inst y in
          let args, vs' = i32_split (Int32.sub n 1l) vs e.at in
-         vs', [Suspending (tagt, args, Some cont, fun code -> code) @@ e.at]
+         vs', [Suspending (tagt, args, Some (arity, ContRef cont), fun code -> code) @@ e.at]
 
       | ReturnCall x, vs ->
         (match (step {c with code = (vs, [Plain (Call x) @@ e.at])}).code with
@@ -1292,11 +1295,10 @@ let rec step (c : config) : config =
       [Ref (ContRef (ref (Some (Lib.List32.length ts, ctxt'))))] @ vs1 @ vs,
       [Plain (Br (List.assq tagt hs)) @@ e.at]
 
-    | Handle ((_, hs) as hso, (vs', {it = Suspending (tagt, vs1, Some (ContRef ({contents = Some (_, ctxt)} as cont)), ctxt'); at} :: es')), vs
+    | Handle ((_, hs) as hso, (vs', {it = Suspending (tagt, vs1, Some (ar, ContRef ({contents = Some (_, ctxt)} as cont)), ctxt'); at} :: es')), vs
        when List.memq tagt hs ->
-       let FuncT (_, ts) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
        let ctxt'' code = compose (ctxt' code) (vs', es') in
-       let cont' = Ref (ContRef (ref (Some (Int32.add (Lib.List32.length ts) 1l, ctxt'')))) in
+       let cont' = Ref (ContRef (ref (Some (ar, ctxt'')))) in
        let args = cont' :: vs1 in
        cont := None;
        vs' @ vs, [Handle (hso, ctxt (args, [])) @@ e.at]
