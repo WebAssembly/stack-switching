@@ -72,7 +72,7 @@ and admin_instr' =
   | Label of int * instr list * code
   | Frame of int * frame * code
   | Handler of int * catch list * code
-  | Handle of handle_table * code
+  | Prompt of handle_table * code
   | Suspending of tag_inst * value stack * (int32 * ref_) option * ctxt
 
 and ctxt = code -> code
@@ -391,7 +391,7 @@ let rec step (c : config) : config =
         let hs = handle_table c xls in
         let args, vs' = i32_split n vs e.at in
         cont := None;
-        vs', [Handle (hs, ctxt (args, [])) @@ e.at]
+        vs', [Prompt (hs, ctxt (args, [])) @@ e.at]
 
       | ResumeThrow (x, y, xls), Ref (NullRef _) :: vs ->
         vs, [Trapping "null continuation reference" @@ e.at]
@@ -405,7 +405,7 @@ let rec step (c : config) : config =
         let hs = handle_table c xls in
         let args, vs' = i32_split (Lib.List32.length ts) vs e.at in
         cont := None;
-        vs', [Handle (hs, ctxt ([], [Throwing (tagt, args) @@ e.at])) @@ e.at]
+        vs', [Prompt (hs, ctxt ([], [Throwing (tagt, args) @@ e.at])) @@ e.at]
 
       | Switch (x, y), Ref (NullRef _) :: vs ->
          vs, [Trapping "null continuation reference" @@ e.at]
@@ -1285,34 +1285,34 @@ let rec step (c : config) : config =
         with Crash (_, msg) -> Crash.error e.at msg)
       )
 
-    | Handle (hso, (vs', [])), vs ->
+    | Prompt (hso, (vs', [])), vs ->
       vs' @ vs, []
 
-    | Handle ((hs, _), (vs', {it = Suspending (tagt, vs1, None, ctxt); at} :: es')), vs
+    | Prompt ((hs, _), (vs', {it = Suspending (tagt, vs1, None, ctxt); at} :: es')), vs
       when List.mem_assq tagt hs ->
       let FuncT (_, ts) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
       let ctxt' code = compose (ctxt code) (vs', es') in
       [Ref (ContRef (ref (Some (Lib.List32.length ts, ctxt'))))] @ vs1 @ vs,
       [Plain (Br (List.assq tagt hs)) @@ e.at]
 
-    | Handle ((_, hs) as hso, (vs', {it = Suspending (tagt, vs1, Some (ar, ContRef ({contents = Some (_, ctxt)} as cont)), ctxt'); at} :: es')), vs
+    | Prompt ((_, hs) as hso, (vs', {it = Suspending (tagt, vs1, Some (ar, ContRef ({contents = Some (_, ctxt)} as cont)), ctxt'); at} :: es')), vs
        when List.memq tagt hs ->
        let ctxt'' code = compose (ctxt' code) (vs', es') in
        let cont' = Ref (ContRef (ref (Some (ar, ctxt'')))) in
        let args = cont' :: vs1 in
        cont := None;
-       vs' @ vs, [Handle (hso, ctxt (args, [])) @@ e.at]
+       vs' @ vs, [Prompt (hso, ctxt (args, [])) @@ e.at]
 
-    | Handle (hso, (vs', {it = Suspending (tagt, vs1, contref, ctxt); at} :: es')), vs ->
-      let ctxt' code = [], [Handle (hso, compose (ctxt code) (vs', es')) @@ e.at] in
+    | Prompt (hso, (vs', {it = Suspending (tagt, vs1, contref, ctxt); at} :: es')), vs ->
+      let ctxt' code = [], [Prompt (hso, compose (ctxt code) (vs', es')) @@ e.at] in
       vs, [Suspending (tagt, vs1, contref, ctxt') @@ at]
 
-    | Handle (hso, (vs', e' :: es')), vs when is_jumping e' ->
+    | Prompt (hso, (vs', e' :: es')), vs when is_jumping e' ->
       vs, [e']
 
-    | Handle (hso, code'), vs ->
+    | Prompt (hso, code'), vs ->
       let c' = step {c with code = code'} in
-      vs, [Handle (hso, c'.code) @@ e.at]
+      vs, [Prompt (hso, c'.code) @@ e.at]
 
     | Suspending (_, _, _, _), _ -> assert false
 
