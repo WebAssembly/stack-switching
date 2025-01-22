@@ -898,7 +898,7 @@ H^ea ::=
 
 * `S; F; (ref.null t) (cont.bind $ct $ct')  -->  S; F; trap`
 
-* `S; F; (ref.cont ca) (cont.bind $ct $ct')  -->  S'; F; trap`
+* `S; F; (ref.cont ca) (cont.bind $ct $ct')  -->  S; F; trap`
   - iff `S.conts[ca] = epsilon`
 
 * `S; F; v^n (ref.cont ca) (cont.bind $ct $ct')  -->  S'; F; (ref.const |S.conts|)`
