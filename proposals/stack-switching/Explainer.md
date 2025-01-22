@@ -941,7 +941,7 @@ H^ea ::=
   - and `S.tags[ea].type ~~ [t1^n] -> [t2^m]`
   - and `S' = S with conts += (H^ea : m)`
 
-* `S; F; (prompt{hdl* (ea switch) hdl2*} H^ea[v^n (ref.cont ca) (switch $ct $e)] end) --> S''; F; prompt{hdl1* (ea switch) hdl2*} E[v^n (ref.cont |S.conts|)] end`
+* `S; F; (prompt{hdl1* (ea switch) hdl2*} H^ea[v^n (ref.cont ca) (switch $ct $e)] end) --> S''; F; prompt{hdl1* (ea switch) hdl2*} E[v^n (ref.cont |S.conts|)] end`
   - iff  `S.conts[ca] = (E : n')`
   - and `n' = 1 + n`
   - and `ea notin ea1*`
