@@ -861,11 +861,11 @@ of event, even if they use the correct tag.
 * `(prompt{<hdl>*} <instr>* end)` represents an active handler
   - `(prompt{((a $l) | (b switch))*}? instr* end) : [t1*] -> [t2*]`
     - iff `instr* : [t1*] -> [t2*]`
-    - and `(S.tags[a].type = [te1*] -> [te2*])*`
-    - and `(S.tags[b].type = [] -> [te2*])*`
+    - and `(S.tags[a].type ~~ [te1*] -> [te2*])*`
+    - and `(S.tags[b].type ~~ [] -> [te2*])*`
     - and `(label $l : [te1'* (ref null? $ct')])*`
     - and `([te1*] <: [te1'*])*`
-    - and `($ct' = cont $ft')*`
+    - and `($ct' ~~ cont $ft')*`
     - and `([te2*] -> [t2*] <: $ft')*`
 
 The administrative structure `hdl` is defined as.
