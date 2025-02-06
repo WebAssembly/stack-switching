@@ -855,7 +855,7 @@ of event, even if they use the correct tag.
 * `(prompt{<hdl>*} <instr>* end)` represents an active handler
   - `(prompt{hdl*}? instr* end) : [t1*] -> [t2*]`
     - iff `instr* : [t1*] -> [t2*]`
-    - and `(hdl : [t2^*])*`
+    - and `(hdl : [t2*])*`
 
 The administrative structure `hdl` is defined as
 ```
