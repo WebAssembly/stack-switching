@@ -835,14 +835,6 @@ of event, even if they use the correct tag.
 
 #### Store extensions
 
-* A store component `tags` for allocated tags (from the exception
-  handling proposal)
-  - `S ::= {..., tags <taginst>*}`
-
-* A *tag instance* represents a control tag (from the exception
-  handling proposal)
-  - `taginst ::= {type <tagtype>}`
-
 * New store component `conts` for allocated continuations
   - `S ::= {..., conts <cont>?*}`
 
@@ -855,23 +847,33 @@ of event, even if they use the correct tag.
 * `(ref.cont a)` represents a continuation value, where `a` is a *continuation address* indexing into the store's `conts` component
   - `ref.cont a : [] -> [(ref $ct)]`
     - iff `S.conts[a] = epsilon \/ S.conts[a] = (E : n)`
+      + iff `E[val^n] : t2*`
+      + and `(val : t1)^n`
     - and `$ct ~~ cont $ft`
     - and `$ft ~~ [t1^n] -> [t2*]`
 
 * `(prompt{<hdl>*} <instr>* end)` represents an active handler
-  - `(prompt{((a $l) | (b switch))*}? instr* end) : [t1*] -> [t2*]`
+  - `(prompt{hdl*}? instr* end) : [t1*] -> [t2*]`
     - iff `instr* : [t1*] -> [t2*]`
-    - and `(S.tags[a].type ~~ [te1*] -> [te2*])*`
-    - and `(S.tags[b].type ~~ [] -> [te2*])*`
+    - and `(hdl : [t2^*])*`
+
+The administrative structure `hdl` is defined as
+```
+hdl ::= (<tagaddr> $l) | (<tagaddr> switch)
+```
+
+where
+
+* `(a $l)` represents a tag-label association
+ - `(a $l) : [t2*]`
+    - iff `(S.tags[a].type ~~ [te1*] -> [te2*])*`
     - and `(label $l : [te1'* (ref null? $ct')])*`
     - and `([te1*] <: [te1'*])*`
     - and `($ct' ~~ cont $ft')*`
     - and `([te2*] -> [t2*] <: $ft')*`
 
-The administrative structure `hdl` is defined as.
-```
-hdl ::= (<tagaddr> $l) hdl | (<tagaddr> switch)
-```
+* `(a switch)` represents a tag-switch association
+ - `(a switch)` and `(S.tags[b].type ~~ [] -> [te2*])*`
 
 #### Handler contexts
 
@@ -882,7 +884,7 @@ H^ea ::=
   label_n{instr*} H^ea end
   frame_n{F} H^ea end
   catch{...} H^ea end
-  prompt{hdl*} H^ea end   (iff ea notin ea'*)
+  prompt{hdl*} H^ea end   (iff ea notin tagaddr(hdl*))
 ```
 
 
@@ -916,7 +918,6 @@ H^ea ::=
 
 * `S; F; v^n (ref.cont ca) (resume $ct hdl*)  -->  S'; F; prompt{hdl*} E[v^n] end`
   - iff `S.conts[ca] = (E : n)`
-  - and `(ea = F.tags[$t])*`
   - and `S' = S with conts[ca] = epsilon`
 
 * `S; F; (ref.null t) (resume_throw $ct $e (on $t $l)*)  -->  S; F; trap`
@@ -926,17 +927,13 @@ H^ea ::=
 
 * `S; F; v^m (ref.cont ca) (resume_throw $ct $e hdl*)  -->  S'; F; prompt{hdl*} E[v^m (throw $e)] end`
   - iff `S.conts[ca] = (E : n)`
-  - and `(ea = F.tags[$t])*`
   - and `S.tags[F.tags[$e]].type ~~ [t1^m] -> [t2*]`
   - and `S' = S with conts[ca] = epsilon`
 
-* `S; F; (prompt{(e $l)*}? v* end)  -->  S; F; v*`
-
-* `S; F; (prompt H^ea[(suspend $e)] end)  --> S; F; trap`
-  - iff `ea = F.tags[$e]`
+* `S; F; (prompt{hdl*} v* end)  -->  S; F; v*`
 
 * `S; F; (prompt{hdl1* (ea $l) hdl2*} H^ea[v^n (suspend $e)] end)  --> S'; F; v^n (ref.cont |S.conts|) (br $l)`
-  - iff `ea notin ea1*`
+  - iff `ea notin tagaddr(hdl1*)`
   - and `ea = F.tags[$e]`
   - and `S.tags[ea].type ~~ [t1^n] -> [t2^m]`
   - and `S' = S with conts += (H^ea : m)`
@@ -944,7 +941,7 @@ H^ea ::=
 * `S; F; (prompt{hdl1* (ea switch) hdl2*} H^ea[v^n (ref.cont ca) (switch $ct $e)] end) --> S''; F; prompt{hdl1* (ea switch) hdl2*} E[v^n (ref.cont |S.conts|)] end`
   - iff  `S.conts[ca] = (E : n')`
   - and `n' = 1 + n`
-  - and `ea notin ea1*`
+  - and `ea notin tagaddr(hdl1*)`
   - and `ea = F.tags[$e]`
   - and `$ct ~~ cont $ft`
   - and `$ft ~~ [t1* (ref $ct2)] -> [t2*]`
