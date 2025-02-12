@@ -21,6 +21,9 @@ validation rules to facilitate stack-switching.
    1. [Suspending continuations](#suspending-continuations)
    1. [Partial continuation application](#partial-continuation-application)
    1. [Continuation lifetime](#continuation-lifetime)
+1. [Further examples](#further-examples)
+   1. [Extending the generator](#extending-the-generator)
+   1. [Canceling tasks](#canceling-tasks)
 1. [Design considerations](#design-considerations)
    1. [Asymmetric switching](#asymmetric-switching)
    1. [Symmetric switching](#symmetric-switching)
@@ -78,12 +81,13 @@ design provides a form of *symmetric switching*.
 
 We illustrate the proposed stack-switching mechanism using two
 examples: generators and task scheduling. The generators example uses
-asymmetric stack-switching and the task scheduling example uses
-symmetric stack-switching.
+asymmetric stack-switching. The task scheduling example has two
+variants: the first variant uses asymmetric stack-switching and the
+second variant uses symmetric stack-switching.
 
 ### Generators
 
-The first example illustrates a generator-consumer pattern. Execution
+Our first example illustrates a generator-consumer pattern. Execution
 switches back and forth between a generator and a consumer execution
 stack. Whenever execution switches from the generator to the consumer
 the generator also passes a value to the consumer.
@@ -116,19 +120,18 @@ The overall module implementing our example has the following shape.
 ```wat
 (module $generator
   (type $ft (func))
-  ;; Types of continuations used by the generator:
+  ;; Type of continuations used by the generator:
   ;; No need for param or result types: No data passed back to the
   ;; generator when resuming it, and $generator function has no return
   ;; values.
   (type $ct (cont $ft))
 
-  ;; Tag used to coordinate between generator and consumer: The i32 param
-  ;; corresponds to the generated values passed; no values passed back from
-  ;; generator to consumer.
-  (tag $gen (param i32))
-
-
   (func $print (import "spectest" "print_i32") (param i32))
+
+  ;; Tag used to coordinate between generator and consumer: The i32 param
+  ;; corresponds to the generated values passed to consumer; no values passed
+  ;; back from generator to consumer.
+  (tag $gen (param i32))
 
   ;; Simple generator yielding values from 100 down to 1
   (func $generator ...)
@@ -147,16 +150,16 @@ manipulate suspended continuations of type `(ref $ct)`.
 The generator is defined as follows.
 
 ```wat
-;; Simple generator yielding values from 100 down to 1
+;; Simple generator yielding values from 100 down to 1.
 (func $generator
   (local $i i32)
   (local.set $i (i32.const 100))
-  (loop $l
-    ;; Suspend execution, pass current value of $i to consumer
+  (loop $loop
+    ;; Suspend execution, pass current value of $i to consumer.
     (suspend $gen (local.get $i))
-    ;; Decrement $i and exit loop once $i reaches 0
+    ;; Decrement $i and exit loop once $i reaches 0.
     (local.tee $i (i32.sub (local.get $i) (i32.const 1)))
-    (br_if $l)
+    (br_if $loop)
   )
 )
 ```
@@ -178,9 +181,9 @@ The consumer is defined as follows.
 
   (loop $loop
     (block $on_gen (result i32 (ref $ct))
-      ;; Resume continuation $c
+      ;; Resume continuation $c.
       (resume $ct (on $gen $on_gen) (local.get $c))
-      ;; $generator returned: no more data
+      ;; $generator returned: no more data.
       (return)
     )
     ;; Generator suspended, stack now contains [i32 (ref $ct)]
@@ -257,7 +260,7 @@ The full definition of this module can be found
 
 ### Task scheduling
 
-The second example demonstrates how to implement task scheduling with
+Our second example demonstrates how to implement task scheduling with
 the stack-switching instructions. Specifically, suppose we want to
 schedule a number of tasks, represented by functions `$task_0` to
 `$task_n`, to be executed concurrently. Scheduling is cooperative,
@@ -276,11 +279,9 @@ This approach is illustrated by the following skeleton code.
 
 ```wat
 (module $scheduler1
-
   (type $ft (func))
   ;; Continuation type of all tasks
   (type $ct (cont $ft))
-
 
   ;; Tag used to yield execution in one task and resume another one.
   (tag $yield)
@@ -442,16 +443,16 @@ continuation references. The task that we switched to is now
 responsible for enqueuing the previous continuation (i.e., the one
 received as a payload) in the task list.
 
-As a minor complication, we need to encode the fact that the
-continuation switched to receives the current one as an argument in
-the type of the continuations handled by all scheduling logic. This
-means the type `$ct` must be recursive: a continuation of this type
+As a minor complication, we must encode the fact that the continuation
+switched to receives the current continuation as an argument in the
+type of the continuations handled by all scheduling logic. This means
+that the type `$ct` must be recursive: a continuation of this type
 takes a value of type `(ref null $ct)` as a parameter. In order to
 give the same type to continuations that have yielded execution (those
 created by `switch`) and those continuations that correspond to
 beginning the execution of a `$task_i` function (those created by
 `cont.new`), we add a `(ref null $ct)` parameter to all of the
-`$task_i` functions.  Finally, observe that the event loop passes a
+`$task_i` functions. Finally, observe that the event loop passes a
 null continuation to any continuation it resumes, indicating to the
 resumed continuation that there is no previous continuation to enqueue
 in the task list.
@@ -681,6 +682,180 @@ In order to ensure that continuations are one-shot, `resume`,
 `resume_throw`, `switch`, and `cont.bind` destructively modify the
 suspended continuation such that any subsequent use of the same
 suspended continuation will result in a trap.
+
+## Further examples
+
+We now illustrate the use of tags with result values and the
+instructions `cont.bind` and `resume.throw`, by adapting and extending
+the examples of [Section
+3](#introduction-to-continuation-based-stack-switching).
+
+### Extending the generator
+
+The `$generator` function in [Section 3](#generators)
+produces the values 100 down to 1. It uses the tag `$gen`, defined as
+`(tag $gen (param i32))`, to send values to the `$producer` function.
+
+We now adapt the producer to indicate to the generator when to reset
+(i.e., start counting down from 100 again). The producer is adapted to
+pass a boolean flag to the generator when resuming a continuation.
+Correspondingly, the `$gen` tag is adapted to include an `i32` result
+type for the flag:
+
+```wat
+(tag $gen (param i32) (result i32))
+```
+
+In the generator, the instruction `(suspend $gen)` now has type `[i32]
+-> [i32]`: the parameter type represents the generated value (as in
+the original version of the example) and the result type represents
+the flag obtained back from the producer. We adapt the generator to
+behave as follows, choosing between resetting or decrementing `$i`:
+
+```wat
+  (func $generator
+    (local $i i32)
+    (local.set $i (i32.const 100))
+    (loop $loop
+      ;; Suspend execution, pass current value of $i to consumer
+      (suspend $gen (local.get $i))
+      ;; We now have the flag on the stack given to us by the consumer, telling
+      ;; us whether to reset the generator or not.
+      (if (result i32)
+        (then (i32.const 100))
+        (else (i32.sub (local.get $i) (i32.const 1)))
+      )
+      (local.tee $i)
+      (br_if $loop)
+    )
+  )
+```
+
+In the producer, we add logic to select the value of the flag, and
+pass it to the generator continuation on `resume`. However, this poses
+a challenge: the continuation created with `(cont.new $ct0 (ref.func
+$generator)))` has the same type as before: a continuation type with
+no parameter or return types. In contrast, the type of the
+continuation received in a handler block for tag `$gen` expects an
+`i32` due to the result type we added to `$gen`. This means that the
+producer must now manipulate two different continuation types:
+
+```wat
+(type $ft0 (func))
+(type $ft1 (func (param i32)))
+;; Types of continuations used by the generator:
+;; No param or result types for $ct0: $generator function has no
+;; parameters or return values.
+(type $ct0 (cont $ft0))
+;; One param of type i32 for $ct1: An i32 is passed back to the
+;; generator when resuming it, and $generator function has no return
+;; values.
+(type $ct1 (cont $ft1))
+```
+
+In order to avoid making the producer function unnecessarily
+complicated, we ensure that there is a single local variable that
+contains the next continuation to resume; its type will be `(ref
+$ct0)`. We can then use `cont.bind` to turn the continuations received
+in the handler block from type `(ref $ct1)` into `(ref $ct0)` by
+binding the value of the flag to be passed.
+
+The overall function is then defined as follows:
+
+```wat
+(func $consumer (export "consumer")
+  ;; The continuation of the generator.
+  (local $c0 (ref $ct0))
+  ;; For temporarily storing the continuation received in handler.
+  (local $c1 (ref $ct1))
+  (local $i i32)
+  ;; Create continuation executing function $generator.
+  ;; Execution only starts when resumed for the first time.
+  (local.set $c0 (cont.new $ct0 (ref.func $generator)))
+  ;; Just counts how many values we have received so far.
+  (local.set $i (i32.const 1))
+
+  (loop $loop
+    (block $on_gen (result i32 (ref $ct1))
+      ;; Resume continuation $c0
+      (resume $ct0 (on $gen $on_gen) (local.get $c0))
+      ;; $generator returned: no more data
+      (return)
+    )
+    ;; Generator suspended, stack now contains [i32 (ref $ct0)]
+    ;; Save continuation to resume it in next iteration
+    (local.set $c1)
+    ;; Stack now contains the i32 value yielded by $generator
+    (call $print)
+
+    ;; Calculate flag to be passed back to generator:
+    ;; Reset after the 42nd iteration
+    (i32.eq (local.get $i) (i32.const 42))
+    ;; Create continuation of type (ref $ct0) by binding flag value.
+    (cont.bind $ct1 $ct0 (local.get $c1))
+    (local.set $c0)
+
+    (local.tee $i (i32.add (local.get $i) (i32.const 1)))
+    (br_if $loop)
+  )
+)
+```
+
+Here, we set the flag for resetting the generator exactly once (after
+it has returned 42 values).
+
+The full version of the extended generator example can be found
+[here](examples/generator-extended.wast).
+
+### Canceling tasks
+
+The task scheduling examples from [Section 3](#task-scheduling) yield
+either by suspending to the scheduler running in the parent
+(asymmetric variant) or by calling a scheduling function that uses
+`switch` (symmetric variant).
+
+Suppose we wish to adapt our schedulers to impose a limit on the
+number of tasks that can exist at the same time. A simple way to
+enforce the limit is to cancel the task at the head of the queue
+whenever an attempt is made to add a continuation to a full queue. We
+can implement this behaviour with a small modification to our previous
+schedulers. Instead of adding tasks to be scheduled directly to a
+queue, we call the following function.
+
+```wat
+(func $schedule_task (param $c (ref null $ct))
+  ;; If the task queue is too long, cancel a task in the queue
+  (if (i32.ge_s (call $task_queue-count) (global.get $concurrent_task_limit))
+    (then
+      (block $exc_handler
+        (try_table (catch $abort $exc_handler)
+          (resume_throw $ct $abort (call $task_dequeue))
+        )
+      )
+    )
+  )
+  (call $task_enqueue (local.get $c))
+)
+```
+
+The `$schedule_task` function checks if the current number of elements
+in the queue has already reached the limit. If so, the function takes
+an existing continuation from the queue and calls `resume_throw` on
+it.
+
+The `resume_throw` instruction is annotated with a newly defined tag,
+`$abort`. This tag denotes an exception that will be raised at the
+suspension point of the continuation. We then wrap the `resume_throw`
+instruction in a `try_table`, which installs an exception handler for
+`$abort`. This exception handler simply swallows the exception, which
+means that the exception raised at the suspension point cannot escape
+the `$schedule_task` function. The old continuation is deallocated and
+the function proceeds to enqueue the new continuation.
+
+The full version of the symmetric scheduling example using the
+`$schedule_task` function can be found
+[here](examples/scheduler2-throw.wast). The changes to the asymmetric
+scheduling example are analogous.
 
 ## Design considerations
 
