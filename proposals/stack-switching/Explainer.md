@@ -81,12 +81,13 @@ design provides a form of *symmetric switching*.
 
 We illustrate the proposed stack-switching mechanism using two
 examples: generators and task scheduling. The generators example uses
-asymmetric stack-switching and the task scheduling example uses
-symmetric stack-switching.
+asymmetric stack-switching. The task scheduling example has two
+variants: the first variant uses asymmetric stack-switching and the
+second variant uses symmetric stack-switching.
 
 ### Generators
 
-The first example illustrates a generator-consumer pattern. Execution
+Our first example illustrates a generator-consumer pattern. Execution
 switches back and forth between a generator and a consumer execution
 stack. Whenever execution switches from the generator to the consumer
 the generator also passes a value to the consumer.
@@ -131,7 +132,7 @@ The overall module implementing our example has the following shape.
   ;; corresponds to the generated values passed to consumer; no values passed
   ;; back from generator to consumer.
   (tag $gen (param i32))
- 
+
   ;; Simple generator yielding values from 100 down to 1
   (func $generator ...)
   (elem declare func $generator)
@@ -259,7 +260,7 @@ The full definition of this module can be found
 
 ### Task scheduling
 
-The second example demonstrates how to implement task scheduling with
+Our second example demonstrates how to implement task scheduling with
 the stack-switching instructions. Specifically, suppose we want to
 schedule a number of tasks, represented by functions `$task_0` to
 `$task_n`, to be executed concurrently. Scheduling is cooperative,
@@ -278,11 +279,9 @@ This approach is illustrated by the following skeleton code.
 
 ```wat
 (module $scheduler1
-
   (type $ft (func))
   ;; Continuation type of all tasks
   (type $ct (cont $ft))
-
 
   ;; Tag used to yield execution in one task and resume another one.
   (tag $yield)
@@ -444,16 +443,16 @@ continuation references. The task that we switched to is now
 responsible for enqueuing the previous continuation (i.e., the one
 received as a payload) in the task list.
 
-As a minor complication, we need to encode the fact that the
-continuation switched to receives the current one as an argument in
-the type of the continuations handled by all scheduling logic. This
-means the type `$ct` must be recursive: a continuation of this type
+As a minor complication, we must encode the fact that the continuation
+switched to receives the current continuation as an argument in the
+type of the continuations handled by all scheduling logic. This means
+that the type `$ct` must be recursive: a continuation of this type
 takes a value of type `(ref null $ct)` as a parameter. In order to
 give the same type to continuations that have yielded execution (those
 created by `switch`) and those continuations that correspond to
 beginning the execution of a `$task_i` function (those created by
 `cont.new`), we add a `(ref null $ct)` parameter to all of the
-`$task_i` functions.  Finally, observe that the event loop passes a
+`$task_i` functions. Finally, observe that the event loop passes a
 null continuation to any continuation it resumes, indicating to the
 resumed continuation that there is no previous continuation to enqueue
 in the task list.
@@ -686,34 +685,32 @@ suspended continuation will result in a trap.
 
 ## Further examples
 
-We now provide examples using tags with result values as well as the
-instructions `cont.bind` and `resume.throw`.
-To this end, we revisit the examples from [Section
+We now illustrate the use of tags with result values and the
+instructions `cont.bind` and `resume.throw`, by adapting and extending
+the examples of [Section
 3](#introduction-to-continuation-based-stack-switching).
-
-
 
 ### Extending the generator
 
-The `$generator` function introduced in [Section 3](#generators)
-produced the values 100 down to 1. It uses the tag `$gen`, defined as
+The `$generator` function in [Section 3](#generators)
+produces the values 100 down to 1. It uses the tag `$gen`, defined as
 `(tag $gen (param i32))`, to send values to the `$producer` function.
 
-We now consider a situation where the producer wants to indicate to
-the generator to reset itself (i.e., start counting down from 100
-again). To this end, we allow the producer to pass a boolean flag to
-the generator when resuming a continuation. We use type `i32` for the
-flag, leading to the following definition of `$gen`:
+We now adapt the producer to indicate to the generator when to reset
+(i.e., start counting down from 100 again). The producer is adapted to
+pass a boolean flag to the generator when resuming a continuation.
+Correspondingly, the `$gen` tag is adapted to include an `i32` result
+type for the flag:
 
 ```wat
 (tag $gen (param i32) (result i32))
 ```
 
 In the generator, the instruction `(suspend $gen)` now has type `[i32]
--> [i32]`: Its argument type represents the generated value (as in the
-original version of the example), the result type represents the flag
-obtained back from the producer. We change the generator to behave as
-follows, choosing between resetting or decrementing `$i`:
+-> [i32]`: the parameter type represents the generated value (as in
+the original version of the example) and the result type represents
+the flag obtained back from the producer. We adapt the generator to
+behave as follows, choosing between resetting or decrementing `$i`:
 
 ```wat
   (func $generator
@@ -734,17 +731,14 @@ follows, choosing between resetting or decrementing `$i`:
   )
 ```
 
-
-In the producer, we then add some logic to pick the value of the flag,
-and pass it to the generator continuation on `resume`. However, this
-poses a challenge: The continuation created with `(cont.new $ct0
-(ref.func $generator)))` has the same type as before: A continuation
-type with no parameter or return types. In contrast, the type of the
-continuation received in a handler block for tag `$gen` is different
-from that type, due to the result type added to `$gen`: The result
-type of the tag becomes an additional parameter of the continuation
-received when handling that tag. This means that the producer now has
-to deal with two different continuation types:
+In the producer, we add logic to select the value of the flag, and
+pass it to the generator continuation on `resume`. However, this poses
+a challenge: the continuation created with `(cont.new $ct0 (ref.func
+$generator)))` has the same type as before: a continuation type with
+no parameter or return types. In contrast, the type of the
+continuation received in a handler block for tag `$gen` expects an
+`i32` due to the result type we added to `$gen`. This means that the
+producer must now manipulate two different continuation types:
 
 ```wat
 (type $ft0 (func))
@@ -759,12 +753,12 @@ to deal with two different continuation types:
 (type $ct1 (cont $ft1))
 ```
 
-To avoid making the producer function unnecessarily complicated, we
-want to make sure that there is only a single local variable that
-contains the next continuation to resume. Its type will be `(ref $ct0)`.
-We can then use `cont.bind` to turn the continuations received in the
-handler block from type `(ref $ct1)` into `(ref $ct0)` by binding the
-value of the flag to be passed.
+In order to avoid making the producer function unnecessarily
+complicated, we ensure that there is a single local variable that
+contains the next continuation to resume; its type will be `(ref
+$ct0)`. We can then use `cont.bind` to turn the continuations received
+in the handler block from type `(ref $ct1)` into `(ref $ct0)` by
+binding the value of the flag to be passed.
 
 The overall function is then defined as follows:
 
@@ -807,31 +801,26 @@ The overall function is then defined as follows:
 )
 ```
 
-
-Here, we set the flag for resetting the generator exactly
-once, after it returned 42 values. 
+Here, we set the flag for resetting the generator exactly once (after
+it has returned 42 values).
 
 The full version of the extended generator example can be found
 [here](examples/generator-extended.wast).
 
-### Canceling tasks 
+### Canceling tasks
 
-We now revisit the task scheduling example originally introduced 
-in [Section 3](#task-scheduling).
-To yield execution, tasks either suspend to the scheduler running in
-the parent (first variant of example) or call a scheduling function
-that uses `switch` (second variant).
+The task scheduling examples from [Section 3](#task-scheduling) yield
+either by suspending to the scheduler running in the parent
+(asymmetric variant) or by calling a scheduling function that uses
+`switch` (symmetric variant).
 
-
-We may want to adapt the example such that there is a limit on the
-number of tasks that can exist at the same time. Once that limit is
-reached, some task must be canceled before being able to schedule
-another one.
-
-We can implement this with a small addition to the previous example.
-Instead of adding tasks to be scheduled directly to a queue, we
-call the following function `$schedule_task` with any continuation that 
-should be scheduled.
+Suppose we wish to adapt our schedulers to impose a limit on the
+number of tasks that can exist at the same time. A simple way to
+enforce the limit is to cancel the task at the head of the queue
+whenever an attempt is made to add a continuation to a full queue. We
+can implement this behaviour with a small modification to our previous
+schedulers. Instead of adding tasks to be scheduled directly to a
+queue, we call the following function.
 
 ```wat
 (func $schedule_task (param $c (ref null $ct))
@@ -839,7 +828,7 @@ should be scheduled.
   (if (i32.ge_s (call $task_queue-count) (global.get $concurrent_task_limit))
     (then
       (block $exc_handler
-        (try_table (catch $abort $exc_handler) 
+        (try_table (catch $abort $exc_handler)
           (resume_throw $ct $abort (call $task_dequeue))
         )
       )
@@ -849,26 +838,24 @@ should be scheduled.
 )
 ```
 
-The function checks if the current number of elements in the queue has
-already reached the limit. If so, the function takes an existing
-continuation from the queue and calls `resume_throw` on it. 
+The `$schedule_task` function checks if the current number of elements
+in the queue has already reached the limit. If so, the function takes
+an existing continuation from the queue and calls `resume_throw` on
+it.
 
-Note that
-the `resume_throw` instruction is annotated with a newly defined tag, `$abort`.
-This tag denotes an exception that will be raised at the
+The `resume_throw` instruction is annotated with a newly defined tag,
+`$abort`. This tag denotes an exception that will be raised at the
 suspension point of the continuation. We then wrap the `resume_throw`
 instruction in a `try_table`, which installs an exception handler for
-`$abort`. This exception handler simply does nothing.
-Altogether this means that the exception raised at the suspension
-point cannot escape outside of the `$schedule_task` function, which
-then proceeds to enqueue the continuation given as a function
-argument.
+`$abort`. This exception handler simply swallows the exception, which
+means that the exception raised at the suspension point cannot escape
+the `$schedule_task` function. The old continuation is deallocated and
+the function proceeds to enqueue the new continuation.
 
-Integrating the `$schedule_task` function above into the second
-variant of the task scheduling example (i.e., the variant using
-`switch`) can be found [here](examples/scheduler2-throw.wast).
-The changes to the first variant are analogous.
-
+The full version of the symmetric scheduling example using the
+`$schedule_task` function can be found
+[here](examples/scheduler2-throw.wast). The changes to the asymmetric
+scheduling example are analogous.
 
 ## Design considerations
 
