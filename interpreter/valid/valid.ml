@@ -125,6 +125,10 @@ let check_limits {min; max} range at msg =
     require (I64.le_u min max) at
       "size minimum must not be greater than maximum"
 
+let check_def_type (c : context) (t : def_type) at =
+  match t with
+  | DefT (RecT sts, i) -> assert Int32.(compare i (of_int (List.length sts)) < 0)
+
 let check_num_type (c : context) (t : num_type) at =
   ()
 
@@ -139,7 +143,8 @@ let check_heap_type (c : context) (t : heap_type) at =
   | ExnHT | NoExnHT
   | ExternHT | NoExternHT -> ()
   | VarHT (StatX x) -> let _dt = type_ c (x @@ at) in ()
-  | VarHT (RecX _) | DefHT _ -> assert false
+  | VarHT (RecX _) -> assert false
+  | DefHT dt -> check_def_type c dt at
   | BotHT -> ()
 
 let check_ref_type (c : context) (t : ref_type) at =
@@ -180,9 +185,7 @@ let check_func_type (c : context) (ft : func_type) at =
 
 let check_cont_type (c : context) (ct : cont_type) at =
   match ct with
-  | ContT (VarHT (StatX x)) ->
-    let _dt = func_type c (x @@ at) in ()
-  | _ -> assert false
+  | ContT ht -> let _dt = func_type_of_heap_type c ht at in ()
 
 let check_table_type (c : context) (tt : table_type) at =
   let TableT (at_, lim, t) = tt in
