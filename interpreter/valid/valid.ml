@@ -127,7 +127,7 @@ let check_limits {min; max} range at msg =
 
 let check_def_type (c : context) (t : def_type) at =
   match t with
-  | DefT (RecT sts, i) -> assert Int32.(compare i (of_int (List.length sts)) < 0)
+  | DefT (RecT sts, i) -> assert (i < Lib.List32.length sts)
 
 let check_num_type (c : context) (t : num_type) at =
   ()
