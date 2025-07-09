@@ -21,6 +21,14 @@
 ;;   "non-empty tag result type"
 ;; )
 
+;; Mutually recursive types
+(module
+  (rec
+    (type $f (func (param (ref null $c))))
+    (type $c (cont $f))
+  )
+  (tag (type $f))
+)
 
 ;; Link-time typing
 

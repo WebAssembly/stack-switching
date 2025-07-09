@@ -205,7 +205,7 @@ let check_memory_type (c : context) (mt : memory_type) at =
 
 let check_tag_type (c : context) (et : tag_type) at =
   match et with
-  | TagT dt -> check_func_type c (as_func_str_type (expand_def_type dt)) at
+  | TagT dt -> let _ft = as_func_str_type (expand_def_type dt) in ()
 
 let check_global_type (c : context) (gt : global_type) at =
   let GlobalT (_mut, t) = gt in
