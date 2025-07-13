@@ -1008,6 +1008,123 @@ events and only `(on $e switch)` handlers can handle `switch`
 events. The handler search continues past handlers for the wrong kind
 of event, even if they use the correct tag.
 
+#### Store extensions
+
+* New store component `conts` for allocated continuations
+  - `S ::= {..., conts <cont>?*}`
+
+* A continuation is a context annotated with its hole's arity
+  - `cont ::= (E : n)`
+
+
+#### Administrative instructions
+
+* `(ref.cont a)` represents a continuation value, where `a` is a *continuation address* indexing into the store's `conts` component
+  - `ref.cont a : [] -> [(ref $ct)]`
+    - iff `S.conts[a] = epsilon \/ S.conts[a] = (E : n)`
+      + iff `E[val^n] : t2*`
+      + and `(val : t1)^n`
+    - and `$ct ~~ cont $ft`
+    - and `$ft ~~ [t1^n] -> [t2*]`
+
+* `(prompt{<hdl>*} <instr>* end)` represents an active handler
+  - `(prompt{hdl*}? instr* end) : [t1*] -> [t2*]`
+    - iff `instr* : [t1*] -> [t2*]`
+    - and `(hdl : [t2*])*`
+
+The administrative structure `hdl` is defined as
+```
+hdl ::= (<tagaddr> $l) | (<tagaddr> switch)
+```
+
+where
+
+* `(a $l)` represents a tag-label association
+ - `(a $l) : [t2*]`
+    - iff `(S.tags[a].type ~~ [te1*] -> [te2*])*`
+    - and `(label $l : [te1'* (ref null? $ct')])*`
+    - and `([te1*] <: [te1'*])*`
+    - and `($ct' ~~ cont $ft')*`
+    - and `([te2*] -> [t2*] <: $ft')*`
+
+* `(a switch)` represents a tag-switch association
+ - `(a switch)` and `(S.tags[b].type ~~ [] -> [te2*])*`
+
+#### Handler contexts
+
+```
+H^ea ::=
+  _
+  val* H^ea instr*
+  label_n{instr*} H^ea end
+  frame_n{F} H^ea end
+  catch{...} H^ea end
+  prompt{hdl*} H^ea end   (iff ea notin tagaddr(hdl*))
+```
+
+
+#### Reduction
+
+* `S; F; (ref.null t) (cont.new $ct)  -->  S; F; trap`
+
+* `S; F; (ref.func fa) (cont.new $ct)  -->  S'; F; (ref.cont |S.conts|)`
+  - iff `S' = S with conts += (E : n)`
+  - and `E = _ (invoke fa)`
+  - and `$ct ~~ cont $ft`
+  - and `$ft ~~ [t1^n] -> [t2*]`
+
+* `S; F; (ref.null t) (cont.bind $ct $ct')  -->  S; F; trap`
+
+* `S; F; (ref.cont ca) (cont.bind $ct $ct')  -->  S; F; trap`
+  - iff `S.conts[ca] = epsilon`
+
+* `S; F; v^n (ref.cont ca) (cont.bind $ct $ct')  -->  S'; F; (ref.const |S.conts|)`
+  - iff `S.conts[ca] = (E' : n')`
+  - and `$ct' ~~ cont $ft'`
+  - and `$ft' ~~ [t1'*] -> [t2'*]`
+  - and `n = n' - |t1'*|`
+  - and `S' = S with conts[ca] = epsilon with conts += (E : |t1'*|)`
+  - and `E = E'[v^n _]`
+
+* `S; F; (ref.null t) (resume $ct (on $e $l)*)  -->  S; F; trap`
+
+* `S; F; (ref.cont ca) (resume $ct (on $e $l)*)  -->  S; F; trap`
+  - iff `S.conts[ca] = epsilon`
+
+* `S; F; v^n (ref.cont ca) (resume $ct hdl*)  -->  S'; F; prompt{hdl*} E[v^n] end`
+  - iff `S.conts[ca] = (E : n)`
+  - and `S' = S with conts[ca] = epsilon`
+
+* `S; F; (ref.null t) (resume_throw $ct $e (on $t $l)*)  -->  S; F; trap`
+
+* `S; F; (ref.cont ca) (resume_throw $ct $e (on $t $l)*)  -->  S; F; trap`
+  - iff `S.conts[ca] = epsilon`
+
+* `S; F; v^m (ref.cont ca) (resume_throw $ct $e hdl*)  -->  S'; F; prompt{hdl*} E[v^m (throw $e)] end`
+  - iff `S.conts[ca] = (E : n)`
+  - and `S.tags[F.tags[$e]].type ~~ [t1^m] -> [t2*]`
+  - and `S' = S with conts[ca] = epsilon`
+
+* `S; F; (prompt{hdl*} v* end)  -->  S; F; v*`
+
+* `S; F; (prompt{hdl1* (ea $l) hdl2*} H^ea[v^n (suspend $e)] end)  --> S'; F; v^n (ref.cont |S.conts|) (br $l)`
+  - iff `ea notin tagaddr(hdl1*)`
+  - and `ea = F.tags[$e]`
+  - and `S.tags[ea].type ~~ [t1^n] -> [t2^m]`
+  - and `S' = S with conts += (H^ea : m)`
+
+* `S; F; (prompt{hdl1* (ea switch) hdl2*} H^ea[v^n (ref.cont ca) (switch $ct $e)] end) --> S''; F; prompt{hdl1* (ea switch) hdl2*} E[v^n (ref.cont |S.conts|)] end`
+  - iff  `S.conts[ca] = (E : n')`
+  - and `n' = 1 + n`
+  - and `ea notin tagaddr(hdl1*)`
+  - and `ea = F.tags[$e]`
+  - and `$ct ~~ cont $ft`
+  - and `$ft ~~ [t1* (ref $ct2)] -> [t2*]`
+  - and `$ct2 ~~ cont $ft2`
+  - and `$ft2 ~~ [t1'^m] -> [t2'*]`
+  - and `S' = S with conts[ca] = epsilon`
+  - and `S'' = S' with conts += (H^ea : m)`
+
 ### Binary format
 
 We extend the binary format of composite types, heap types, and instructions.
@@ -1031,7 +1148,7 @@ The opcode for heap types is encoded as an `s33`.
 
 #### Instructions
 
-We use the use the opcode space `0xe0-0xe5` for the seven new instructions.
+We use the use the opcode space `0xe0-0xe5` for the six new instructions.
 
 | Opcode | Instruction              | Immediates |
 | ------ | ------------------------ | ---------- |
