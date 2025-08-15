@@ -235,6 +235,33 @@
   (type $c2 (cont $f2))
 )
 
+;; Test resume_throw used on the very first execution of a continuation (so the
+;; code in the continuation function is never reached).
+(module
+  (tag $exn)
+
+  (type $f (func))
+  (type $k (cont $f))
+
+  (func $never
+    (unreachable)
+  )
+
+  (func (export "resume_throw-never")
+    (block $handle
+      (try_table (catch $exn $handle)
+        (resume_throw $k $exn
+          (cont.new $k (ref.func $never))
+        )
+      )
+    )
+  )
+
+  (elem declare func $never)
+)
+
+(assert_return (invoke "resume_throw-never"))
+
 ;; Simple state example
 
 (module $state
