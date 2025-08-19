@@ -8,6 +8,10 @@
   (type $f1 (func))
   (type $k1 (cont $f1))
 
+  (rec
+    (type $f2 (func (param (ref $k2))))
+    (type $k2 (cont $f2)))
+
   (func $f1 (export "unhandled-1")
     (suspend $e1)
   )
@@ -103,6 +107,10 @@
     (drop (cont.bind $k1 $k1 (local.get $k)))
     (resume $k1 (local.get $k))
   )
+  (func $nl5 (type $f2)
+    (resume $k2 (local.get 0) (local.get 0))
+  )
+  (elem declare func $nl5)
 
   (func (export "non-linear-1")
     (call $nl1 (cont.new $k1 (ref.func $r0)))
@@ -116,6 +124,8 @@
   (func (export "non-linear-4")
     (call $nl4 (cont.new $k1 (ref.func $r1)))
   )
+  (func (export "non-linear-5")
+    (call $nl5 (cont.new $k2 (ref.func $nl5))))
 
   (func (export "null-resume")
     (resume $k1
@@ -143,6 +153,7 @@
 (assert_trap (invoke "non-linear-2") "continuation already consumed")
 (assert_trap (invoke "non-linear-3") "continuation already consumed")
 (assert_trap (invoke "non-linear-4") "continuation already consumed")
+(assert_trap (invoke "non-linear-5") "continuation already consumed")
 
 (assert_trap (invoke "null-resume") "null continuation reference")
 (assert_trap (invoke "null-new") "null function reference")
