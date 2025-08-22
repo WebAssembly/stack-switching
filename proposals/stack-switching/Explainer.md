@@ -811,6 +811,7 @@ This abbreviation will be formalised with an auxiliary function or other means i
   - `suspend $t : [t1*] -> [t2*]`
     - iff `C.tags[$t] = tag $ft`
     - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
+ - During the validation phase, the tag name `$t` is replaced by the corresponding `<tagaddr>`
 
 - `switch <typeidx> <tagidx>`
   - Switch to executing a given continuation directly, suspending the current execution.
@@ -822,6 +823,7 @@ This abbreviation will be formalised with an auxiliary function or other means i
     - and `te1* <: t*`
     - and `C.types[$ct2] ~~ cont [t2*] -> [te2*]`
     - and `t* <: te2*`
+ - During the validation phase, the tag name `$t` is replaced by the corresponding `<tagaddr>`
 
 ### Execution
 
@@ -853,9 +855,9 @@ of event, even if they use the correct tag.
     - and `$ft ~~ [t1^n] -> [t2*]`
 
 * `(prompt{<hdl>*} <instr>* end)` represents an active handler
-  - `(prompt{hdl*}? instr* end) : [t1*] -> [t2*]`
-    - iff `instr* : [t1*] -> [t2*]`
-    - and `(hdl : [t2*])*`
+  - `(prompt{hdl*}? instr* end) : [] -> [t*]`
+    - iff `instr* : [] -> [t*]` in the empty context
+    - and `(hdl : [t*])*`
 
 The administrative structure `hdl` is defined as
 ```
@@ -873,7 +875,10 @@ where
     - and `([te2*] -> [t2*] <: $ft')*`
 
 * `(a switch)` represents a tag-switch association
- - `(a switch)` and `(S.tags[b].type ~~ [] -> [te2*])*`
+ - `(a switch) : [t2*]`
+      - iff `(S.tags[b].type ~~ [] -> [te2*])*`
+  
+Note: `(a $l)` and `(a switch)` use a separate namespace for the name `a`
 
 #### Handler contexts
 
@@ -884,7 +889,7 @@ H^ea ::=
   label_n{instr*} H^ea end
   frame_n{F} H^ea end
   catch{...} H^ea end
-  prompt{hdl*} H^ea end   (iff ea notin tagaddr(hdl*))
+  prompt{hdl*} H^ea end   (iff ea notin hdl*)
 ```
 
 
@@ -903,7 +908,7 @@ H^ea ::=
 * `S; F; (ref.cont ca) (cont.bind $ct $ct')  -->  S; F; trap`
   - iff `S.conts[ca] = epsilon`
 
-* `S; F; v^n (ref.cont ca) (cont.bind $ct $ct')  -->  S'; F; (ref.const |S.conts|)`
+* `S; F; v^n (ref.cont ca) (cont.bind $ct $ct')  -->  S'; F; (ref.cont |S.conts|)`
   - iff `S.conts[ca] = (E' : n')`
   - and `$ct' ~~ cont $ft'`
   - and `$ft' ~~ [t1'*] -> [t2'*]`
@@ -911,38 +916,42 @@ H^ea ::=
   - and `S' = S with conts[ca] = epsilon with conts += (E : |t1'*|)`
   - and `E = E'[v^n _]`
 
-* `S; F; (ref.null t) (resume $ct (on $e $l)*)  -->  S; F; trap`
+* `S; F; (ref.null t) (resume $ct hdl*)  -->  S; F; trap`
 
-* `S; F; (ref.cont ca) (resume $ct (on $e $l)*)  -->  S; F; trap`
+* `S; F; (ref.cont ca) (resume $ct hdl*)  -->  S; F; trap`
   - iff `S.conts[ca] = epsilon`
 
-* `S; F; v^n (ref.cont ca) (resume $ct hdl*)  -->  S'; F; prompt{hdl*} E[v^n] end`
+* `S; F; v^n (ref.cont ca) (resume $ct hdl*)  -->  S'; F; prompt{hdl'*} E[v^n] end`
   - iff `S.conts[ca] = (E : n)`
   - and `S' = S with conts[ca] = epsilon`
+  - and `hdl'*` is obtained by translating the `<tagidx>` from `hdl*` into `<tagaddr>` using `F.tag`:
+       - if `on $a $l` is in `hdl*` and `F.tags[$e]=ea`, then `ea $l` is in `hdl'*`
+       - if `on $a switch` is in `hdl'*` and `F.tags[$e]=ea`, then `ea switch` is in `hdl'*`
 
-* `S; F; (ref.null t) (resume_throw $ct $e (on $t $l)*)  -->  S; F; trap`
+* `S; F; (ref.null t) (resume_throw $ct $e hdl*)  -->  S; F; trap`
 
-* `S; F; (ref.cont ca) (resume_throw $ct $e (on $t $l)*)  -->  S; F; trap`
+* `S; F; (ref.cont ca) (resume_throw $ct $e hdl*)  -->  S; F; trap`
   - iff `S.conts[ca] = epsilon`
 
-* `S; F; v^m (ref.cont ca) (resume_throw $ct $e hdl*)  -->  S'; F; prompt{hdl*} E[v^m (throw $e)] end`
+* `S; F; v^m (ref.cont ca) (resume_throw $ct $e hdl*)  -->  S'; F; prompt{hdl'*} E[v^m (throw $e)] end`
   - iff `S.conts[ca] = (E : n)`
   - and `S.tags[F.tags[$e]].type ~~ [t1^m] -> [t2*]`
   - and `S' = S with conts[ca] = epsilon`
+  - and `hdl'*` is obtained by translating the `<tagidx>` from `hdl*` into `<tagaddr>` using `F.tag`:
+       - if `on $a $l` is in `hdl*` and `F.tags[$e]=ea`, then `ea $l` is in `hdl'*`
+       - if `on $a switch` is in `hdl'*` and `F.tags[$e]=ea`, then `ea switch` is in `hdl'*`
 
 * `S; F; (prompt{hdl*} v* end)  -->  S; F; v*`
 
-* `S; F; (prompt{hdl1* (ea $l) hdl2*} H^ea[v^n (suspend $e)] end)  --> S'; F; v^n (ref.cont |S.conts|) (br $l)`
+* `S; F; (prompt{hdl1* (ea $l) hdl2*} H^ea[v^n (suspend ea)] end)  --> S'; F; v^n (ref.cont |S.conts|) (br $l)`
   - iff `ea notin tagaddr(hdl1*)`
-  - and `ea = F.tags[$e]`
   - and `S.tags[ea].type ~~ [t1^n] -> [t2^m]`
   - and `S' = S with conts += (H^ea : m)`
 
-* `S; F; (prompt{hdl1* (ea switch) hdl2*} H^ea[v^n (ref.cont ca) (switch $ct $e)] end) --> S''; F; prompt{hdl1* (ea switch) hdl2*} E[v^n (ref.cont |S.conts|)] end`
+* `S; F; (prompt{hdl1* (ea switch) hdl2*} H^ea[v^n (ref.cont ca) (switch $ct ea)] end) --> S''; F; prompt{hdl1* (ea switch) hdl2*} E[v^n (ref.cont |S.conts|)] end`
   - iff  `S.conts[ca] = (E : n')`
   - and `n' = 1 + n`
   - and `ea notin tagaddr(hdl1*)`
-  - and `ea = F.tags[$e]`
   - and `$ct ~~ cont $ft`
   - and `$ft ~~ [t1* (ref $ct2)] -> [t2*]`
   - and `$ct2 ~~ cont $ft2`
