@@ -857,7 +857,7 @@ of event, even if they use the correct tag.
     - iff `S.tags[ea].type ~~ [t1*] -> [t2*]`
    
 * `(switch.addr $ct ea)` represents a `(switch $ct $e)` instruction where the tag index `$e` has been replaced with the physical address `ea` of the tag.
-  - `switch.addr $ct ea : : [t1* (ref null $ct1)] -> [t2*]`
+  - `switch.addr $ct ea : [t1* (ref null $ct1)] -> [t2*]`
     - iff `S.tags[$e].type ~~ [] -> [t*]`
     - and `C.types[$ct] ~~ cont [t1* (ref null? $ct2)] -> [te1*]`
     - and `te1* <: t*`
