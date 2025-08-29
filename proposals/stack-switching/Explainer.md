@@ -808,10 +808,9 @@ This abbreviation will be formalised with an auxiliary function or other means i
 
 - `suspend <tagidx>`
   - Use a control tag to suspend the current computation.
-  - `suspend $t : [t1*] -> [t2*]`
-    - iff `C.tags[$t] = tag $ft`
+  - `suspend $e : [t1*] -> [t2*]`
+    - iff `C.tags[$e] = tag $ft`
     - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
- - During the validation phase, the tag name `$t` is replaced by the corresponding `<tagaddr>`
 
 - `switch <typeidx> <tagidx>`
   - Switch to executing a given continuation directly, suspending the current execution.
@@ -823,7 +822,6 @@ This abbreviation will be formalised with an auxiliary function or other means i
     - and `te1* <: t*`
     - and `C.types[$ct2] ~~ cont [t2*] -> [te2*]`
     - and `t* <: te2*`
- - During the validation phase, the tag name `$t` is replaced by the corresponding `<tagaddr>`
 
 ### Execution
 
@@ -854,6 +852,18 @@ of event, even if they use the correct tag.
     - and `$ct ~~ cont $ft`
     - and `$ft ~~ [t1^n] -> [t2*]`
 
+* `(suspend.addr ea)` represents a `(suspend $e)` instruction where the tag index `$e` has been replaced with the physical address `ea` of the tag.
+  - `suspend.addr ea : [t1*] -> [t2*]`
+    - iff `S.tags[ea].type ~~ [t1*] -> [t2*]`
+   
+* `(switch.addr $ct ea)` represents a `(switch $ct $e)` instruction where the tag index `$e` has been replaced with the physical address `ea` of the tag.
+  - `switch.addr $ct ea : : [t1* (ref null $ct1)] -> [t2*]`
+    - iff `S.tags[$e].type ~~ [] -> [t*]`
+    - and `C.types[$ct] ~~ cont [t1* (ref null? $ct2)] -> [te1*]`
+    - and `te1* <: t*`
+    - and `C.types[$ct2] ~~ cont [t2*] -> [te2*]`
+    - and `t* <: te2*` 
+
 * `(prompt{<hdl>*} <instr>* end)` represents an active handler
   - `(prompt{hdl*}? instr* end) : [] -> [t*]`
     - iff `instr* : [] -> [t*]` in the empty context
@@ -878,7 +888,6 @@ where
  - `(a switch) : [t2*]`
       - iff `(S.tags[b].type ~~ [] -> [te2*])*`
   
-Note: `(a $l)` and `(a switch)` use a separate namespace for the name `a`
 
 #### Handler contexts
 
@@ -943,12 +952,18 @@ H^ea ::=
 
 * `S; F; (prompt{hdl*} v* end)  -->  S; F; v*`
 
-* `S; F; (prompt{hdl1* (ea $l) hdl2*} H^ea[v^n (suspend ea)] end)  --> S'; F; v^n (ref.cont |S.conts|) (br $l)`
+* `S; F; (suspend $e) --> S; F; (suspend.addr ea)`
+  - iff `ea = F.tags[$e]`
+
+* `S; F; (prompt{hdl1* (ea $l) hdl2*} H^ea[v^n (suspend.addr ea)] end)  --> S'; F; v^n (ref.cont |S.conts|) (br $l)`
   - iff `ea notin tagaddr(hdl1*)`
   - and `S.tags[ea].type ~~ [t1^n] -> [t2^m]`
   - and `S' = S with conts += (H^ea : m)`
 
-* `S; F; (prompt{hdl1* (ea switch) hdl2*} H^ea[v^n (ref.cont ca) (switch $ct ea)] end) --> S''; F; prompt{hdl1* (ea switch) hdl2*} E[v^n (ref.cont |S.conts|)] end`
+* `S; F; (switch $ct $e) --> S; F; (switch.addr $ct ea)`
+  - iff `ea = F.tags[$e]`
+
+* `S; F; (prompt{hdl1* (ea switch) hdl2*} H^ea[v^n (ref.cont ca) (switch.addr $ct ea)] end) --> S''; F; prompt{hdl1* (ea switch) hdl2*} E[v^n (ref.cont |S.conts|)] end`
   - iff  `S.conts[ca] = (E : n')`
   - and `n' = 1 + n`
   - and `ea notin tagaddr(hdl1*)`
