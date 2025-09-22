@@ -188,6 +188,7 @@ rule token = parse
       | "field" -> FIELD
       | "mut" -> MUT
       | "cont" -> CONT
+      | "handler" -> HANDLER
       | "sub" -> SUB
       | "final" -> FINAL
       | "rec" -> REC
@@ -228,8 +229,10 @@ rule token = parse
       | "cont.new" -> CONT_NEW
       | "cont.bind" -> CONT_BIND
       | "suspend" -> SUSPEND
+      | "suspend_to" -> SUSPEND_TO
       | "resume" -> RESUME
       | "resume_throw" -> RESUME_THROW
+      | "resume_with" -> RESUME_WITH
       | "switch" -> SWITCH
 
 

@@ -21,6 +21,7 @@ type heap_type =
   | ExnHT | NoExnHT
   | ExternHT | NoExternHT
   | ContHT | NoContHT
+  | HandlerHT | NoHandlerHT
   | VarHT of var
   | DefHT of def_type
   | BotHT
@@ -37,12 +38,14 @@ and struct_type = StructT of field_type list
 and array_type = ArrayT of field_type
 and func_type = FuncT of result_type * result_type
 and cont_type = ContT of heap_type
+and handler_type = HandlerT of result_type
 
 and str_type =
   | DefStructT of struct_type
   | DefArrayT of array_type
   | DefFuncT of func_type
   | DefContT of cont_type
+  | DefHandlerT of handler_type
 
 and sub_type = SubT of final * heap_type list * str_type
 and rec_type = RecT of sub_type list
@@ -152,6 +155,8 @@ let subst_heap_type s = function
   | NoExternHT -> NoExternHT
   | ContHT -> ContHT
   | NoContHT -> NoContHT
+  | HandlerHT -> HandlerHT
+  | NoHandlerHT -> NoHandlerHT
   | VarHT x -> s x
   | DefHT dt -> DefHT dt  (* assume closed *)
   | BotHT -> BotHT
@@ -188,11 +193,15 @@ let subst_func_type s = function
 let subst_cont_type s = function
   | ContT ht -> ContT (subst_heap_type s ht)
 
+let subst_handler_type s = function
+  | HandlerT ts -> HandlerT (subst_result_type s ts)
+
 let subst_str_type s = function
   | DefStructT st -> DefStructT (subst_struct_type s st)
   | DefArrayT at -> DefArrayT (subst_array_type s at)
   | DefFuncT ft -> DefFuncT (subst_func_type s ft)
   | DefContT ct -> DefContT (subst_cont_type s ct)
+  | DefHandlerT ht -> DefHandlerT (subst_handler_type s ht)
 
 let subst_sub_type s = function
   | SubT (fin, hts, st) ->
@@ -323,6 +332,11 @@ let as_cont_func_ref_type (rt : val_type) : func_type =
   | RefT (_, ht) -> as_cont_func_heap_type ht
   | _ -> assert false
 
+let as_handler_str_type (st : str_type) : handler_type =
+  match st with
+  | DefHandlerT ht -> ht
+  | _ -> assert false
+
 let extern_type_of_import_type (ImportT (et, _, _)) = et
 let extern_type_of_export_type (ExportT (et, _)) = et
 
@@ -389,6 +403,8 @@ let rec string_of_heap_type = function
   | NoExternHT -> "noextern"
   | ContHT -> "cont"
   | NoContHT -> "nocont"
+  | HandlerHT -> "handler"
+  | NoHandlerHT -> "nohandler"
   | VarHT x -> string_of_var x
   | DefHT dt -> "(" ^ string_of_def_type dt ^ ")"
   | BotHT -> "something"
@@ -427,11 +443,15 @@ and string_of_func_type = function
 and string_of_cont_type = function
   | ContT ht -> string_of_heap_type ht
 
+and string_of_handler_type = function
+  | HandlerT ts -> string_of_result_type ts
+
 and string_of_str_type = function
   | DefStructT st -> "struct " ^ string_of_struct_type st
   | DefArrayT at -> "array " ^ string_of_array_type at
   | DefFuncT ft -> "func " ^ string_of_func_type ft
   | DefContT ct -> "cont " ^ string_of_cont_type ct
+  | DefHandlerT ht -> "handler " ^ string_of_handler_type ht
 
 
 and string_of_tag_type = function

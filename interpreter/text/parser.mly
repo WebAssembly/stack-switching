@@ -299,12 +299,12 @@ let parse_annots (m : module_) : Custom.section list =
 %token<V128.shape> VEC_SHAPE
 %token ANYREF NULLREF EQREF I31REF STRUCTREF ARRAYREF
 %token FUNCREF NULLFUNCREF EXNREF NULLEXNREF EXTERNREF NULLEXTERNREF
-%token NOCONT CONTREF NULLCONTREF
+%token NOCONT CONTREF NULLCONTREF NOHANDLER
 %token ANY NONE EQ I31 REF NOFUNC EXN NOEXN EXTERN NOEXTERN NULL
 %token MUT FIELD STRUCT ARRAY SUB FINAL REC
 %token UNREACHABLE NOP DROP SELECT
 %token BLOCK END IF THEN ELSE LOOP
-%token CONT_NEW CONT_BIND SUSPEND RESUME RESUME_THROW SWITCH
+%token CONT_NEW CONT_BIND SUSPEND SUSPEND_TO RESUME RESUME_THROW RESUME_WITH SWITCH
 %token BR BR_IF BR_TABLE BR_ON_NON_NULL
 %token<Ast.idx -> Ast.instr'> BR_ON_NULL
 %token<Ast.idx -> Types.ref_type -> Types.ref_type -> Ast.instr'> BR_ON_CAST
@@ -336,7 +336,7 @@ let parse_annots (m : module_) : Custom.section list =
 %token<Ast.instr'> VEC_SHIFT VEC_BITMASK VEC_SPLAT
 %token VEC_SHUFFLE
 %token<int -> Ast.instr'> VEC_EXTRACT VEC_REPLACE
-%token FUNC START TYPE PARAM RESULT LOCAL GLOBAL CONT
+%token FUNC START TYPE PARAM RESULT LOCAL GLOBAL CONT HANDLER
 %token TABLE ELEM MEMORY ON TAG DATA DECLARE OFFSET ITEM IMPORT EXPORT
 %token MODULE BIN QUOTE DEFINITION INSTANCE
 %token SCRIPT REGISTER INVOKE GET
@@ -394,6 +394,8 @@ heap_type :
   | NOEXTERN { fun c -> NoExternHT }
   | CONT { fun c -> ContHT }
   | NOCONT { fun c -> NoContHT }
+  | HANDLER { fun c -> HandlerHT }
+  | NOHANDLER { fun c -> NoHandlerHT }
   | var { fun c -> VarHT (StatX ($1 c type_).it) }
 
 ref_type :
@@ -490,6 +492,10 @@ func_type :
     { fun c -> let FuncT (ts1, ts2) = $6 c in
       FuncT ($4 c :: ts1, ts2) }
 
+handler_type :
+  | func_type_result
+    { fun c -> HandlerT ($1 c) }
+
 func_type_result :
   | /* empty */
     { fun c -> [] }
@@ -501,6 +507,7 @@ str_type :
   | LPAR ARRAY array_type RPAR { fun c x -> DefArrayT ($3 c) }
   | LPAR FUNC func_type RPAR { fun c x -> DefFuncT ($3 c) }
   | LPAR CONT cont_type RPAR { fun c x -> DefContT ($3 c) }
+  | LPAR HANDLER handler_type RPAR { fun c x -> DefHandlerT ($3 c) }
 
 sub_type :
   | str_type { fun c x -> SubT (Final, [], $1 c x) }
@@ -626,6 +633,7 @@ plain_instr :
   | CONT_NEW var { fun c -> cont_new ($2 c type_) }
   | CONT_BIND var var { fun c -> cont_bind ($2 c type_) ($3 c type_) }
   | SUSPEND var { fun c -> suspend ($2 c tag) }
+  | SUSPEND_TO var var { fun c -> suspend_to ($2 c type_) ($3 c tag) }
   | THROW var { fun c -> throw ($2 c tag) }
   | THROW_REF { fun c -> throw_ref }
   | LOCAL_GET var { fun c -> local_get ($2 c local) }
@@ -789,6 +797,11 @@ resume_instr_instr_list :
       let x  = $2 c type_ in
       let tag = $3 c tag in
       let hs, es = $4 c in (resume_throw x tag hs @@ loc1) :: es }
+  | RESUME_WITH var resume_instr_handler_instr
+    { let loc1 = $loc($1) in
+      fun c ->
+      let x = $2 c type_ in
+      let hs, es = $3 c in (resume_with x hs @@ loc1) :: es }
 
 resume_instr_handler_instr :
   | LPAR ON var var RPAR resume_instr_handler_instr
@@ -907,6 +920,11 @@ expr1 :  /* Sugar */
       let tag = $3 c tag in
       let hs, es = $4 c in
       es, resume_throw x tag hs }
+  | RESUME_WITH var resume_expr_handler
+    { fun c ->
+      let x = $2 c type_ in
+      let hs, es = $3 c in
+      es, resume_with x hs }
   | BLOCK labeling_opt block
     { fun c -> let c' = $2 c [] in let bt, es = $3 c' in [], block bt es }
   | LOOP labeling_opt block

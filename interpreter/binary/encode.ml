@@ -132,6 +132,8 @@ struct
     | NoExternHT -> s7 (-0x0e)
     | ContHT -> s7 (-0x18)
     | NoContHT -> s7 (-0x0b)
+    | HandlerHT -> s7 (-0x1e)
+    | NoHandlerHT -> s7 (-0x1a)
     | VarHT x -> var_type s33 x
     | DefHT _ | BotHT -> assert false
 
@@ -187,6 +189,9 @@ struct
   let cont_type = function
     | ContT ht -> heap_type ht
 
+  let handler_type = function
+    | HandlerT ts -> vec val_type ts
+
   let str_type = function
     | DefStructT st -> s7 (-0x21); struct_type st
     | DefArrayT at -> s7 (-0x22); array_type at
@@ -195,6 +200,7 @@ struct
     (* TODO(dhil): This might need to change again in the future as a
        different proposal might claim this opcode! GC proposal claimed
        the previous opcode we were using. *)
+    | DefHandlerT ht -> s7 (-0x24); handler_type ht
 
   let sub_type = function
     | SubT (Final, [], st) -> str_type st
@@ -301,8 +307,10 @@ struct
     | ContNew x -> op 0xe0; var x
     | ContBind (x, y) -> op 0xe1; var x; var y
     | Suspend x -> op 0xe2; var x
+    | SuspendTo (x, y) -> op 0xe7; var x; var y
     | Resume (x, xls) -> op 0xe3; var x; resumetable xls
     | ResumeThrow (x, y, xls) -> op 0xe4; var x; var y; resumetable xls
+    | ResumeWith (x, xls) -> op 0xe8; var x; resumetable xls
     | Switch (x, y) -> op 0xe5; var x; var y
 
     | Throw x -> op 0x08; var x
