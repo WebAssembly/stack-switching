@@ -84,6 +84,11 @@ let array_type (c : context) x =
   | DefArrayT at -> at
   | _ -> error x.at ("non-array type " ^ I32.to_string_u x.it)
 
+let handler_type (c : context) x =
+  match expand_def_type (type_ c x) with
+  | DefHandlerT ht -> ht
+  | _ -> error x.at ("non-handler type " ^ Int32.to_string x.it)
+
 let refer category (s : Free.Set.t) x =
   if not (Free.Set.mem x.it s) then
     error x.at
@@ -104,6 +109,12 @@ let func_type_of_heap_type (c : context) (ht : heap_type) at : func_type =
   match ht with
   | DefHT dt -> as_func_str_type (expand_def_type dt)
   | VarHT (StatX x) -> func_type c (x @@ at)
+  | _ -> assert false
+
+let handler_type_of_heap_type (c : context) (ht : heap_type) at : handler_type =
+  match ht with
+  | DefHT dt -> as_handler_str_type (expand_def_type dt)
+  | VarHT (StatX x) -> handler_type c (x @@ at)
   | _ -> assert false
 
 let func_type_of_cont_type (c : context) (ContT ht) at : func_type =
@@ -137,7 +148,8 @@ let check_heap_type (c : context) (t : heap_type) at =
   | FuncHT | NoFuncHT
   | ContHT | NoContHT
   | ExnHT | NoExnHT
-  | ExternHT | NoExternHT -> ()
+  | ExternHT | NoExternHT
+  | HandlerHT | NoHandlerHT -> ()
   | VarHT (StatX x) -> let _dt = type_ c (x @@ at) in ()
   | VarHT (RecX _) | DefHT _ -> assert false
   | BotHT -> ()
@@ -184,6 +196,10 @@ let check_cont_type (c : context) (ct : cont_type) at =
     let _dt = func_type c (x @@ at) in ()
   | _ -> assert false
 
+let check_handler_type (c : context) (ht : handler_type) at =
+  match ht with
+  | HandlerT ts -> check_result_type c ts at
+
 let check_table_type (c : context) (tt : table_type) at =
   let TableT (at_, lim, t) = tt in
   check_ref_type c t at;
@@ -217,6 +233,7 @@ let check_str_type (c : context) (st : str_type) at =
   | DefArrayT rt -> check_array_type c rt at
   | DefFuncT ft -> check_func_type c ft at
   | DefContT ct -> check_cont_type c ct at
+  | DefHandlerT ht -> check_handler_type c ht at
 
 let check_sub_type (c : context) (sut : sub_type) at =
   let SubT (_fin, hts, st) = sut in
@@ -434,11 +451,17 @@ let check_memop (c : context) (memop : ('t, 's) memop) ty_size get_sz at =
  * declarative typing rules.
  *)
 
-let check_resume_table (c : context) ts2 (xys : (idx * hdl) list) at =
+let check_resume_table (c : context) hrt ts2 (xys : (idx * hdl) list) at =
   List.iter (fun (x1, x2) ->
       match x2 with
       | OnLabel x2 ->
-        let FuncT (ts3, ts4) = func_type_of_tag_type c (tag c x1) x1.at in
+         let FuncT (ts3, ts4) =
+          match hrt with
+          | Some rt ->
+            let FuncT (ts3, ts4) = func_type_of_tag_type c (tag c x1) x1.at in
+            FuncT (ts3, ts4 @ [RefT rt])
+          | None -> func_type_of_tag_type c (tag c x1) x1.at
+        in
         let ts' = label c x2 in
         (match Lib.List.last_opt ts' with
         | Some (RefT (nul', ht)) ->
@@ -637,10 +660,17 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
     let FuncT (ts1, ts2) = func_type_of_tag_type c tag x.at in
     ts1 --> ts2, []
 
+  | SuspendTo (x, y) ->
+    let _hty = handler_type c x in
+    let tag = tag c y in
+    let FuncT (ts1, ts2) = func_type_of_tag_type c tag x.at in
+    (ts1 @ [RefT (Null, VarHT (StatX x.it))]) -->
+      (ts2 @ [RefT (NoNull, VarHT (StatX x.it))]), []
+
   | Resume (x, xys) ->
     let ct = cont_type c x in
     let FuncT (ts1, ts2) = func_type_of_cont_type c ct x.at in
-    check_resume_table c ts2 xys e.at;
+    check_resume_table c None ts2 xys e.at;
     (ts1 @ [RefT (Null, VarHT (StatX x.it))]) --> ts2, []
 
   | ResumeThrow (x, y, xys) ->
@@ -648,8 +678,27 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
     let FuncT (ts1, ts2) = func_type_of_cont_type c ct x.at in
     let tag = tag c y in
     let FuncT (ts0, _) = func_type_of_tag_type c tag y.at in
-    check_resume_table c ts2 xys e.at;
+    check_resume_table c None ts2 xys e.at;
     (ts0 @ [RefT (Null, VarHT (StatX x.it))]) --> ts2, []
+
+  | ResumeWith (x, xys) ->
+    let ct = cont_type c x in
+    let FuncT (ts1, ts2) = func_type_of_cont_type c ct x.at in
+    let (rt, ts3) =
+      match Lib.List.last_opt ts1 with
+      | Some (RefT ((nul, ht) as rt)) ->
+         let HandlerT ts = handler_type_of_heap_type c ht x.at in
+         (rt, ts)
+      | _ ->
+         error x.at
+           ("type mismatch: instruction requires a handler reference type " ^
+              " but the type annotation has " ^ string_of_result_type ts1)
+    in
+    require (match_result_type c.types ts3 ts2) x.at
+      "type mismatch in handler type";
+    check_resume_table c (Some rt) ts2 xys e.at;
+    let ts1' = Lib.List.lead ts1 in
+    (ts1' @ [RefT (Null, VarHT (StatX x.it))]) --> ts2, []
 
   | Switch (x, y) ->
      let ct1 = cont_type c x in

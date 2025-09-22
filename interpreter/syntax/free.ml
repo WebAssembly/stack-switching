@@ -82,6 +82,7 @@ let heap_type = function
   | ExnHT | NoExnHT -> empty
   | ExternHT | NoExternHT -> empty
   | ContHT | NoContHT -> empty
+  | HandlerHT | NoHandlerHT -> empty
   | VarHT x -> var_type x
   | DefHT _ct -> empty  (* assume closed *)
   | BotHT -> empty
@@ -109,12 +110,14 @@ let field_type (FieldT (_mut, st)) = storage_type st
 let struct_type (StructT fts) = list field_type fts
 let array_type (ArrayT ft) = field_type ft
 let func_type (FuncT (ts1, ts2)) = list val_type ts1 ++ list val_type ts2
+let handler_type (HandlerT ts) = list val_type ts
 
 let str_type = function
   | DefStructT st -> struct_type st
   | DefArrayT at -> array_type at
   | DefFuncT ft -> func_type ft
   | DefContT ct -> cont_type ct
+  | DefHandlerT ht -> handler_type ht
 
 let sub_type = function
   | SubT (_fin, hts, st) -> list heap_type hts ++ str_type st
@@ -182,7 +185,9 @@ let rec instr (e : instr) =
   | ContBind (x, y) -> types (idx x) ++ types (idx y)
   | ResumeThrow (x, y, xys) -> types (idx x) ++ tags (idx y) ++ list (fun (x, y) -> tags (idx x) ++ hdl y) xys
   | Resume (x, xys) -> types (idx x) ++ list (fun (x, y) -> tags (idx x) ++ hdl y) xys
+  | ResumeWith (x, xys) -> types (idx x) ++ list (fun (x, y) -> tags (idx x) ++ hdl y) xys
   | Suspend x -> tags (idx x)
+  | SuspendTo (x, y) -> types (idx x) ++ tags (idx y)
   | Switch (x, z) -> types (idx x) ++ tags (idx z)
   | Throw x -> tags (idx x)
   | ThrowRef -> empty

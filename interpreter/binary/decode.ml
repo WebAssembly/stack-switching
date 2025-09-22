@@ -193,6 +193,8 @@ let heap_type s =
       | -0x16 -> ArrayHT
       | -0x17 -> ExnHT
       | -0x18 -> ContHT
+      | -0x1e -> HandlerHT
+      | -0x1a -> NoHandlerHT
       | _ -> error s pos "malformed heap type"
     )
   ] s
@@ -214,6 +216,8 @@ let ref_type s =
   | -0x16 -> (Null, ArrayHT)
   | -0x17 -> (Null, ExnHT)
   | -0x18 -> (Null, ContHT)
+  | -0x19 -> (Null, HandlerHT)
+  | -0x1a -> (Null, NoHandlerHT)
   | -0x1c -> (NoNull, heap_type s)
   | -0x1d -> (Null, heap_type s)
   | _ -> error s pos "malformed reference type"
@@ -259,12 +263,16 @@ let func_type s =
 let cont_type s =
   ContT (heap_type s)
 
+let handler_type s =
+  HandlerT (result_type s)
+
 let str_type s =
   match s7 s with
   | -0x20 -> DefFuncT (func_type s)
   | -0x21 -> DefStructT (struct_type s)
   | -0x22 -> DefArrayT (array_type s)
   | -0x23 -> DefContT (cont_type s) (* TODO(dhil): See comment in encode.ml *)
+  | -0x24 -> DefHandlerT (handler_type s)
   | _ -> error s (pos s - 1) "malformed definition type"
 
 let sub_type s =
@@ -650,6 +658,14 @@ let rec instr s =
     let x = at var s in
     let y = at var s in
     switch x y
+  | 0xe7 ->
+    let x = at var s in
+    let y = at var s in
+    suspend_to x y
+  | 0xe8 ->
+    let x = at var s in
+    let xls = vec on_clause s in
+    resume_with x xls
 
   | 0xfb as b ->
     (match u32 s with
