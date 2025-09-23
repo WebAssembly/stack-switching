@@ -900,8 +900,8 @@ critical use-cases requires multi-shot continuations.
 
 ## Specification changes
 
-This proposal is based on the [function references proposal](https://github.com/WebAssembly/function-references)
-and [exception handling proposal](https://github.com/WebAssembly/exception-handling).
+This proposal is based on Wasm 3.0, specifically [function references](https://github.com/WebAssembly/function-references)
+and [exception handling](https://github.com/WebAssembly/exception-handling).
 
 ### Types
 
@@ -997,6 +997,15 @@ This abbreviation will be formalised with an auxiliary function or other means i
     - and `te1* <: t*`
     - and `C.types[$ct2] ~~ cont [t2*] -> [te2*]`
     - and `t* <: te2*`
+
+In addition to these new rules, the existing rules for cast instructions `ref.test`, `ref.cast`, `br_on_cast`, and `br_on_cast_fail` are amended with an additional side condition to rule out casting of continuation types:
+
+  - iff `rt castable`
+
+where `rt` is the respective target type of the cast instruction, and the `castable` predicate is defined as follows:
+
+- `rt castable`
+  - iff not (rt <: (ref null cont))
 
 ### Execution
 

@@ -114,6 +114,7 @@ let func_type_of_tag_type (c : context) (TagT dt) at : func_type =
   | DefFuncT ft -> ft
   | _ -> error at "non-function type"
 
+
 (* Types *)
 
 let check_limits {min; max} range at msg =
@@ -413,6 +414,10 @@ let check_memop (c : context) (memop : ('t, 's) memop) ty_size get_sz at =
       "offset out of range";
   memop.ty
 
+let check_cast (c : context) rt at =
+  require (not (match_ref_type c.types rt (Null, ContHT))) at
+    "invalid cast to continuation types"
+
 
 (*
  * Conventions:
@@ -540,6 +545,7 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
   | BrOnCast (x, rt1, rt2) ->
     check_ref_type c rt1 e.at;
     check_ref_type c rt2 e.at;
+    check_cast c rt2 e.at;
     require
       (match_ref_type c.types rt2 rt1) e.at
       ("type mismatch on cast: type " ^ string_of_ref_type rt2 ^
@@ -556,6 +562,7 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
   | BrOnCastFail (x, rt1, rt2) ->
     check_ref_type c rt1 e.at;
     check_ref_type c rt2 e.at;
+    check_cast c rt2 e.at;
     let rt1' = diff_ref_type rt1 rt2 in
     require
       (match_ref_type c.types rt2 rt1) e.at
@@ -835,11 +842,13 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
   | RefTest rt ->
     let (_nul, ht) = rt in
     check_ref_type c rt e.at;
+    check_cast c rt e.at;
     [RefT (Null, top_of_heap_type c.types ht)] --> [NumT I32T], []
 
   | RefCast rt ->
     let (nul, ht) = rt in
     check_ref_type c rt e.at;
+    check_cast c rt e.at;
     [RefT (Null, top_of_heap_type c.types ht)] --> [RefT (nul, ht)], []
 
   | RefEq ->
