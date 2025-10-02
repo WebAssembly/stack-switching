@@ -748,6 +748,10 @@ We change the wellformedness condition for tag types to be more liberal, i.e.
 
 In other words, the return type of tag types is allowed to be non-empty.
 
+We also introduce tag uses, which can be either tag indices or tag addresses:
+
+- `taguse ::= tagidx | tagaddr`
+
 ### Instructions
 
 The new instructions and their validation rules are as follows. To simplify the presentation, we write this:
@@ -806,17 +810,27 @@ This abbreviation will be formalised with an auxiliary function or other means i
     - iff `C.tags[$e] = tag $ft`
     - and `C.types[$ft] ~~ func [] -> [t*]`
 
-- `suspend <tagidx>`
+- `suspend <taguse>`
   - Use a control tag to suspend the current computation.
   - `suspend $e : [t1*] -> [t2*]`
     - iff `C.tags[$e] = tag $ft`
     - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
+  - `suspend ea : [t1*] -> [t2*]`
+    - iff `S.tags[ea] = tag $ft`
+    - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
 
-- `switch <typeidx> <tagidx>`
+- `switch <typeidx> <taguse>`
   - Switch to executing a given continuation directly, suspending the current execution.
   - The suspension and switch are performed from the perspective of a parent `(on $e switch)` handler, determined by the annotated control tag.
   - `switch $ct1 $e : [t1* (ref null $ct1)] -> [t2*]`
     - iff `C.tags[$e] = tag $ft`
+    - and `C.types[$ft] ~~ func [] -> [t*]`
+    - and `C.types[$ct1] ~~ cont [t1* (ref null? $ct2)] -> [te1*]`
+    - and `te1* <: t*`
+    - and `C.types[$ct2] ~~ cont [t2*] -> [te2*]`
+    - and `t* <: te2*`
+  - `switch $ct1 ea : [t1* (ref null $ct1)] -> [t2*]`
+    - iff `S.tags[ea] = tag $ft`
     - and `C.types[$ft] ~~ func [] -> [t*]`
     - and `C.types[$ct1] ~~ cont [t1* (ref null? $ct2)] -> [te1*]`
     - and `te1* <: t*`
@@ -851,18 +865,6 @@ of event, even if they use the correct tag.
       + and `(val : t1)^n`
     - and `$ct ~~ cont $ft`
     - and `$ft ~~ [t1^n] -> [t2*]`
-
-* `(suspend.addr ea)` represents a `(suspend $e)` instruction where the tag index `$e` has been replaced with the physical address `ea` of the tag.
-  - `suspend.addr ea : [t1*] -> [t2*]`
-    - iff `S.tags[ea].type ~~ [t1*] -> [t2*]`
-
-* `(switch.addr $ct ea)` represents a `(switch $ct $e)` instruction where the tag index `$e` has been replaced with the physical address `ea` of the tag.
-  - `switch.addr $ct ea : [t1* (ref null $ct1)] -> [t2*]`
-    - iff `S.tags[$e].type ~~ [] -> [t*]`
-    - and `C.types[$ct] ~~ cont [t1* (ref null? $ct2)] -> [te1*]`
-    - and `te1* <: t*`
-    - and `C.types[$ct2] ~~ cont [t2*] -> [te2*]`
-    - and `t* <: te2*`
 
 * `(prompt{<hdl>*} <instr>* end)` represents an active handler
   - `(prompt{hdl*}? instr* end) : [] -> [t*]`
@@ -954,18 +956,18 @@ H^ea ::=
 
 * `S; F; (prompt{hdl*} v* end)  -->  S; F; v*`
 
-* `S; F; (suspend $e) --> S; F; (suspend.addr ea)`
+* `S; F; (suspend $e) --> S; F; (suspend ea)`
   - iff `ea = F.module.tags[$e]`
 
-* `S; F; (prompt{hdl1* (ea $l) hdl2*} H^ea[v^n (suspend.addr ea)] end)  --> S'; F; v^n (ref.cont |S.conts|) (br $l)`
+* `S; F; (prompt{hdl1* (ea $l) hdl2*} H^ea[v^n (suspend ea)] end)  --> S'; F; v^n (ref.cont |S.conts|) (br $l)`
   - iff `forall $l', (ea $l') notin hdl1*`
   - and `S.tags[ea].type ~~ [t1^n] -> [t2^m]`
   - and `S' = S with conts += (H^ea : m)`
 
-* `S; F; (switch $ct $e) --> S; F; (switch.addr $ct ea)`
+* `S; F; (switch $ct $e) --> S; F; (switch $ct ea)`
   - iff `ea = F.module.tags[$e]`
 
-* `S; F; (prompt{hdl1* (ea switch) hdl2*} H^ea[v^n (ref.cont ca) (switch.addr $ct ea)] end) --> S''; F; prompt{hdl1* (ea switch) hdl2*} E[v^n (ref.cont |S.conts|)] end`
+* `S; F; (prompt{hdl1* (ea switch) hdl2*} H^ea[v^n (ref.cont ca) (switch $ct ea)] end) --> S''; F; prompt{hdl1* (ea switch) hdl2*} E[v^n (ref.cont |S.conts|)] end`
   - iff  `S.conts[ca] = (E : n')`
   - and `n' = 1 + n`
   - and `(switch ea) notin hdl1*`
