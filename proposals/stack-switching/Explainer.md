@@ -878,11 +878,11 @@ where
 
 * `(a $l)` represents a tag-label association
  - `(a $l) : [t2*]`
-    - iff `(S.tags[a].type ~~ [te1*] -> [te2*])*`
-    - and `(label $l : [te1'* (ref null? $ct')])*`
-    - and `([te1*] <: [te1'*])*`
-    - and `($ct' ~~ cont $ft')*`
-    - and `([te2*] -> [t2*] <: $ft')*`
+    - iff `S.tags[a].type ~~ [te1*] -> [te2*]`
+    - and `label $l : [te1'* (ref null? $ct')]`
+    - and `[te1*] <: [te1'*]`
+    - and `$ct' ~~ cont $ft'`
+    - and `[te2*] -> [t2*] <: $ft'`
 
 * `(a switch)` represents a tag-switch association
  - `(a switch) : [t2*]`
