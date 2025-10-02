@@ -836,10 +836,10 @@ of event, even if they use the correct tag.
 #### Store extensions
 
 * New store component `conts` for allocated continuations
-  - `S ::= {..., conts <cont>?*}`
+  - `S ::= {..., conts <continst>?*}`
 
 * A continuation is a context annotated with its hole's arity
-  - `cont ::= (E : n)`
+  - `continst ::= (E : n)`
 
 
 #### Administrative instructions
@@ -886,7 +886,7 @@ where
 
 * `(a switch)` represents a tag-switch association
  - `(a switch) : [t2*]`
-      - iff `S.tags[a].type ~~ [] -> [te2*]`
+      - iff `S.tags[a].type ~~ [] -> [t2*]`
   
 
 #### Handler contexts
@@ -933,9 +933,9 @@ H^ea ::=
 * `S; F; v^n (ref.cont ca) (resume $ct hdl*)  -->  S'; F; prompt{hdl'*} E[v^n] end`
   - iff `S.conts[ca] = (E : n)`
   - and `S' = S with conts[ca] = epsilon`
-  - and `hdl'*` is obtained by translating the `<tagidx>` from `hdl*` into `<tagaddr>` using `F.tag`:
-       - if `on $a $l` is in `hdl*` and `F.tags[$e]=ea`, then `ea $l` is in `hdl'*`
-       - if `on $a switch` is in `hdl'*` and `F.tags[$e]=ea`, then `ea switch` is in `hdl'*`
+  - and `hdl'*` by mapping the following translation onto `hdl*`:
+       - a clause of the form `on $a $l` becomes `ea $l` if `F.module.tags[$a]=ea` 
+       - a clause of the form `on $a switch` becomes `ea switch` if `F.module.tags[$a]=ea` 
 
 * `S; F; (ref.null t) (resume_throw $ct $e hdl*)  -->  S; F; trap`
 
@@ -944,31 +944,31 @@ H^ea ::=
 
 * `S; F; v^m (ref.cont ca) (resume_throw $ct $e hdl*)  -->  S''; F; prompt{hdl'*} E[(ref.exn |S'.exns|) throw_ref] end`
   - iff `S.conts[ca] = (E : n)`
-  - and `ta = S.tags[F.tags[$e]]`
+  - and `ta = S.tags[F.module.tags[$e]]`
   - and `ta.type ~~ [t1^m] -> [t2*]`
   - and `S' = S with exns += {ta, v^m}`
   - and `S'' = S' with conts[ca] = epsilon`
-  - and `hdl'*` is obtained by translating the `<tagidx>` from `hdl*` into `<tagaddr>` using `F.tag`:
-       - if `on $a $l` is in `hdl*` and `F.tags[$e]=ea`, then `ea $l` is in `hdl'*`
-       - if `on $a switch` is in `hdl'*` and `F.tags[$e]=ea`, then `ea switch` is in `hdl'*`
+  - and `hdl'*` by mapping the following translation onto `hdl*`:
+       - a clause of the form `on $a $l` becomes `ea $l` if `F.module.tags[$a]=ea` 
+       - a clause of the form `on $a switch` becomes `ea switch` if `F.module.tags[$a]=ea`
 
 * `S; F; (prompt{hdl*} v* end)  -->  S; F; v*`
 
 * `S; F; (suspend $e) --> S; F; (suspend.addr ea)`
-  - iff `ea = F.tags[$e]`
+  - iff `ea = F.module.tags[$e]`
 
 * `S; F; (prompt{hdl1* (ea $l) hdl2*} H^ea[v^n (suspend.addr ea)] end)  --> S'; F; v^n (ref.cont |S.conts|) (br $l)`
-  - iff `ea notin tagaddr(hdl1*)`
+  - iff `forall $l', (ea $l') notin hdl1*`
   - and `S.tags[ea].type ~~ [t1^n] -> [t2^m]`
   - and `S' = S with conts += (H^ea : m)`
 
 * `S; F; (switch $ct $e) --> S; F; (switch.addr $ct ea)`
-  - iff `ea = F.tags[$e]`
+  - iff `ea = F.module.tags[$e]`
 
 * `S; F; (prompt{hdl1* (ea switch) hdl2*} H^ea[v^n (ref.cont ca) (switch.addr $ct ea)] end) --> S''; F; prompt{hdl1* (ea switch) hdl2*} E[v^n (ref.cont |S.conts|)] end`
   - iff  `S.conts[ca] = (E : n')`
   - and `n' = 1 + n`
-  - and `ea notin tagaddr(hdl1*)`
+  - and `(switch ea) notin hdl1*`
   - and `$ct ~~ cont $ft`
   - and `$ft ~~ [t1* (ref $ct2)] -> [t2*]`
   - and `$ct2 ~~ cont $ft2`
