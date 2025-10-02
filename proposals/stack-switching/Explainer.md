@@ -751,6 +751,11 @@ In other words, the return type of tag types is allowed to be non-empty.
 We also introduce tag uses, which can be either tag indices or tag addresses:
 
 - `taguse ::= tagidx | tagaddr`
+  - `$a : [t1*] -> [t2*]`
+    - iff `C.tags[$e] = tag $ft`
+    - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
+  - `ea : [t1*] -> [t2*]`
+    - iff `S.tags[ea].type ~~ [t1*] -> [t2*]`
 
 ### Instructions
 
@@ -799,45 +804,25 @@ This abbreviation will be formalised with an auxiliary function or other means i
 
 - `hdl = (on <taguse> <labelidx>) | (on <taguse> switch)`
   - Handlers attached to `resume` and `resume_throw`, handling control tags for `suspend` and `switch`, respectively.
-  - `(on $e $l) : t*`
-    - iff `C.tags[$e] = tag $ft`
-    - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
+  - `(on tu $l) : t*`
+    - iff `tu : [t1*] -> [t2*]`
     - and `C.labels[$l] = [t1'* (ref null? $ct)]`
     - and `t1* <: t1'*`
     - and `C.types[$ct] ~~ cont [t2'*] -> [t'*]`
     - and `[t2*] -> [t*] <: [t2'*] -> [t'*]`
-  - `(on ea $l) : t*`
-    - iff `S.tags[ea].type ~~ [t1*] -> [t2*]`
-    - and `C.labels[$l] = [t1'* (ref null? $ct)]`
-    - and `t1* <: t1'*`
-    - and `C.types[$ct] ~~ cont [t2'*] -> [t'*]`
-    - and `[t2*] -> [t*] <: [t2'*] -> [t'*]`
-  - `(on $e switch) : t*`
-    - iff `C.tags[$e] = tag $ft`
-    - and `C.types[$ft] ~~ func [] -> [t*]`
-  - `(on ea switch) : t*`
-    - iff `S.tags[ea].type ~~ [] -> [t*]`
+  - `(on tu switch) : t*`
+    - iff `tu : [] -> [t*]`
 
 - `suspend <taguse>`
   - Use a control tag to suspend the current computation.
-  - `suspend $e : [t1*] -> [t2*]`
-    - iff `C.tags[$e] = tag $ft`
-    - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
-  - `suspend ea : [t1*] -> [t2*]`
-    - iff `S.tags[ea].types ~~ func [t1*] -> [t2*]`
+  - `suspend tu : [t1*] -> [t2*]`
+    - iff `tu : func [t1*] -> [t2*]`
 
 - `switch <typeidx> <taguse>`
   - Switch to executing a given continuation directly, suspending the current execution.
   - The suspension and switch are performed from the perspective of a parent `(on $e switch)` handler, determined by the annotated control tag.
-  - `switch $ct1 $e : [t1* (ref null $ct1)] -> [t2*]`
-    - iff `C.tags[$e] = tag $ft`
-    - and `C.types[$ft] ~~ func [] -> [t*]`
-    - and `C.types[$ct1] ~~ cont [t1* (ref null? $ct2)] -> [te1*]`
-    - and `te1* <: t*`
-    - and `C.types[$ct2] ~~ cont [t2*] -> [te2*]`
-    - and `t* <: te2*`
-  - `switch $ct1 ea : [t1* (ref null $ct1)] -> [t2*]`
-    - iff `S.tags[ea].types ~~ func [] -> [t*]`
+  - `switch $ct1 tu : [t1* (ref null $ct1)] -> [t2*]`
+    - iff `tu : [] -> [t*]`
     - and `C.types[$ct1] ~~ cont [t1* (ref null? $ct2)] -> [te1*]`
     - and `te1* <: t*`
     - and `C.types[$ct2] ~~ cont [t2*] -> [te2*]`
@@ -941,18 +926,18 @@ H^ea ::=
 * `S; F; (suspend $e) --> S; F; (suspend ea)`
   - iff `ea = F.module.tags[$e]`
 
-* `S; F; (prompt{hdl1* (ea $l) hdl2*} H^ea[v^n (suspend ea)] end)  --> S'; F; v^n (ref.cont |S.conts|) (br $l)`
-  - iff `forall $l', (ea $l') notin hdl1*`
+* `S; F; (prompt{hdl1* (on ea $l) hdl2*} H^ea[v^n (suspend ea)] end)  --> S'; F; v^n (ref.cont |S.conts|) (br $l)`
+  - iff `forall $l', (on ea $l') notin hdl1*`
   - and `S.tags[ea].type ~~ [t1^n] -> [t2^m]`
   - and `S' = S with conts += (H^ea : m)`
 
 * `S; F; (switch $ct $e) --> S; F; (switch $ct ea)`
   - iff `ea = F.module.tags[$e]`
 
-* `S; F; (prompt{hdl1* (ea switch) hdl2*} H^ea[v^n (ref.cont ca) (switch $ct ea)] end) --> S''; F; prompt{hdl1* (ea switch) hdl2*} E[v^n (ref.cont |S.conts|)] end`
+* `S; F; (prompt{hdl1* (on ea switch) hdl2*} H^ea[v^n (ref.cont ca) (switch $ct ea)] end) --> S''; F; prompt{hdl1* (on ea switch) hdl2*} E[v^n (ref.cont |S.conts|)] end`
   - iff  `S.conts[ca] = (E : n')`
   - and `n' = 1 + n`
-  - and `(switch ea) notin hdl1*`
+  - and `(on switch ea) notin hdl1*`
   - and `$ct ~~ cont $ft`
   - and `$ft ~~ [t1* (ref $ct2)] -> [t2*]`
   - and `$ct2 ~~ cont $ft2`
