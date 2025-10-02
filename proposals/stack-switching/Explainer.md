@@ -855,14 +855,14 @@ of event, even if they use the correct tag.
 * `(suspend.addr ea)` represents a `(suspend $e)` instruction where the tag index `$e` has been replaced with the physical address `ea` of the tag.
   - `suspend.addr ea : [t1*] -> [t2*]`
     - iff `S.tags[ea].type ~~ [t1*] -> [t2*]`
-   
+
 * `(switch.addr $ct ea)` represents a `(switch $ct $e)` instruction where the tag index `$e` has been replaced with the physical address `ea` of the tag.
   - `switch.addr $ct ea : [t1* (ref null $ct1)] -> [t2*]`
     - iff `S.tags[$e].type ~~ [] -> [t*]`
     - and `C.types[$ct] ~~ cont [t1* (ref null? $ct2)] -> [te1*]`
     - and `te1* <: t*`
     - and `C.types[$ct2] ~~ cont [t2*] -> [te2*]`
-    - and `t* <: te2*` 
+    - and `t* <: te2*`
 
 * `(prompt{<hdl>*} <instr>* end)` represents an active handler
   - `(prompt{hdl*}? instr* end) : [] -> [t*]`
@@ -942,10 +942,12 @@ H^ea ::=
 * `S; F; (ref.cont ca) (resume_throw $ct $e hdl*)  -->  S; F; trap`
   - iff `S.conts[ca] = epsilon`
 
-* `S; F; v^m (ref.cont ca) (resume_throw $ct $e hdl*)  -->  S'; F; prompt{hdl'*} E[v^m (throw $e)] end`
+* `S; F; v^m (ref.cont ca) (resume_throw $ct $e hdl*)  -->  S''; F; prompt{hdl'*} E[(ref.exn |S'.exns|) throw_ref] end`
   - iff `S.conts[ca] = (E : n)`
-  - and `S.tags[F.tags[$e]].type ~~ [t1^m] -> [t2*]`
-  - and `S' = S with conts[ca] = epsilon`
+  - and `ta = S.tags[F.tags[$e]]`
+  - and `ta.type ~~ [t1^m] -> [t2*]`
+  - and `S' = S with exns += {ta, v^m}`
+  - and `S'' = S' with conts[ca] = epsilon`
   - and `hdl'*` is obtained by translating the `<tagidx>` from `hdl*` into `<tagaddr>` using `F.tag`:
        - if `on $a $l` is in `hdl*` and `F.tags[$e]=ea`, then `ea $l` is in `hdl'*`
        - if `on $a switch` is in `hdl'*` and `F.tags[$e]=ea`, then `ea switch` is in `hdl'*`
