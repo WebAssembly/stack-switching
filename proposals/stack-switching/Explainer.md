@@ -886,7 +886,7 @@ where
 
 * `(a switch)` represents a tag-switch association
  - `(a switch) : [t2*]`
-      - iff `(S.tags[b].type ~~ [] -> [te2*])*`
+      - iff `S.tags[a].type ~~ [] -> [te2*]`
   
 
 #### Handler contexts
