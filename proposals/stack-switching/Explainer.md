@@ -755,7 +755,7 @@ We also introduce tag uses, which can be either tag indices or tag addresses:
     - iff `C.tags[$e] = tag $ft`
     - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
   - `ea : [t1*] -> [t2*]`
-    - iff `S.tags[ea].type ~~ [t1*] -> [t2*]`
+    - iff `S.tags[ea].type ~~ func [t1*] -> [t2*]`
 
 ### Instructions
 
