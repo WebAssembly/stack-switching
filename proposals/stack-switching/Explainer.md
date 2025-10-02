@@ -797,7 +797,7 @@ This abbreviation will be formalised with an auxiliary function or other means i
     - and `C.types[$ft] ~~ func [te*] -> []`
     - and `(hdl : t2*)*`
 
-- `hdl = (on <tagidx> <labelidx>) | (on <tagidx> switch)`
+- `hdl = (on <taguse> <labelidx>) | (on <taguse> switch)`
   - Handlers attached to `resume` and `resume_throw`, handling control tags for `suspend` and `switch`, respectively.
   - `(on $e $l) : t*`
     - iff `C.tags[$e] = tag $ft`
@@ -806,9 +806,17 @@ This abbreviation will be formalised with an auxiliary function or other means i
     - and `t1* <: t1'*`
     - and `C.types[$ct] ~~ cont [t2'*] -> [t'*]`
     - and `[t2*] -> [t*] <: [t2'*] -> [t'*]`
+  - `(on ea $l) : t*`
+    - iff `S.tags[ea].type ~~ [t1*] -> [t2*]`
+    - and `C.labels[$l] = [t1'* (ref null? $ct)]`
+    - and `t1* <: t1'*`
+    - and `C.types[$ct] ~~ cont [t2'*] -> [t'*]`
+    - and `[t2*] -> [t*] <: [t2'*] -> [t'*]`
   - `(on $e switch) : t*`
     - iff `C.tags[$e] = tag $ft`
     - and `C.types[$ft] ~~ func [] -> [t*]`
+  - `(on ea switch) : t*`
+    - iff `S.tags[ea].type ~~ [] -> [t*]`
 
 - `suspend <taguse>`
   - Use a control tag to suspend the current computation.
@@ -816,8 +824,7 @@ This abbreviation will be formalised with an auxiliary function or other means i
     - iff `C.tags[$e] = tag $ft`
     - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
   - `suspend ea : [t1*] -> [t2*]`
-    - iff `S.tags[ea] = tag $ft`
-    - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
+    - iff `S.tags[ea].types ~~ func [t1*] -> [t2*]`
 
 - `switch <typeidx> <taguse>`
   - Switch to executing a given continuation directly, suspending the current execution.
@@ -830,8 +837,7 @@ This abbreviation will be formalised with an auxiliary function or other means i
     - and `C.types[$ct2] ~~ cont [t2*] -> [te2*]`
     - and `t* <: te2*`
   - `switch $ct1 ea : [t1* (ref null $ct1)] -> [t2*]`
-    - iff `S.tags[ea] = tag $ft`
-    - and `C.types[$ft] ~~ func [] -> [t*]`
+    - iff `S.tags[ea].types ~~ func [] -> [t*]`
     - and `C.types[$ct1] ~~ cont [t1* (ref null? $ct2)] -> [te1*]`
     - and `te1* <: t*`
     - and `C.types[$ct2] ~~ cont [t2*] -> [te2*]`
@@ -870,26 +876,6 @@ of event, even if they use the correct tag.
   - `(prompt{hdl*}? instr* end) : [] -> [t*]`
     - iff `instr* : [] -> [t*]` in the empty context
     - and `(hdl : [t*])*`
-
-The administrative structure `hdl` is defined as
-```
-hdl ::= (<tagaddr> $l) | (<tagaddr> switch)
-```
-
-where
-
-* `(a $l)` represents a tag-label association
- - `(a $l) : [t2*]`
-    - iff `S.tags[a].type ~~ [te1*] -> [te2*]`
-    - and `label $l : [te1'* (ref null? $ct')]`
-    - and `[te1*] <: [te1'*]`
-    - and `$ct' ~~ cont $ft'`
-    - and `[te2*] -> [t2*] <: $ft'`
-
-* `(a switch)` represents a tag-switch association
- - `(a switch) : [t2*]`
-      - iff `S.tags[a].type ~~ [] -> [t2*]`
-  
 
 #### Handler contexts
 
@@ -935,9 +921,7 @@ H^ea ::=
 * `S; F; v^n (ref.cont ca) (resume $ct hdl*)  -->  S'; F; prompt{hdl'*} E[v^n] end`
   - iff `S.conts[ca] = (E : n)`
   - and `S' = S with conts[ca] = epsilon`
-  - and `hdl'*` by mapping the following translation onto `hdl*`:
-       - a clause of the form `on $a $l` becomes `ea $l` if `F.module.tags[$a]=ea` 
-       - a clause of the form `on $a switch` becomes `ea switch` if `F.module.tags[$a]=ea` 
+  - and `hdl'* = hdl*[F.module.tags / 0..|F.module.tags|-1]`
 
 * `S; F; (ref.null t) (resume_throw $ct $e hdl*)  -->  S; F; trap`
 
@@ -950,9 +934,7 @@ H^ea ::=
   - and `ta.type ~~ [t1^m] -> [t2*]`
   - and `S' = S with exns += {ta, v^m}`
   - and `S'' = S' with conts[ca] = epsilon`
-  - and `hdl'*` by mapping the following translation onto `hdl*`:
-       - a clause of the form `on $a $l` becomes `ea $l` if `F.module.tags[$a]=ea` 
-       - a clause of the form `on $a switch` becomes `ea switch` if `F.module.tags[$a]=ea`
+  - and `hdl'* = hdl*[F.module.tags / 0..|F.module.tags|-1]`
 
 * `S; F; (prompt{hdl*} v* end)  -->  S; F; v*`
 
