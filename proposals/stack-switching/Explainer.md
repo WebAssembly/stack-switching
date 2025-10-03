@@ -751,7 +751,7 @@ In other words, the return type of tag types is allowed to be non-empty.
 We also introduce tag uses, which can be either tag indices or tag addresses:
 
 - `taguse ::= tagidx | tagaddr`
-  - `$a : [t1*] -> [t2*]`
+  - `$e : [t1*] -> [t2*]`
     - iff `C.tags[$e] = tag $ft`
     - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
   - `ea : [t1*] -> [t2*]`
@@ -933,6 +933,11 @@ H^ea ::=
 
 * `S; F; (switch $ct $e) --> S; F; (switch $ct ea)`
   - iff `ea = F.module.tags[$e]`
+
+* `S; F; (ref.null t) (switch $ct ea) --> S; F; trap`
+
+* `S; F; (ref.cont ca) (switch $ct ea) --> S; F; trap`
+  - iff `S.conts[ca] = epsilon`
 
 * `S; F; (prompt{hdl1* (on ea switch) hdl2*} H^ea[v^n (ref.cont ca) (switch $ct ea)] end) --> S''; F; prompt{hdl1* (on ea switch) hdl2*} E[v^n (ref.cont |S.conts|)] end`
   - iff  `S.conts[ca] = (E : n')`
