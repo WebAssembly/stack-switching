@@ -923,6 +923,15 @@ We change the wellformedness condition for tag types to be more liberal, i.e.
 
 In other words, the return type of tag types is allowed to be non-empty.
 
+We also introduce tag uses, which can be either tag indices or tag addresses:
+
+- `taguse ::= tagidx | tagaddr`
+  - `$e : [t1*] -> [t2*]`
+    - iff `C.tags[$e] = tag $ft`
+    - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
+  - `ea : [t1*] -> [t2*]`
+    - iff `S.tags[ea].type ~~ func [t1*] -> [t2*]`
+
 ### Instructions
 
 The new instructions and their validation rules are as follows. To simplify the presentation, we write this:
@@ -968,31 +977,27 @@ This abbreviation will be formalised with an auxiliary function or other means i
     - and `C.types[$ft] ~~ func [te*] -> []`
     - and `(hdl : t2*)*`
 
-- `hdl = (on <tagidx> <labelidx>) | (on <tagidx> switch)`
+- `hdl = (on <taguse> <labelidx>) | (on <taguse> switch)`
   - Handlers attached to `resume` and `resume_throw`, handling control tags for `suspend` and `switch`, respectively.
-  - `(on $e $l) : t*`
-    - iff `C.tags[$e] = tag $ft`
-    - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
+  - `(on tu $l) : t*`
+    - iff `tu : [t1*] -> [t2*]`
     - and `C.labels[$l] = [t1'* (ref null? $ct)]`
     - and `t1* <: t1'*`
     - and `C.types[$ct] ~~ cont [t2'*] -> [t'*]`
     - and `[t2*] -> [t*] <: [t2'*] -> [t'*]`
-  - `(on $e switch) : t*`
-    - iff `C.tags[$e] = tag $ft`
-    - and `C.types[$ft] ~~ func [] -> [t*]`
+  - `(on tu switch) : t*`
+    - iff `tu : [] -> [t*]`
 
-- `suspend <tagidx>`
+- `suspend <taguse>`
   - Use a control tag to suspend the current computation.
-  - `suspend $t : [t1*] -> [t2*]`
-    - iff `C.tags[$t] = tag $ft`
-    - and `C.types[$ft] ~~ func [t1*] -> [t2*]`
+  - `suspend tu : [t1*] -> [t2*]`
+    - iff `tu : func [t1*] -> [t2*]`
 
-- `switch <typeidx> <tagidx>`
+- `switch <typeidx> <taguse>`
   - Switch to executing a given continuation directly, suspending the current execution.
   - The suspension and switch are performed from the perspective of a parent `(on $e switch)` handler, determined by the annotated control tag.
-  - `switch $ct1 $e : [t1* (ref null $ct1)] -> [t2*]`
-    - iff `C.tags[$e] = tag $ft`
-    - and `C.types[$ft] ~~ func [] -> [t*]`
+  - `switch $ct1 tu : [t1* (ref null $ct1)] -> [t2*]`
+    - iff `tu : [] -> [t*]`
     - and `C.types[$ct1] ~~ cont [t1* (ref null? $ct2)] -> [te1*]`
     - and `te1* <: t*`
     - and `C.types[$ct2] ~~ cont [t2*] -> [te2*]`
@@ -1017,6 +1022,118 @@ events and only `(on $e switch)` handlers can handle `switch`
 events. The handler search continues past handlers for the wrong kind
 of event, even if they use the correct tag.
 
+#### Store extensions
+
+* New store component `conts` for allocated continuations
+  - `S ::= {..., conts <continst>?*}`
+
+* A continuation is a context annotated with its hole's arity
+  - `continst ::= (E : n)`
+
+
+#### Administrative instructions
+
+* `(ref.cont a)` represents a continuation value, where `a` is a *continuation address* indexing into the store's `conts` component
+  - `ref.cont a : [] -> [(ref $ct)]`
+    - iff `S.conts[a] = epsilon \/ S.conts[a] = (E : n)`
+      + iff `E[val^n] : t2*`
+      + and `(val : t1)^n`
+    - and `$ct ~~ cont $ft`
+    - and `$ft ~~ [t1^n] -> [t2*]`
+
+* `(prompt{<hdl>*} <instr>* end)` represents an active handler
+  - `(prompt{hdl*}? instr* end) : [] -> [t*]`
+    - iff `instr* : [] -> [t*]` in the empty context
+    - and `(hdl : [t*])*`
+
+#### Handler contexts
+
+```
+H^ea ::=
+  _
+  val* H^ea instr*
+  label_n{instr*} H^ea end
+  frame_n{F} H^ea end
+  catch{...} H^ea end
+  prompt{hdl*} H^ea end   (iff ea notin hdl*)
+```
+
+
+#### Reduction
+
+* `S; F; (ref.null t) (cont.new $ct)  -->  S; F; trap`
+
+* `S; F; (ref.func fa) (cont.new $ct)  -->  S'; F; (ref.cont |S.conts|)`
+  - iff `S' = S with conts += (E : n)`
+  - and `E = _ (invoke fa)`
+  - and `$ct ~~ cont $ft`
+  - and `$ft ~~ [t1^n] -> [t2*]`
+
+* `S; F; (ref.null t) (cont.bind $ct $ct')  -->  S; F; trap`
+
+* `S; F; (ref.cont ca) (cont.bind $ct $ct')  -->  S; F; trap`
+  - iff `S.conts[ca] = epsilon`
+
+* `S; F; v^n (ref.cont ca) (cont.bind $ct $ct')  -->  S'; F; (ref.cont |S.conts|)`
+  - iff `S.conts[ca] = (E' : n')`
+  - and `$ct' ~~ cont $ft'`
+  - and `$ft' ~~ [t1'*] -> [t2'*]`
+  - and `n = n' - |t1'*|`
+  - and `S' = S with conts[ca] = epsilon with conts += (E : |t1'*|)`
+  - and `E = E'[v^n _]`
+
+* `S; F; (ref.null t) (resume $ct hdl*)  -->  S; F; trap`
+
+* `S; F; (ref.cont ca) (resume $ct hdl*)  -->  S; F; trap`
+  - iff `S.conts[ca] = epsilon`
+
+* `S; F; v^n (ref.cont ca) (resume $ct hdl*)  -->  S'; F; prompt{hdl'*} E[v^n] end`
+  - iff `S.conts[ca] = (E : n)`
+  - and `S' = S with conts[ca] = epsilon`
+  - and `hdl'* = hdl*[F.module.tags / 0..|F.module.tags|-1]`
+
+* `S; F; (ref.null t) (resume_throw $ct $e hdl*)  -->  S; F; trap`
+
+* `S; F; (ref.cont ca) (resume_throw $ct $e hdl*)  -->  S; F; trap`
+  - iff `S.conts[ca] = epsilon`
+
+* `S; F; v^m (ref.cont ca) (resume_throw $ct $e hdl*)  -->  S''; F; prompt{hdl'*} E[(ref.exn |S'.exns|) throw_ref] end`
+  - iff `S.conts[ca] = (E : n)`
+  - and `ta = S.tags[F.module.tags[$e]]`
+  - and `ta.type ~~ [t1^m] -> [t2*]`
+  - and `S' = S with exns += {ta, v^m}`
+  - and `S'' = S' with conts[ca] = epsilon`
+  - and `hdl'* = hdl*[F.module.tags / 0..|F.module.tags|-1]`
+
+* `S; F; (prompt{hdl*} v* end)  -->  S; F; v*`
+
+* `S; F; (suspend $e) --> S; F; (suspend ea)`
+  - iff `ea = F.module.tags[$e]`
+
+* `S; F; (prompt{hdl1* (on ea $l) hdl2*} H^ea[v^n (suspend ea)] end)  --> S'; F; v^n (ref.cont |S.conts|) (br $l)`
+  - iff `forall $l', (on ea $l') notin hdl1*`
+  - and `S.tags[ea].type ~~ [t1^n] -> [t2^m]`
+  - and `S' = S with conts += (H^ea : m)`
+
+* `S; F; (switch $ct $e) --> S; F; (switch $ct ea)`
+  - iff `ea = F.module.tags[$e]`
+
+* `S; F; (ref.null t) (switch $ct ea) --> S; F; trap`
+
+* `S; F; (ref.cont ca) (switch $ct ea) --> S; F; trap`
+  - iff `S.conts[ca] = epsilon`
+
+* `S; F; (prompt{hdl1* (on ea switch) hdl2*} H^ea[v^n (ref.cont ca) (switch $ct ea)] end) --> S''; F; prompt{hdl1* (on ea switch) hdl2*} E[v^n (ref.cont |S.conts|)] end`
+  - iff  `S.conts[ca] = (E : n')`
+  - and `n' = 1 + n`
+  - and `(on switch ea) notin hdl1*`
+  - and `$ct ~~ cont $ft`
+  - and `$ft ~~ [t1* (ref $ct2)] -> [t2*]`
+  - and `$ct2 ~~ cont $ft2`
+  - and `$ft2 ~~ [t1'^m] -> [t2'*]`
+  - and `S' = S with conts[ca] = epsilon`
+  - and `S'' = S' with conts += (H^ea : m)`
+
 ### Binary format
 
 We extend the binary format of composite types, heap types, and instructions.
@@ -1040,7 +1157,7 @@ The opcode for heap types is encoded as an `s33`.
 
 #### Instructions
 
-We use the use the opcode space `0xe0-0xe5` for the seven new instructions.
+We use the use the opcode space `0xe0-0xe5` for the six new instructions.
 
 | Opcode | Instruction              | Immediates |
 | ------ | ------------------------ | ---------- |
