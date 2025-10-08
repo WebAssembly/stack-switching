@@ -483,8 +483,8 @@ a task function would ordinarily return, it should instead switch to
 the next task. When doing so, it should pass a new flag to the target
 continuation to indicate that the source continuation should not be
 enqueued in the task list, but should instead be cancelled. Cancellation
-can be implemented using another instruction, `resume_throw`, which is
-described later in the document.
+can be implemented using two more instructions, `resume_throw` and
+`resume_throw_ref`, which are described later in the document.
 
 Full versions of `$scheduler1` and  `$scheduler2` can be found
 [here](examples/scheduler1.wast) and [here](examples/scheduler2.wast).
@@ -543,7 +543,7 @@ The following instruction creates a *suspended continuation* from a
 function.
 
 ```wast
-  cont.new $ct : [(ref $ft)] -> [(ref $ct)]
+  cont.new $ct : [(ref null $ft)] -> [(ref $ct)]
   where:
   - $ft = func [t1*] -> [t2*]
   - $ct = cont $ft
@@ -561,7 +561,7 @@ continuation under a *handler*. The handler specifies what to do when
 control is subsequently suspended again.
 
 ```wast
-  resume $ct hdl* : [t1* (ref $ct)] -> [t2*]
+  resume $ct hdl* : [t1* (ref null $ct)] -> [t2*]
   where:
   - $ct = cont [t1*] -> [t2*]
 ```
@@ -581,7 +581,7 @@ The second way to invoke a continuation is to raise an exception at
 the control tag invocation site which causes the stack to be unwound.
 
 ```wast
-  resume_throw $ct $exn hdl* : [te* (ref $ct)])] -> [t2*]
+  resume_throw $ct $exn hdl* : [te* (ref null $ct)] -> [t2*]
   where:
   - $ct = cont [t1*] -> [t2*]
   - $exn : [te*] -> []
@@ -597,11 +597,24 @@ exception is being raised (the continuation is not actually being
 supplied a value) the parameter types for the continuation `t1*` are
 unconstrained.
 
+Exceptions can also be raised at a suspension site using
+`resume_throw_ref`.
+
+```wast
+  resume_throw_ref $ct hdl* : [exnref (ref null $ct)] -> [t2*]
+  where:
+  - $ct = cont [t1*] -> [t2*]
+```
+
+The `resume_throw_ref` instruction is identical to the `resume_throw`
+instruction except that the exception it raises is given by an exnref
+operand rather than by an exception tag immediate.
+
 The third way to invoke a continuation is to perform a symmetric
 switch.
 
 ```wast
-  switch $ct1 $e : [t1* (ref $ct1)] -> [t2*]
+  switch $ct1 $e : [t1* (ref null $ct1)] -> [t2*]
   where:
   - $e : [] -> [t*]
   - $ct1 = cont [t1* (ref $ct2)] -> [t*]
@@ -614,8 +627,9 @@ continuation argument (`$ct1`) and a control tag
 performs a direct switch to the suspended peer continuation (of type
 `$ct1`), passing in the required parameters (including the just
 suspended current continuation, in order to allow the peer to switch
-back again). As with `resume` and `resume_throw`, the `switch`
-instruction fully consumes its suspended continuation argument.
+back again). As with `resume`, `resume_throw`, and `resume_throw_ref`,
+the `switch` instruction fully consumes its suspended continuation
+argument.
 
 ### Suspending continuations
 
@@ -641,7 +655,7 @@ A suspended continuation can be partially applied to a prefix of its
 arguments yielding another suspended continuation.
 
 ```wast
-  cont.bind $ct1 $ct2 : [t1* (ref $ct1)] -> [(ref $ct2)]
+  cont.bind $ct1 $ct2 : [t1* (ref null $ct1)] -> [(ref $ct2)]
   where:
   - $ct1 = cont [t1* t3*] -> [t2*]
   - $ct2 = cont [t3*] -> [t2*]
@@ -672,21 +686,22 @@ preallocating one slot for each continuation argument.
 
 #### Consuming continuations
 
-There are four different ways in which suspended continuations are
-consumed (`resume,resume_throw,switch,cont.bind`). A suspended
-continuation may be resumed with a particular handler with `resume`;
-aborted with `resume_throw`; directly switched to via `switch`; or
-partially applied with `cont.bind`.
+There are five different ways in which suspended continuations are
+consumed (`resume,resume_throw,resume_throw_ref,switch,cont.bind`).
+A suspended continuation may be resumed with a particular handler with
+`resume`; aborted with `resume_throw` or `resume_throw_ref`; directly
+switched to via `switch`; or partially applied with `cont.bind`.
 
 In order to ensure that continuations are one-shot, `resume`,
-`resume_throw`, `switch`, and `cont.bind` destructively modify the
-suspended continuation such that any subsequent use of the same
-suspended continuation will result in a trap.
+`resume_throw`, `resume_throw_ref`, `switch`, and `cont.bind`
+destructively modify the suspended continuation such that any
+subsequent use of the same suspended continuation will result in a
+trap.
 
 ## Further examples
 
 We now illustrate the use of tags with result values and the
-instructions `cont.bind` and `resume.throw`, by adapting and extending
+instructions `cont.bind` and `resume_throw`, by adapting and extending
 the examples of [Section
 3](#introduction-to-continuation-based-stack-switching).
 
@@ -977,6 +992,13 @@ This abbreviation will be formalised with an auxiliary function or other means i
     - and `C.types[$ft] ~~ func [te*] -> []`
     - and `(hdl : t2*)*`
 
+- `resume_throw_ref <typeidx> hdl*`
+  - Execute a given continuation, but force it to immediately throw the given exception.
+  - Used to abort a continuation.
+  - `resume_throw_ref $ct hdl* : [exnref (ref null $ct)] -> [t2*]`
+    - iff `C.types[$ct] ~~ cont [t1*] -> [t2*]`
+    - and `(hdl : t2*)*`
+
 - `hdl = (on <taguse> <labelidx>) | (on <taguse> switch)`
   - Handlers attached to `resume` and `resume_throw`, handling control tags for `suspend` and `switch`, respectively.
   - `(on tu $l) : t*`
@@ -1094,15 +1116,21 @@ H^ea ::=
 
 * `S; F; (ref.null t) (resume_throw $ct $e hdl*)  -->  S; F; trap`
 
-* `S; F; (ref.cont ca) (resume_throw $ct $e hdl*)  -->  S; F; trap`
+* `S; F; v^m (ref.cont ca) (resume_throw $ct $e hdl*)  -->  S'; F; (ref.exn |S.exns|) (ref.const ca) (resume_throw_ref $ct hdl*)`
+  - iff `ta = F.module.tags[$e]`
+  - and `S.tags[ta].type ~~ [t1^m] -> [t2*]`
+  - and `S' = S with exns += {S.tags[ta], v^m}`
+
+* `S; F; (ref.null t) (resume_throw_ref $ct hdl*)  -->  S; F; trap`
+
+* `S; F; (ref.cont ca) (resume_throw_ref $ct hdl*)  -->  S; F; trap`
   - iff `S.conts[ca] = epsilon`
 
-* `S; F; v^m (ref.cont ca) (resume_throw $ct $e hdl*)  -->  S''; F; prompt{hdl'*} E[(ref.exn |S'.exns|) throw_ref] end`
+* `S; F; (ref.null t) (ref.cont ca) (resume_throw_ref $ct hdl*)  -->  S; F; trap`
+
+* `S; F; (ref.exn ea) (ref.cont ca) (resume_throw_ref $ct hdl*)  -->  S'; F; prompt{hdl'*} E[(ref.exn ea) throw_ref] end`
   - iff `S.conts[ca] = (E : n)`
-  - and `ta = S.tags[F.module.tags[$e]]`
-  - and `ta.type ~~ [t1^m] -> [t2*]`
-  - and `S' = S with exns += {ta, v^m}`
-  - and `S'' = S' with conts[ca] = epsilon`
+  - and `S' = S with conts[ca] = epsilon`
   - and `hdl'* = hdl*[F.module.tags / 0..|F.module.tags|-1]`
 
 * `S; F; (prompt{hdl*} v* end)  -->  S; F; v*`
@@ -1157,7 +1185,7 @@ The opcode for heap types is encoded as an `s33`.
 
 #### Instructions
 
-We use the use the opcode space `0xe0-0xe5` for the six new instructions.
+We use the use the opcode space `0xe0-0xe6` for the seven new instructions.
 
 | Opcode | Instruction              | Immediates |
 | ------ | ------------------------ | ---------- |
@@ -1166,10 +1194,11 @@ We use the use the opcode space `0xe0-0xe5` for the six new instructions.
 | 0xe2   | `suspend $t`             | `$t : u32` |
 | 0xe3   | `resume $ct hdl*` | `$ct : u32` (for hdl see below) |
 | 0xe4   | `resume_throw $ct $e hdl*` | `$ct : u32`, `$e : u32` (for hdl see below) |
-| 0xe5   | `switch $ct1 $e`          | `$ct1 : u32`, `$e : u32` |
+| 0xe5   | `resume_throw_ref $ct hdl*` | `$ct : u32` (for hdl see below) |
+| 0xe6   | `switch $ct1 $t`          | `$ct1 : u32`, `$t : u32` |
 
-In the case of `resume` and `resume_throw` we use a leading byte to
-indicate the shape of `hdl` as follows.
+In the cases of `resume`, `resume_throw`, and `resume_throw_ref` we use a
+leading byte to indicate the shape of `hdl` as follows.
 
 | Opcode | On clause shape | Immediates |
 | ------ | --------------- | ---------- |
