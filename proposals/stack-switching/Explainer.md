@@ -1050,15 +1050,15 @@ of event, even if they use the correct tag.
 * New store component `conts` for allocated continuations
   - `S ::= {..., conts <continst>?*}`
 
-* A continuation is a context annotated with its hole's arity
-  - `continst ::= (E : n)`
+* A continuation is a context
+  - `continst ::= E`
 
 
 #### Administrative instructions
 
 * `(ref.cont a)` represents a continuation value, where `a` is a *continuation address* indexing into the store's `conts` component
   - `ref.cont a : [] -> [(ref $ct)]`
-    - iff `S.conts[a] = epsilon \/ S.conts[a] = (E : n)`
+    - iff `S.conts[a] = epsilon \/ S.conts[a] = E`
       + iff `E[val^n] : t2*`
       + and `(val : t1)^n`
     - and `$ct ~~ cont $ft`
@@ -1087,10 +1087,8 @@ H^ea ::=
 * `S; F; (ref.null t) (cont.new $ct)  -->  S; F; trap`
 
 * `S; F; (ref.func fa) (cont.new $ct)  -->  S'; F; (ref.cont |S.conts|)`
-  - iff `S' = S with conts += (E : n)`
+  - iff `S' = S with conts += E`
   - and `E = _ (invoke fa)`
-  - and `$ct ~~ cont $ft`
-  - and `$ft ~~ [t1^n] -> [t2*]`
 
 * `S; F; (ref.null t) (cont.bind $ct $ct')  -->  S; F; trap`
 
@@ -1098,11 +1096,11 @@ H^ea ::=
   - iff `S.conts[ca] = epsilon`
 
 * `S; F; v^n (ref.cont ca) (cont.bind $ct $ct')  -->  S'; F; (ref.cont |S.conts|)`
-  - iff `S.conts[ca] = (E' : n')`
-  - and `$ct' ~~ cont $ft'`
-  - and `$ft' ~~ [t1'*] -> [t2'*]`
-  - and `n = n' - |t1'*|`
-  - and `S' = S with conts[ca] = epsilon with conts += (E : |t1'*|)`
+  - iff `S.conts[ca] = E'`
+  - and `$ct ~~ cont [t1*] -> [t2*]`
+  - and `$ct' ~~ cont [t1'*] -> [t2'*]`
+  - and `n = |t1*| - |t1'*|`
+  - and `S' = S with conts[ca] = epsilon with conts += E`
   - and `E = E'[v^n _]`
 
 * `S; F; (ref.null t) (resume $ct hdl*)  -->  S; F; trap`
@@ -1111,8 +1109,9 @@ H^ea ::=
   - iff `S.conts[ca] = epsilon`
 
 * `S; F; v^n (ref.cont ca) (resume $ct hdl*)  -->  S'; F; prompt{hdl'*} E[v^n] end`
-  - iff `S.conts[ca] = (E : n)`
+  - iff `S.conts[ca] = E`
   - and `S' = S with conts[ca] = epsilon`
+  - and `$ct ~~ cont [t1^n] -> [t2*]`
   - and `hdl'* = hdl*[F.module.tags / 0..|F.module.tags|-1]`
 
 * `S; F; (ref.null t) (resume_throw $ct $e hdl*)  -->  S; F; trap`
@@ -1128,10 +1127,10 @@ H^ea ::=
   - iff `S.conts[ca] = epsilon`
 
 * `S; F; (ref.null t) (ref.cont ca) (resume_throw_ref $ct hdl*)  -->  S; F; trap`
-  - iff `S.conts[ca] = (E : n)`
+  - iff `S.conts[ca] = E`
 
 * `S; F; (ref.exn ea) (ref.cont ca) (resume_throw_ref $ct hdl*)  -->  S'; F; prompt{hdl'*} E[(ref.exn ea) throw_ref] end`
-  - iff `S.conts[ca] = (E : n)`
+  - iff `S.conts[ca] = E`
   - and `S' = S with conts[ca] = epsilon`
   - and `hdl'* = hdl*[F.module.tags / 0..|F.module.tags|-1]`
 
@@ -1154,15 +1153,11 @@ H^ea ::=
   - iff `S.conts[ca] = epsilon`
 
 * `S; F; (prompt{hdl1* (on ea switch) hdl2*} H^ea[v^n (ref.cont ca) (switch $ct ea)] end) --> S''; F; prompt{hdl1* (on ea switch) hdl2*} E[v^n (ref.cont |S.conts|)] end`
-  - iff  `S.conts[ca] = (E : n')`
-  - and `n' = 1 + n`
+  - iff  `S.conts[ca] = E`
   - and `(on switch ea) notin hdl1*`
-  - and `$ct ~~ cont $ft`
-  - and `$ft ~~ [t1* (ref $ct2)] -> [t2*]`
-  - and `$ct2 ~~ cont $ft2`
-  - and `$ft2 ~~ [t1'^m] -> [t2'*]`
+  - and `$ct ~~ cont [t1^n (ref $ct2)] -> [t2*]`
   - and `S' = S with conts[ca] = epsilon`
-  - and `S'' = S' with conts += (H^ea : m)`
+  - and `S'' = S' with conts += H^ea`
 
 ### Binary format
 
