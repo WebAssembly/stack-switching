@@ -1128,6 +1128,7 @@ H^ea ::=
   - iff `S.conts[ca] = epsilon`
 
 * `S; F; (ref.null t) (ref.cont ca) (resume_throw_ref $ct hdl*)  -->  S; F; trap`
+  - iff `S.conts[ca] = (E : n)`
 
 * `S; F; (ref.exn ea) (ref.cont ca) (resume_throw_ref $ct hdl*)  -->  S'; F; prompt{hdl'*} E[(ref.exn ea) throw_ref] end`
   - iff `S.conts[ca] = (E : n)`
