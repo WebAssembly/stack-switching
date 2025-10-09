@@ -687,10 +687,11 @@ preallocating one slot for each continuation argument.
 #### Consuming continuations
 
 There are five different ways in which suspended continuations are
-consumed (`resume,resume_throw,resume_throw_ref,switch,cont.bind`).
-A suspended continuation may be resumed with a particular handler with
-`resume`; aborted with `resume_throw` or `resume_throw_ref`; directly
-switched to via `switch`; or partially applied with `cont.bind`.
+consumed (`resume`, `resume_throw`, `resume_throw_ref`, `switch`,
+`cont.bind`). A suspended continuation may be resumed with a particular
+handler with `resume`; aborted with `resume_throw` or
+`resume_throw_ref`; directly switched to via `switch`; or partially
+applied with `cont.bind`.
 
 In order to ensure that continuations are one-shot, `resume`,
 `resume_throw`, `resume_throw_ref`, `switch`, and `cont.bind`
