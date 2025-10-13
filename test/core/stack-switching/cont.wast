@@ -574,7 +574,7 @@
 
 ;; Nested example: generator in a thread
 
-(module $concurrent-generator
+(module $concurrent_generator
   (func $log (import "spectest" "print_i64") (param i64))
 
   (tag $syield (import "scheduler" "yield"))
