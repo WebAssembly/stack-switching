@@ -228,7 +228,7 @@
 ;;;;
 
 
-(module $subtyping-resume0
+(module $subtyping_resume0
 
   (type $ft0 (func))
   (type $ct0 (cont $ft0))
@@ -260,7 +260,7 @@
   )
 )
 
-(module $subtyping-resume1
+(module $subtyping_resume1
 
   (type $ft0 (func))
   (type $ct0 (cont $ft0))
