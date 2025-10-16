@@ -271,7 +271,7 @@
     (tag $exn (param externref))
     (func
       (i64.const 0)
-      (resume_throw_ref $ct $exn (ref.null $ct))
+      (resume_throw_ref $ct (ref.null $ct))
       (unreachable)))
   "type mismatch")
 
@@ -279,8 +279,7 @@
   (module
     (type $ft (func))
     (type $ct (cont $ft))
-    (tag $exn (param externref))
     (func
-      (resume_throw_ref $ct $exn (ref.null $ct))
+      (resume_throw_ref $ct (ref.null $ct))
       (unreachable)))
   "type mismatch")

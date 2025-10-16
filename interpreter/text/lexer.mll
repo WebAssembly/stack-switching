@@ -230,6 +230,7 @@ rule token = parse
       | "suspend" -> SUSPEND
       | "resume" -> RESUME
       | "resume_throw" -> RESUME_THROW
+      | "resume_throw_ref" -> RESUME_THROW_REF
       | "switch" -> SWITCH
 
 
