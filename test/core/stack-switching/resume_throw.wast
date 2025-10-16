@@ -158,7 +158,7 @@
 
   (func (export "throw_handled_ref") (result i32)
     (block $h (result exnref)
-      (try_table (catch_ref $e0 $h) (throw $e0 (i32.const 42)))
+      (try_table (catch_ref $e0 $h) (i32.const 42) (throw $e0))
       (unreachable)
     )
     (resume_throw_ref $k (cont.new $k (ref.func $handler)))
