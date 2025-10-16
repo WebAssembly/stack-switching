@@ -303,7 +303,7 @@ struct
     | Suspend x -> op 0xe2; var x
     | Resume (x, xls) -> op 0xe3; var x; resumetable xls
     | ResumeThrow (x, y, xls) -> op 0xe4; var x; var y; resumetable xls
-    (* TOOD: resume_throw_ref *)
+    | ResumeThrowRef (x, xls) -> op 0xe5; var x; resumetable xls
     | Switch (x, y) -> op 0xe6; var x; var y
 
     | Throw x -> op 0x08; var x

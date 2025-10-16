@@ -658,6 +658,12 @@ let rec check_instr (c : context) (e : instr) (s : infer_result_type) : infer_in
     check_resume_table c ts2 xys e.at;
     (ts0 @ [RefT (Null, VarHT (StatX x.it))]) --> ts2, []
 
+  | ResumeThrowRef (x, xys) ->
+    let ct = cont_type c x in
+    let FuncT (ts1, ts2) = func_type_of_cont_type c ct x.at in
+    check_resume_table c ts2 xys e.at;
+    ([RefT (Null, ExnHT); RefT (Null, VarHT (StatX x.it))]) --> ts2, []
+
   | Switch (x, y) ->
      let ct1 = cont_type c x in
      let FuncT (ts11, ts12) = func_type_of_cont_type c ct1 x.at in

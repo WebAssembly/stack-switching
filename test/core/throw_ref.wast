@@ -17,7 +17,8 @@
       (try_table (result i32) (catch_ref $e0 $h) (throw $e0))
       (return)
     )
-    (if (param exnref) (i32.eqz (local.get 0))
+    (if (param exnref
+    ) (i32.eqz (local.get 0))
       (then (throw_ref))
       (else (drop))
     )
