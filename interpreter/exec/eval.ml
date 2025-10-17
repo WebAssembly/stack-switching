@@ -407,17 +407,18 @@ let rec step (c : config) : config =
         cont := None;
         vs', [Prompt (hs, ctxt ([], [Throwing (tagt, args) @@ e.at])) @@ e.at]
 
-      | ResumeThrowRef (x, xls), Ref (NullRef _) :: vs ->
+      | ResumeThrowRef (x, xls), Ref _ :: Ref (NullRef _) :: vs ->
         vs, [Trapping "null exception reference" @@ e.at]
 
-      | ResumeThrowRef (x, xls), Ref _ :: Ref (NullRef _) :: vs ->
+      | ResumeThrowRef (x, xls), Ref (NullRef _) :: vs ->
         vs, [Trapping "null continuation reference" @@ e.at]
 
-      | ResumeThrowRef (x, xls), Ref _ :: Ref (ContRef {contents = None}) :: vs ->
+      | ResumeThrowRef (x, xls), Ref (ContRef {contents = None}) :: Ref _ :: vs ->
         vs, [Trapping "continuation already consumed" @@ e.at]
 
-      | ResumeThrowRef (x, xls), Ref (Exn.(ExnRef (Exn (tagt, args)))) ::
-                                   Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
+      | ResumeThrowRef (x, xls),
+        Ref (ContRef ({contents = Some (n, ctxt)} as cont)) ::
+          Ref (Exn.(ExnRef (Exn (tagt, args)))) :: vs ->
         let hs = handle_table c xls in
         cont := None;
         vs, [Prompt (hs, ctxt ([], [Throwing (tagt, args) @@ e.at])) @@ e.at]
