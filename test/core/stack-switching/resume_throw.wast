@@ -182,7 +182,7 @@
     (block $h (result i32)
       (try_table (result i32) (catch $e0 $h)
         (suspend $yield)
-	(unreachable)
+	    (unreachable)
       )
     )
   )
