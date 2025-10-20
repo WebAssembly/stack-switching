@@ -647,7 +647,7 @@ let rec instr s =
     let xls = vec on_clause s in
     resume_throw x tag xls
   | 0xe5 ->
-    let x   = at var s in
+    let x = at var s in
     let xls = vec on_clause s in
     resume_throw_ref x xls
   | 0xe6 ->
