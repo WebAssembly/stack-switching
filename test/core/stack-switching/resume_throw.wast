@@ -264,7 +264,7 @@
     (tag $exn (param i32))
     (func
       (i64.const 0)
-      (resume_throw $ct $exn (ref.null $ct))
+      (resume_throw $ct $exn (ref.null $ct)) ;; null continuation
       (unreachable)))
   "type mismatch")
 
@@ -276,7 +276,7 @@
     (func 
       (ref.null $ct)   
       (i32.const 0)
-      (resume_throw $ct $exn)
+      (resume_throw $ct $exn) ;; exception tag does not take paramter
       (unreachable)))
   "type mismatch")
 
@@ -286,7 +286,7 @@
     (type $ct (cont $ft))
     (tag $exn (param i32))
     (func
-      (resume_throw $ct $exn (ref.null $ct))
+      (resume_throw $ct $exn (ref.null $ct)) ;; missing exception payload
       (unreachable)))
   "type mismatch")
 
@@ -298,7 +298,7 @@
     (tag $exn (param externref))
     (func
       (i64.const 0)
-      (resume_throw_ref $ct (ref.null $ct))
+      (resume_throw_ref $ct (ref.null $ct)) ;; expecting an exception ref
       (unreachable)))
   "type mismatch")
 
@@ -307,6 +307,6 @@
     (type $ft (func))
     (type $ct (cont $ft))
     (func
-      (resume_throw_ref $ct (ref.null $ct))
+      (resume_throw_ref $ct (ref.null $ct)) ;; expecting an exception ref
       (unreachable)))
   "type mismatch")

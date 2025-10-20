@@ -421,7 +421,7 @@ let rec step (c : config) : config =
           v :: vs ->
         let hs = handle_table c xls in
         cont := None;
-        vs, [Prompt (hs, ctxt ([v], [ThrowRef @@ e.at])) @@ e.at]
+        vs, [Prompt (hs, ctxt ([v], [Plain ThrowRef @@ e.at])) @@ e.at]
 
       | Switch (x, y), Ref (NullRef _) :: vs ->
          vs, [Trapping "null continuation reference" @@ e.at]
