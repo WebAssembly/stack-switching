@@ -163,7 +163,7 @@
     (block $y (result (ref $k))
       (resume $k (on $yield $y)
         (local.get $k_ref))
-      (return))
+      (unreachable))
     (local.set $k_ref)
 
     (block $h (result i32 exnref)
