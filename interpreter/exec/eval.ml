@@ -418,10 +418,10 @@ let rec step (c : config) : config =
 
       | ResumeThrowRef (x, xls),
         Ref (ContRef ({contents = Some (n, ctxt)} as cont)) ::
-          Ref (Exn.(ExnRef (Exn (tagt, args)))) :: vs ->
+          v :: vs ->
         let hs = handle_table c xls in
         cont := None;
-        vs, [Prompt (hs, ctxt ([], [Throwing (tagt, args) @@ e.at])) @@ e.at]
+        vs, [Prompt (hs, ctxt ([v], [ThrowRef @@ e.at])) @@ e.at]
 
       | Switch (x, y), Ref (NullRef _) :: vs ->
          vs, [Trapping "null continuation reference" @@ e.at]
