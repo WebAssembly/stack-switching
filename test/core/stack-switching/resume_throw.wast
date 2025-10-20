@@ -229,9 +229,9 @@
     (resume $k (local.get $k_ref)) ;; consume it
 
     (block $h (result exnref)
-      (try_table (catch_ref $e0 $h)
-         (throw $e0))
-      (unreachable)
+      (try_table (result exnref) (catch_ref $e0 $h)
+         (throw $e0)
+      )
     )
     (local.get $k_ref)
 
