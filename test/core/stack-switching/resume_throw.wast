@@ -43,7 +43,6 @@
     )
   )
 )
-
 (assert_return (invoke "throw_never_i32") (i32.const 42))
 
 ;; Test resume_throw with a reference type argument.
