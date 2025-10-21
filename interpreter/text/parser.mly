@@ -304,7 +304,7 @@ let parse_annots (m : module_) : Custom.section list =
 %token MUT FIELD STRUCT ARRAY SUB FINAL REC
 %token UNREACHABLE NOP DROP SELECT
 %token BLOCK END IF THEN ELSE LOOP
-%token CONT_NEW CONT_BIND SUSPEND RESUME RESUME_THROW SWITCH
+%token CONT_NEW CONT_BIND SUSPEND RESUME RESUME_THROW RESUME_THROW_REF SWITCH
 %token BR BR_IF BR_TABLE BR_ON_NON_NULL
 %token<Ast.idx -> Ast.instr'> BR_ON_NULL
 %token<Ast.idx -> Types.ref_type -> Types.ref_type -> Ast.instr'> BR_ON_CAST
@@ -789,6 +789,11 @@ resume_instr_instr_list :
       let x  = $2 c type_ in
       let tag = $3 c tag in
       let hs, es = $4 c in (resume_throw x tag hs @@ loc1) :: es }
+  | RESUME_THROW_REF var resume_instr_handler_instr
+    { let loc1 = $loc($1) in
+      fun c ->
+      let x  = $2 c type_ in
+      let hs, es = $3 c in (resume_throw_ref x hs @@ loc1) :: es }
 
 resume_instr_handler_instr :
   | LPAR ON var var RPAR resume_instr_handler_instr
@@ -907,6 +912,11 @@ expr1 :  /* Sugar */
       let tag = $3 c tag in
       let hs, es = $4 c in
       es, resume_throw x tag hs }
+  | RESUME_THROW_REF var resume_expr_handler
+    { fun c ->
+      let x = $2 c type_ in
+      let hs, es = $3 c in
+      es, resume_throw_ref x hs }
   | BLOCK labeling_opt block
     { fun c -> let c' = $2 c [] in let bt, es = $3 c' in [], block bt es }
   | LOOP labeling_opt block

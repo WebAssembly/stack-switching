@@ -54,6 +54,7 @@ let cont_bind x y = ContBind (x, y)
 let suspend x = Suspend x
 let resume x xys = Resume (x, xys)
 let resume_throw x y xys = ResumeThrow (x, y, xys)
+let resume_throw_ref x xys = ResumeThrowRef (x, xys)
 let switch x y = Switch (x, y)
 let throw x = Throw x
 let throw_ref = ThrowRef

@@ -561,6 +561,8 @@ let rec instr e =
       "resume " ^ var x, resumetable xys
     | ResumeThrow (x, y, xys) ->
       "resume_throw " ^ var x ^ " " ^ var y, resumetable xys
+    | ResumeThrowRef (x, xys) ->
+      "resume_throw_ref " ^ var x, resumetable xys
     | Switch (x, z) ->
       "switch " ^ var x ^ " " ^ var z, []
     | Throw x -> "throw " ^ var x, []

@@ -181,6 +181,7 @@ let rec instr (e : instr) =
   | ContNew x -> types (idx x)
   | ContBind (x, y) -> types (idx x) ++ types (idx y)
   | ResumeThrow (x, y, xys) -> types (idx x) ++ tags (idx y) ++ list (fun (x, y) -> tags (idx x) ++ hdl y) xys
+  | ResumeThrowRef (x, xys) -> types (idx x) ++ list (fun (x, y) -> tags (idx x) ++ hdl y) xys
   | Resume (x, xys) -> types (idx x) ++ list (fun (x, y) -> tags (idx x) ++ hdl y) xys
   | Suspend x -> tags (idx x)
   | Switch (x, z) -> types (idx x) ++ tags (idx z)

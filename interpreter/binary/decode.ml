@@ -646,7 +646,10 @@ let rec instr s =
     let tag = at var s in
     let xls = vec on_clause s in
     resume_throw x tag xls
-  (* TODO: resume_throw_ref *)
+  | 0xe5 ->
+    let x = at var s in
+    let xls = vec on_clause s in
+    resume_throw_ref x xls
   | 0xe6 ->
     let x = at var s in
     let y = at var s in
