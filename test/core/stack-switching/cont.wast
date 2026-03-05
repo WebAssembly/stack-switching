@@ -123,10 +123,11 @@
     )
   )
 
-  (func (export "null-new") (result (ref null $k1))
+  (func (export "null-new")
     (cont.new $k1
       (ref.null $f1)
     )
+    (unreachable)
   )
 )
 
