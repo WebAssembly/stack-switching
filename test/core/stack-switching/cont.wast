@@ -1163,3 +1163,45 @@
     (func (param $k (ref $ct))
       (switch $ct $t)))
   "type mismatch in switch tag")
+
+;; Synthesized from https://github.com/WebAssembly/stack-switching/issues/117
+(assert_invalid
+  (module
+    (type $ft (func))
+    (type $ct (cont $ft))
+    (tag $t)
+
+    (func
+      (block $on_t (result (ref cont))
+        (resume $ct (on $t $on_t) (cont.new $ct (ref.null $ft)))
+        (unreachable)
+      )
+      (drop)
+    ))
+  "type mismatch: instruction requires concrete continuation reference type but label has [(ref cont)]")
+
+(assert_invalid
+  (module
+    (type $ft (func))
+    (type $ct (cont $ft))
+    (tag $t)
+
+    (func
+      (block $on_t (result (ref nocont))
+        (resume $ct (on $t $on_t) (cont.new $ct (ref.null $ft)))
+        (unreachable)
+      )
+      (drop)
+    ))
+  "type mismatch: instruction requires concrete continuation reference type but label has [(ref nocont)]")
+
+;; https://github.com/WebAssembly/stack-switching/issues/117#issuecomment-2908974084
+(module
+  (type $f (func))
+  (type $c (sub (cont $f)))
+  (tag $e)
+  (func (param $c (ref $c))
+    (local.get $c)
+    (resume $c)
+  )
+)
