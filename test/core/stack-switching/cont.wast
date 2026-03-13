@@ -127,7 +127,7 @@
     (cont.new $k1
       (ref.null $f1)
     )
-    (unreachable)
+    (drop)
   )
 )
 
