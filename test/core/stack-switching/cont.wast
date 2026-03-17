@@ -129,6 +129,14 @@
     )
     (drop)
   )
+
+  (func (export "null-bind")
+    (drop
+      (cont.bind $k1 $k1
+        (ref.null $k1)
+      )
+    )
+  )
 )
 
 (assert_suspension (invoke "unhandled-1") "unhandled")
@@ -147,6 +155,7 @@
 
 (assert_trap (invoke "null-resume") "null continuation reference")
 (assert_trap (invoke "null-new") "null function reference")
+(assert_trap (invoke "null-bind") "null continuation reference")
 
 (assert_invalid
   (module
