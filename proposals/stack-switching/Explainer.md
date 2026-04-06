@@ -543,7 +543,7 @@ The following instruction creates a *suspended continuation* from a
 function.
 
 ```wast
-  cont.new $ct : [(ref null $ft)] -> [(ref $ct)]
+  cont.new $ct : [(ref null $ft)] -> [(ref (exact $ct))]
   where:
   - $ft = func [t1*] -> [t2*]
   - $ct = cont $ft
@@ -617,7 +617,7 @@ switch.
   switch $ct1 $e : [t1* (ref null $ct1)] -> [t2*]
   where:
   - $e : [] -> [t*]
-  - $ct1 = cont [t1* (ref $ct2)] -> [t*]
+  - $ct1 = cont [t1* (ref null? (exact? $ct2))] -> [t*]
   - $ct2 = cont [t2*] -> [t*]
 ```
 
@@ -655,7 +655,7 @@ A suspended continuation can be partially applied to a prefix of its
 arguments yielding another suspended continuation.
 
 ```wast
-  cont.bind $ct1 $ct2 : [t1* (ref null $ct1)] -> [(ref $ct2)]
+  cont.bind $ct1 $ct2 : [t1* (ref null $ct1)] -> [(ref (exact $ct2))]
   where:
   - $ct1 = cont [t1* t3*] -> [t2*]
   - $ct2 = cont [t3*] -> [t2*]
@@ -967,12 +967,12 @@ This abbreviation will be formalised with an auxiliary function or other means i
 
 - `cont.new <typeidx>`
   - Create a new continuation from a given typed funcref.
-  - `cont.new $ct : [(ref null $ft)] -> [(ref $ct)]`
+  - `cont.new $ct : [(ref null $ft)] -> [(ref (exact $ct))]`
     - iff `C.types[$ct] ~~ cont [t1*] -> [t2*]`
 
 - `cont.bind <typeidx> <typeidx>`
   - Partially apply a continuation.
-  - `cont.bind $ct $ct' : [t3* (ref null $ct)] -> [(ref $ct')]`
+  - `cont.bind $ct $ct' : [t3* (ref null $ct)] -> [(ref (exact $ct'))]`
     - iff `C.types[$ct] ~~ cont [t3* t1*] -> [t2*]`
     - and `C.types[$ct'] ~~ cont [t1'*] -> [t2'*]`
     - and `[t1*] -> [t2*] <: [t1'*] -> [t2'*]`
@@ -1004,7 +1004,7 @@ This abbreviation will be formalised with an auxiliary function or other means i
   - Handlers attached to `resume` and `resume_throw`, handling control tags for `suspend` and `switch`, respectively.
   - `(on tu $l) : t*`
     - iff `tu : [t1*] -> [t2*]`
-    - and `C.labels[$l] = [t1'* (ref null? $ct)]`
+    - and `C.labels[$l] = [t1'* (ref null? (exact? $ct))]`
     - and `t1* <: t1'*`
     - and `C.types[$ct] ~~ cont [t2'*] -> [t'*]`
     - and `[t2*] -> [t*] <: [t2'*] -> [t'*]`
@@ -1021,7 +1021,7 @@ This abbreviation will be formalised with an auxiliary function or other means i
   - The suspension and switch are performed from the perspective of a parent `(on $e switch)` handler, determined by the annotated control tag.
   - `switch $ct1 tu : [t1* (ref null $ct1)] -> [t2*]`
     - iff `tu : [] -> [t*]`
-    - and `C.types[$ct1] ~~ cont [t1* (ref null? $ct2)] -> [te1*]`
+    - and `C.types[$ct1] ~~ cont [t1* (ref null? (exact? $ct2))] -> [te1*]`
     - and `te1* <: t*`
     - and `C.types[$ct2] ~~ cont [t2*] -> [te2*]`
     - and `t* <: te2*`
