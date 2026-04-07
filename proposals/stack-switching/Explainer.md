@@ -617,7 +617,7 @@ switch.
   switch $ct1 $e : [t1* (ref null $ct1)] -> [t2*]
   where:
   - $e : [] -> [t*]
-  - $ct1 = cont [t1* (ref $ct2)] -> [t*]
+  - $ct1 = cont [t1* (ref null? $ct2)] -> [t*]
   - $ct2 = cont [t2*] -> [t*]
 ```
 
