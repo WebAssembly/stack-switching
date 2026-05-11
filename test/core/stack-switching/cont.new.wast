@@ -322,24 +322,21 @@
   "type mismatch"
 )
 
-;; TODO: Make cont.new constant
-;; https://github.com/WebAssembly/stack-switching/issues/145
+;; Constant expression in global definition.
+(module
+  (type $f (func))
+  (type $k (cont $f))
+  (global $k (export "k") (ref $k) (cont.new $k (ref.func $f)))
+  (func $f (type $f))
+)
+(assert_return (get "k") (ref.cont))
 
-;; ;; Constant expression in global definition.
-;; (module
-;;   (type $f (func))
-;;   (type $k (cont $f))
-;;   (global $k (export "k") (ref $k) (cont.new $k (ref.func $f)))
-;;   (func $f (type $f))
-;; )
-;; (assert_return (get "k") (ref.cont))
-
-;; ;; Constant expression in element segment definition.
-;; (module
-;;   (type $f (func))
-;;   (type $k (cont $f))
-;;   (table $t (ref null $k) (elem (cont.new $k (ref.func $f))))
-;;   (func $f (type $f))
-;;   (func (export "get") (result (ref null $k)) (table.get $t (i32.const 0)))
-;; )
-;; (assert_return (invoke "get") (ref.cont))
+;; Constant expression in element segment definition.
+(module
+  (type $f (func))
+  (type $k (cont $f))
+  (table $t (ref null $k) (elem (cont.new $k (ref.func $f))))
+  (func $f (type $f))
+  (func (export "get") (result (ref null $k)) (table.get $t (i32.const 0)))
+)
+(assert_return (invoke "get") (ref.cont))

@@ -550,7 +550,8 @@ function.
 ```
 
 It takes a reference to a function of type `[t1*] -> [t2*]` whose body
-may perform non-local control flow.
+may perform non-local control flow. `cont.new` is a constant
+expression, so it can be used in places like global initializers.
 
 ### Invoking continuations
 
@@ -1034,6 +1035,9 @@ where `rt` is the respective target type of the cast instruction, and the `casta
 
 - `rt castable`
   - iff not (rt <: (ref null cont))
+
+
+Finally, `cont.new` is added to the set of constant expressions.
 
 ### Execution
 

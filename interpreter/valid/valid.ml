@@ -1147,7 +1147,7 @@ let is_const (c : context) (e : instr) =
   | Const _ | VecConst _
   | Binary (Value.I32 I32Op.(Add | Sub | Mul))
   | Binary (Value.I64 I64Op.(Add | Sub | Mul))
-  | RefNull _ | RefFunc _
+  | RefNull _ | RefFunc _ | ContNew _
   | RefI31 | StructNew _ | ArrayNew _ | ArrayNewFixed _ -> true
   | GlobalGet x -> let GlobalT (mut, _t) = global c x in mut = Cons
   | _ -> false
