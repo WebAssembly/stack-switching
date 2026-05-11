@@ -319,7 +319,7 @@ let parse_annots (m : module_) : Custom.section list =
 %token<string> OFFSET_EQ_NAT ALIGN_EQ_NAT
 %token<string Source.phrase -> Ast.instr' * Value.num> CONST
 %token<Ast.instr'> UNARY BINARY TEST COMPARE CONVERT
-%token REF_NULL REF_FUNC REF_I31 REF_STRUCT REF_ARRAY REF_EXN REF_EXTERN REF_HOST
+%token REF_NULL REF_FUNC REF_I31 REF_STRUCT REF_ARRAY REF_CONT REF_EXN REF_EXTERN REF_HOST
 %token REF_EQ REF_IS_NULL REF_AS_NON_NULL REF_TEST REF_CAST
 %token<Ast.instr'> I31_GET
 %token<Ast.idx -> Ast.instr'> STRUCT_NEW ARRAY_NEW ARRAY_GET
@@ -1626,6 +1626,7 @@ result :
   | LPAR REF_STRUCT RPAR { RefResult (RefTypePat StructHT) @@ $sloc }
   | LPAR REF_ARRAY RPAR { RefResult (RefTypePat ArrayHT) @@ $sloc }
   | LPAR REF_FUNC RPAR { RefResult (RefTypePat FuncHT) @@ $sloc }
+  | LPAR REF_CONT RPAR { RefResult (RefTypePat ContHT) @@ $sloc }
   | LPAR REF_EXN RPAR { RefResult (RefTypePat ExnHT) @@ $sloc }
   | LPAR REF_EXTERN RPAR { RefResult (RefTypePat ExternHT) @@ $sloc }
   | LPAR REF_NULL RPAR { RefResult NullPat @@ $sloc }

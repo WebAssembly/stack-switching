@@ -10,3 +10,9 @@ exception Crash of Source.region * string
 
 val init : Ast.module_ -> extern list -> module_inst (* raises Link, Trap *)
 val invoke : func_inst -> value list -> value list (* raises Trap *)
+
+type ctxt
+type handle_table
+
+type cont = int32 * ctxt  (* TODO: represent type properly *)
+type ref_ += ContRef of cont option ref

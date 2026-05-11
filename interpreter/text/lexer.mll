@@ -341,6 +341,7 @@ rule token = parse
       | "ref.func" -> REF_FUNC
       | "ref.struct" -> REF_STRUCT
       | "ref.array" -> REF_ARRAY
+      | "ref.cont" -> REF_CONT
       | "ref.exn" -> REF_EXN
       | "ref.extern" -> REF_EXTERN
       | "ref.host" -> REF_HOST
