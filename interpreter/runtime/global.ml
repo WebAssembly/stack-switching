@@ -9,7 +9,6 @@ exception NotMutable
 
 let alloc (GlobalT (_mut, t) as ty) v =
   assert Free.((val_type t).types = Set.empty);
-  if not (Match.match_val_type [] (type_of_value v) t) then raise Type;
   {ty; content = v}
 
 let type_of glob =
