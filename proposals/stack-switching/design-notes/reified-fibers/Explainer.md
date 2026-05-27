@@ -5,7 +5,7 @@ This document outlines a simplified approach to stack-switching in WebAssembly, 
 ## Core Concepts
 
 ### 1. Fiber Types
-A fiber represents an independent execution thread. A fiber is statically typed with a resume type and a suspend type:
+A fiber represents an independently executing coroutine. A fiber is statically typed with a resume type and a suspend type:
 - **Resume Type** (`$t1*`): The types of the arguments provided to the fiber when it is resumed.
 - **Suspend Type** (`$t2*`): The types of the values the fiber generates when it suspends execution and yields control.
 
@@ -46,7 +46,7 @@ end
 - `fiber.resume` consumes the resume arguments (`$t1...`) and a reference to the fiber (`ref $F`) from the stack.
 - Control is transferred to the fiber.
 - **Return:** If the fiber completes its execution (returns from its base function), control returns to the instruction *immediately following* `fiber.resume`.
-- **Suspend:** If the fiber suspends, control breaks to the block specified by the label (`$suspend_handler`). The values provided by the suspend instruction (`$suspend_args...`) are pushed onto the stack. *(Note: Because the design is unstacked, the resumer always knows exactly which fiber suspended—it is the one it just explicitly resumed. There is no ambiguity, so the fiber does not need to yield its own reference back to the resumer).*
+- **Suspend:** If the fiber suspends, control breaks to the block specified by the label (`$suspend_handler`). The values provided by the suspend instruction (`$suspend_args...`) are pushed onto the stack. *(Note: In this stacked design, when a fiber suspends, it may be a nested fiber suspending to a distant ancestor. Control always returns to the resumer of the target fiber. Since that resumer knows which fiber it explicitly resumed, there is no ambiguity about which fiber's suspension block was triggered, even if the suspension was initiated by a deeply nested child).*
 
 ### 4. Suspending Fibers (`fiber.suspend`)
 The `fiber.suspend` instruction allows a fiber to pause its execution and yield values back to its resumer.
@@ -57,7 +57,7 @@ fiber.suspend
 ```
 
 **Semantics:**
-- As per the design, `fiber.suspend` takes the suspend arguments (`$suspend_args...`) and a reference to a fiber (`ref $F`).
+- `fiber.suspend` takes the suspend arguments (`$suspend_args...`) and a reference to a fiber (`ref $F`).
 - It pauses the current execution context.
 - Control is transferred back to the resumer (breaking to the block label specified in the `fiber.resume` call).
 - Only the `$suspend_args...` are passed to the resumer's block.
@@ -215,6 +215,120 @@ This example demonstrates how to implement cooperative task scheduling. The sche
 )
 ```
 
+## Example: Heterogeneous Stacked Suspension (I/O within a Generator)
+
+This example demonstrates the composability of stacked fibers: combining use cases can mean needing to suspend a deeper computation than the most recently active one. We have a **Scheduler** managing a **Task**, and that **Task** consumes a **Generator**. 
+
+The **Generator** has two distinct suspension behaviors:
+1. **Local Yield:** It yields a produced value to its immediate caller (the Task).
+2. **Deep I/O Suspension:** It suspends the entire task back to the **Scheduler** to wait for an I/O event (e.g., a timer), bypassing the Task's internal logic.
+
+It also demonstrates **bidirectional communication**: the Task can resume the Generator with a sentinel value to either request the next value or cancel the generator.
+
+```wasm
+;; Command constants for Generator control
+;; 0: CONTINUE, 1: CANCEL
+
+;; Fiber type for the Scheduler (handles tasks that might yield Ie /O events)
+(type $TaskFiber (fiber (param i32) (result i32))) 
+
+;; Fiber type for the Generator (yields values to the task)
+;; Resume: 0 (CONTINUE) or 1 (CANCEL). Result: yielded i32 value.
+(type $GenFiber (fiber (param i32) (result i32)))
+
+(module $heterogeneous_example
+  ;; ... Scheduler state (queue, event loop) ...
+
+  ;; The Generator function
+  ;; $initial_cmd is provided by the very first fiber.resume
+  (func $gen_func (param $gen_self (ref $GenFiber)) (param $task_self (ref $TaskFiber)) (param $initial_cmd i32)
+    (local $i i32)
+    (local $cmd i32)
+    (local.set $cmd (local.get $initial_cmd))
+
+    (loop $l
+      ;; Check if the driver requested cancellation (1 = CANCEL)
+      (i32.eq (local.get $cmd) (i32.const 1))
+      (if (then return))
+
+      ;; 1. Standard local yield to the Task
+      (local.get $i)
+      (local.get $gen_self) ;; Target: the generator itself
+      fiber.suspend
+      (local.set $cmd)      ;; Capture the command for the next iteration
+
+      ;; Check again after resumption (1 = CANCEL)
+      (i32.eq (local.get $cmd) (i32.const 1))
+      (if (then return))
+
+      ;; 2. Deep suspension to the Scheduler for I/O
+      (i32.const 100)        ;; Argument for scheduler (e.g., sleep duration)
+      (local.get $task_self) ;; Target: the Scheduler's fiber
+      fiber.suspend
+      drop ;; Scheduler resume arguments (e.g. status) are ignored here for simplicity
+
+      (local.set $i (i32.add (local.get $i) (i32.const 1)))
+      (br $l)
+    end)
+  )
+
+  ;; The Task function
+  (func $task_entry (param $task_self (ref $TaskFiber)) (param $initial_resume i32)
+    (local $gen (ref $GenFiber))
+    (local $val i32)
+    
+    ;; Create the generator
+    (local.get $task_self)
+    (fiber.new $gen_func)
+    (local.set $gen)
+
+    (loop $consume
+      (block $on_gen_yield (result i32)
+        ;; Send CONTINUE (0) sentinel to request next value
+        (i32.const 0)
+        (local.get $gen)
+        (fiber.resume $on_gen_yield)
+        
+        ;; If the generator returns, the task is finished
+        return
+      end)
+      (local.set $val)
+      
+      ;; If we've seen enough values, cancel the generator (1 = CANCEL)
+      (i32.gt_s (local.get $val) (i32.const 10))
+      (if (then
+        (i32.const 1)
+        (local.get $gen)
+        (fiber.resume $on_gen_yield) ;; This will cause $gen_func to return
+        return
+      ))
+
+      (local.get $val)
+      (call $process_value) 
+
+      br $consume
+    end)
+  )
+)
+```
+
+
+### Execution Flow:
+
+1.  **Normal Yield:**
+    *   `generator` calls `fiber.suspend` with `gen_self`.
+    *   The system finds `gen_self` is the current fiber.
+    *   Control returns to the **Task's** `$on_gen_yield` block.
+    *   The **Task** processes the value and loops to resume the generator.
+2.  **I/O Suspension:**
+    *   `generator` calls `fiber.suspend` with `task_self`.
+    *   The system searches the stack: `[Generator -> Task -> Scheduler]`.
+    *   It finds `task_self` (the Task) and suspends the **entire chain** (Generator + Task).
+    *   Control returns to the **Scheduler** (the resumer of the Task).
+    *   The **Scheduler** sees the sleep request, puts the task in a "waiting" queue, and runs other work.
+    *   When the timer expires, the **Scheduler** resumes the **Task**.
+    *   Execution resumes **inside the generator**, immediately after the I/O suspension point. The **Task's** intermediate logic is never even aware that the suspension happened.
+
 *(Note: In the examples above, the fiber reference is explicitly plumbed through the system. By automatically prepending `(ref $F)` to the fiber's prefix arguments during `fiber.new`, the fiber receives its own reference exactly once when it starts. The fiber can then store it in a local and use it to suspend itself later, eliminating the need to pass it back and forth on every resume).*
 
 ## Specification Changes
@@ -275,7 +389,7 @@ Resumes a suspended fiber. If the fiber suspends, control transfers to the block
 - If `f` is currently active (already running on some stack) or exhausted (has returned), trap.
 - Transfer control to the fiber `f`.
 - **On Return:** If the fiber completes its execution by returning from its entry function, control returns to the instruction immediately following the `fiber.resume`.
-- **On Suspend:** If the fiber executes a `fiber.suspend`, control transfers back to the resumer by breaking to the label `$L`. The suspend values `v2*` and the fiber reference `f` are pushed onto the stack.
+- **On Suspend:** If the fiber executes a `fiber.suspend`, control transfers back to the resumer by breaking to the label `$L`. The suspend values `v2*` are pushed onto the stack.
 
 #### `fiber.resume_throw $L $tag`
 Resumes a fiber by raising a specified exception at its current suspension point.
@@ -343,34 +457,44 @@ Suspends the currently executing fiber and yields values to its resumer.
 
 **Execution:**
 - Pop the fiber reference `f` and the suspend values `v2*`.
-- Suspend the current execution context.
-- Return control to the resumer of `f`, breaking to the label specified in the corresponding `fiber.resume` instruction.
-- The values `v2*` are passed to the resumer's block.
-- When the fiber is subsequently resumed, the resume arguments `v1*` are pushed onto the stack, and execution continues immediately after the `fiber.suspend` instruction.
+- Search the dynamic chain of active fibers for `f`. The search starts with the currently executing fiber. 
+- If the current fiber is not `f`, the system moves to the current fiber's **resume parent** (the fiber that called `fiber.resume` to start or resume it) and continues the search.
+- This process repeats until either `f` is found or the end of the chain is reached (i.e., there is no resume parent).
+- **If `f` is found:**
+    - The current execution context is paused.
+    - All fibers in the chain between the current fiber and `f` (inclusive) are suspended.
+    - Control is transferred back to the **resumer of `f`** (breaking to the label `$L` specified in the `fiber.resume $L` call that most recently activated `f`).
+    - The suspend values `v2*` are pushed onto the resumer's stack.
+    - When `f` is subsequently resumed, execution continues immediately after its suspension point. If `f` was the fiber that initiated the suspension via `fiber.suspend`, the resume arguments `v1*` are pushed onto its stack.
+- **If `f` is not found:**
+    - The instruction traps.
 
 *Formal execution semantics:*
 ```
 * `S; F; label{L} E[v^m (ref.fiber fa) fiber.suspend] end  -->  S'; F; v^m (br $L)`
-  - iff `S' = S with fibers[fa] = E`
-  - and `fa` matches the fiber currently executing within this block.
+  - iff `fa` is in the dynamic chain of active fibers.
+  - and `S'` is `S` updated such that all fibers in the chain from the current one up to `fa` are suspended (their current execution states are captured).
+  - and `label{L}` is the label associated with the `fiber.resume` that activated `fa`.
 
-* `S; F; label{L} E[v^m (ref.fiber fb) fiber.suspend] end  -->  S; F; trap`
-  - iff `fb` does not match the fiber currently executing within this block.
+* `S; F; label{L} E[v^m (ref.fiber fa) fiber.suspend] end  -->  S; F; trap`
+  - iff `fa` is not in the dynamic chain of active fibers.
 ```
 
 ---
 
-## Design Decision: Unstacked Fibers
+## Design Decision: Stacked Fibers
 
-This proposal explicitly adopts an **unstacked** semantic for fibers. When a fiber executes `fiber.suspend`, it must be the case that the target fiber reference provided is exactly the *current* executing fiber. The system does not search a stack of active fibers; if the target is not the current fiber, the operation traps or is otherwise invalid.
+This proposal adopts a **stacked** semantic for fibers. When a fiber executes `fiber.suspend`, it provides a reference to the target fiber it wishes to suspend. The system then searches the current dynamic chain of active fibers (starting from the currently executing fiber and following the "resume parent" links) to find a match.
 
-This design was chosen over a "stacked" system (where a suspend operation searches up a chain of active fibers and potentially unwinds intermediate frames) for the following reasons:
+If the target fiber is found in the active chain, the entire sub-stack from the current point up to that fiber is suspended, and control returns to that fiber's resumer. If the target fiber is not found in the dynamic chain, the operation traps.
 
-* **High Performance:** Validation and execution are O(1). The runtime always knows exactly which fiber is suspending, avoiding the O(N) runtime overhead of searching up the active fiber chain.
-* **Simplicity:** It significantly simplifies the runtime implementation by avoiding complex unwinding or re-stitching logic required when a nested fiber yields to a distant ancestor.
-* **Predictable Control Flow:** It enforces strict, predictable local coroutine semantics, preventing the "spaghetti control flow" that can arise from deep, non-local suspensions.
+This design was chosen to provide greater expressivity:
 
-While an unstacked system is less expressive than a stacked system (e.g., if a deeply nested fiber needs to yield to a distant ancestor, every intermediate fiber must manually forward the yield up the chain via boilerplate), this trade-off is intentional. The unstacked approach keeps the underlying primitive fast, simple, and closely aligned with the coroutines and generators found in high-level languages.
+* **Composition:** Stacked fibers allow for better composition of libraries. A deeply nested component can yield directly to a distant ancestor (like a scheduler or a top-level event loop) without requiring every intermediate layer to explicitly catch and re-propagate the suspension.
+* **Reduced Boilerplate:** It eliminates the need for manual "forwarding" of yield operations through intermediate fiber layers.
+* **Flexibility:** It supports more complex control flow patterns, such as multi-level generators or effects that skip intermediate handlers.
+
+While this introduces a search during suspension, the depth of the fiber stack is typically small in practice, keeping the overhead minimal while significantly improving developer ergonomics and system modularity.
 
 ## Design Consideration: Omission of `fiber.bind`
 
