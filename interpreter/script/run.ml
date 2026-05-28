@@ -412,10 +412,11 @@ let assert_ref_pat r p =
   | RefTypePat Types.EqHT, (I31.I31Ref _ | Aggr.StructRef _ | Aggr.ArrayRef _)
   | RefTypePat Types.I31HT, I31.I31Ref _
   | RefTypePat Types.StructHT, Aggr.StructRef _
-  | RefTypePat Types.ArrayHT, Aggr.ArrayRef _ -> true
+  | RefTypePat Types.ArrayHT, Aggr.ArrayRef _
   | RefTypePat Types.FuncHT, Instance.FuncRef _
+  | RefTypePat Types.ContHT, Eval.ContRef _
   | RefTypePat Types.ExnHT, Exn.ExnRef _
-  | RefTypePat Types.ExternHT, _ -> true
+  | RefTypePat Types.ExternHT, _
   | NullPat, Value.NullRef _ -> true
   | _ -> false
 
