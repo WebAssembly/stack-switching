@@ -225,9 +225,10 @@ module NameMap = Map.Make(struct type t = Ast.name let compare = compare end)
 module Map = Map.Make(String)
 
 type exports = extern_type NameMap.t
+type env_entry = exports * Ast.type_ list * def_type list
 type env =
-  { mutable mods : exports Map.t;
-    mutable insts : exports Map.t;
+  { mutable mods : env_entry Map.t;
+    mutable insts : env_entry Map.t;
     mutable current_mod : int;
     mutable current_inst : int;
   }
@@ -255,15 +256,16 @@ let of_inst_opt (env : env) = function
   | Some x -> x.it
 
 let bind_mod (env : env) x_opt m =
-  let exports = exports m in
+  let dts = Ast.def_types_of m in
+  let entry = (exports m, m.it.types, dts) in
   env.current_mod <- env.current_mod + 1;
-  env.mods <- Map.add (of_mod_opt env x_opt) exports env.mods;
-  if x_opt <> None then env.mods <- Map.add (current_mod env) exports env.mods
+  env.mods <- Map.add (of_mod_opt env x_opt) entry env.mods;
+  if x_opt <> None then env.mods <- Map.add (current_mod env) entry env.mods
 
-let bind_inst (env : env) x_opt exports =
+let bind_inst (env : env) x_opt entry =
   env.current_inst <- env.current_inst + 1;
-  env.insts <- Map.add (of_inst_opt env x_opt) exports env.insts;
-  if x_opt <> None then env.insts <- Map.add (current_inst env) exports env.insts
+  env.insts <- Map.add (of_inst_opt env x_opt) entry env.insts;
+  if x_opt <> None then env.insts <- Map.add (current_inst env) entry env.insts
 
 let find_mod (env : env) x_opt at =
   try Map.find (of_mod_opt env x_opt) env.mods with Not_found ->
@@ -278,7 +280,7 @@ let find_inst (env : env) x_opt at =
       else "unknown module instance " ^ of_inst_opt env x_opt ^ " within script"))
 
 let lookup_export (env : env) x_opt name at =
-  let exports = find_inst env x_opt at in
+  let exports, _, _ = find_inst env x_opt at in
   try NameMap.find name exports with Not_found ->
     raise (Eval.Crash (at, "unknown export \"" ^
       string_of_name name ^ "\" within module isntance"))
@@ -470,7 +472,7 @@ let assert_return ress ts at =
         BrIf (0l @@ at) @@ at ]
     | RefResult (RefPat _) ->
       assert false
-    | RefResult (RefTypePat (ExnHT | ExternHT)) ->
+    | RefResult (RefTypePat (ExnHT | ExternHT | ContHT)) ->
       [ BrOnNull (0l @@ at) @@ at ]
     | RefResult (RefTypePat t) ->
       [ RefTest (NoNull, t) @@ at;
@@ -503,21 +505,65 @@ let eqref = RefT (Null, EqHT)
 let func_rec_type ts1 ts2 at =
   RecT [SubT (Final, [], DefFuncT (FuncT (ts1, ts2)))] @@ at
 
-let wrap item_name wrap_action wrap_assertion at =
+let wrap env x_opt item_name wrap_action wrap_assertion at =
   let itypes, idesc, action = wrap_action at in
   let locals, assertion = wrap_assertion at in
+  let _, orig_types, orig_dts = find_inst env x_opt at in
+  let n = Int32.of_int (List.length orig_types) in
+  (* TODO: Use List.find_index once we have OCaml 5.1.0 or later *)
+  let idx_of dt dts =
+    let rec loop i = function
+      | [] -> None
+      | dt' :: dts' -> if dt = dt' then Some (Int32.of_int i) else loop (i + 1) dts'
+    in loop 0 dts
+  in
+  let rec remap_ht = function
+    | DefHT dt ->
+      (match idx_of dt orig_dts with
+      | Some i -> VarHT (StatX i)
+      | None -> failwith "wrap: DefHT not found in original module types")
+    | ht -> ht
+  and remap_ref (nul, ht) = (nul, remap_ht ht)
+  and remap_val = function
+    | RefT rt -> RefT (remap_ref rt)
+    | t -> t
+  and remap_storage = function
+    | ValStorageT t -> ValStorageT (remap_val t)
+    | PackStorageT p -> PackStorageT p
+  and remap_field (FieldT (mut, st)) = FieldT (mut, remap_storage st)
+  and remap_str = function
+    | DefFuncT ft -> DefFuncT (remap_func ft)
+    | DefStructT (StructT fields) -> DefStructT (StructT (List.map remap_field fields))
+    | DefArrayT (ArrayT f) -> DefArrayT (ArrayT (remap_field f))
+    | DefContT (ContT ht) -> DefContT (ContT (remap_ht ht))
+  and remap_func (FuncT (ts1, ts2)) =
+    FuncT (List.map remap_val ts1, List.map remap_val ts2)
+  and remap_sub (SubT (fin, hts, st)) =
+    SubT (fin, List.map remap_ht hts, remap_str st)
+  and remap_rec (RecT sts) = RecT (List.map remap_sub sts)
+  in
+  let itypes' = List.map (fun rt -> {rt with it = remap_rec rt.it}) itypes in
   let types =
-    func_rec_type [] [] at ::
-    func_rec_type [i32] [anyref] at ::
-    func_rec_type [eqref; eqref] [i32] at ::
-    itypes
+    orig_types @
+    [ func_rec_type [] [] at;
+      func_rec_type [i32] [anyref] at;
+      func_rec_type [eqref; eqref] [i32] at;
+    ] @
+    itypes'
+  in
+  let remap_global_type (GlobalT (mut, t)) = GlobalT (mut, remap_val t) in
+  let idesc' =
+    match idesc.it with
+    | FuncImport idx -> FuncImport (Int32.add idx.it n @@ idx.at) @@ idesc.at
+    | GlobalImport t -> GlobalImport (remap_global_type t) @@ idesc.at
+    | _ -> idesc
   in
   let imports =
-    [ {module_name = Utf8.decode "module"; item_name; idesc} @@ at;
+    [ {module_name = Utf8.decode "module"; item_name; idesc = idesc'} @@ at;
       {module_name = Utf8.decode "spectest"; item_name = Utf8.decode "hostref";
-       idesc = FuncImport (1l @@ at) @@ at} @@ at;
+       idesc = FuncImport (Int32.add n 1l @@ at) @@ at} @@ at;
       {module_name = Utf8.decode "spectest"; item_name = Utf8.decode "eq_ref";
-       idesc = FuncImport (2l @@ at) @@ at} @@ at;
+       idesc = FuncImport (Int32.add n 2l @@ at) @@ at} @@ at;
     ]
   in
   let item =
@@ -532,7 +578,7 @@ let wrap item_name wrap_action wrap_assertion at =
     [ Block (ValBlockType None, action @ assertion @ [Return @@ at]) @@ at;
       Unreachable @@ at ]
   in
-  let funcs = [{ftype = 0l @@ at; locals; body} @@ at] in
+  let funcs = [{ftype = n @@ at; locals; body} @@ at] in
   let m = {empty_module with types; funcs; imports; exports} @@ at in
   (try
     Valid.check_module m;  (* sanity check *)
@@ -553,7 +599,11 @@ let is_js_vec_type = function
   | _ -> false
 
 let is_js_ref_type = function
-  | (_, ExnHT) -> false
+  | (_, (ExnHT | NoExnHT | ContHT | NoContHT)) -> false
+  | (_, DefHT dt) ->
+    (match expand_def_type dt with
+    | DefContT _ -> false
+    | _ -> true)
   | _ -> true
 
 let is_js_val_type = function
@@ -667,7 +717,7 @@ let rec of_definition def =
 
 let of_wrapper env x_opt name wrap_action wrap_assertion at =
   let x = of_inst_opt env x_opt in
-  let bs = wrap name wrap_action wrap_assertion at in
+  let bs = wrap env x_opt name wrap_action wrap_assertion at in
   "call(instance(module(" ^ of_bytes bs ^ "), " ^
     "exports(" ^ x ^ ")), " ^ " \"run\", [])"
 
