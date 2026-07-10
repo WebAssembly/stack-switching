@@ -339,6 +339,9 @@ and statify_comptype rts = function
     let rts', ts1' = statify_list statify_valtype rts ts1 in
     let rts'', ts2' = statify_list statify_valtype rts' ts2 in
     rts'', FuncT (ts1', ts2')
+  | ContT ut ->
+    let rts', ut' = statify_typeuse rts ut in
+    rts', ContT ut'
 
 and statify_subtype rts (SubT (fin, uts, ct)) =
     let rts', uts' = statify_list statify_typeuse rts uts in

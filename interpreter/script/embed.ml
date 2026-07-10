@@ -23,6 +23,7 @@ sig
     | Return of 'a
     | Exn of Source.region * taginst * value list
     | Trap of error
+    | Suspension of error
     | Exhaustion of error
 
   val validate : module_ -> (Types.moduletype, error) result

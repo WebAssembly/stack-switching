@@ -95,20 +95,25 @@ let refer_func (c : context) x = refer "function" c.refs.Free.funcs x
 
 let cont_type_of_heaptype (c : context) (ht : heaptype) at : typeuse =
   match ht with
-  | UseHT (Def dt) -> conttype_of_comptype (expand_deftype dt)
+  | UseHT (Def dt) ->
+    (match expand_deftype dt with
+    | ContT ut -> ut
+    | _ -> error at "non-continuation type 0")
   | UseHT (Idx x) -> cont_type c (x @@ at)
-  | _ -> error at "continuation type expected"
+  | _ -> error at "non-continuation type 0"
 
-let func_type_of_heaptype (c : context) (ht : heaptype) at : resulttype * resulttype =
-  match ht with
-  | UseHT (Def dt) -> functype_of_comptype (expand_deftype dt)
-  | UseHT (Idx x) -> func_type c (x @@ at)
-  | _ -> error at "function type expected"
-
-let func_type_of_cont_type (c : context) (ut : typeuse) at : resulttype * resulttype =
+let rec func_type_of_cont_type (c : context) (ut : typeuse) at : resulttype * resulttype =
   match ut with
-  | Def dt -> functype_of_comptype (expand_deftype dt)
-  | Idx x -> func_type c (x @@ at)
+  | Def dt ->
+    (match expand_deftype dt with
+    | FuncT ft -> ft
+    | ContT ut' -> func_type_of_cont_type c ut' at
+    | _ -> error at "function type expected")
+  | Idx x ->
+    (match expand_deftype (type_ c (x @@ at)) with
+    | FuncT ft -> ft
+    | ContT ut' -> func_type_of_cont_type c ut' at
+    | _ -> error at "function type expected")
   | _ -> error at "function type expected"
 
 let func_type_of_tag_type (c : context) (TagT ut) at : resulttype * resulttype =
@@ -189,7 +194,13 @@ let check_comptype (c : context) (ct : comptype) at =
     check_resulttype c ts1 at;
     check_resulttype c ts2 at
   | ContT ut ->
-    check_typeuse c ut at
+    check_typeuse c ut at;
+    (match ut with
+    | Idx x ->
+      (match expand_deftype (type_ c (x @@ at)) with
+      | FuncT _ -> ()
+      | _ -> error at ("non-function type " ^ I32.to_string_u x))
+    | _ -> ())
 
 let check_subtype (c : context) (sut : subtype) at =
   let SubT (_fin, uts, ct) = sut in
@@ -224,8 +235,7 @@ let check_rectype (c : context) (rt : rectype) at : context =
 
 let check_tagtype (c : context) (tt : tagtype) at =
   let TagT ut = tt in
-  let (ts1, ts2) = func_type c (idx_of_typeuse ut @@ at) in
-  require (ts2 = []) at "non-empty tag result type";
+  let _ = func_type c (idx_of_typeuse ut @@ at) in
   ()
 
 let check_globaltype (c : context) (gt : globaltype) at =
@@ -303,25 +313,32 @@ let match_stack (c : context) ts1 ts2 at =
 
 let check_resume_table (c : context) ts2 (xys : (idx * hdl) list) at =
   List.iter (fun (x1, x2) ->
-      match x2.it with
+      match x2 with
       | OnLabel x2 ->
         let (ts3, ts4) = func_type_of_tag_type c (tag c x1) x1.at in
         let ts' = label c x2 in
         (match Lib.List.last_opt ts' with
-        | Some (RefT (nul', ht)) ->
-          let ut = cont_type_of_heaptype c ht x2.at in
-          let ft' = func_type_of_cont_type c ut x2.at in
-          require (match_comptype c.types (FuncT (ts4, ts2)) (FuncT ft')) x2.at
+        | Some (RefT (nul', UseHT ut)) ->
+          let ut' =
+            match ut with
+            | Idx x -> cont_type c (x @@ x2.at)
+            | Def dt ->
+              (match expand_deftype dt with
+               | ContT ut' -> ut'
+               | _ -> error x2.at "non-continuation type 0")
+            | Rec _ -> assert false
+          in
+          let (ts1', ts2') = func_type_of_cont_type c ut' x2.at in
+          require (match_comptype c.types (FuncT (ts4, ts2)) (FuncT (ts1', ts2'))) x2.at
             "type mismatch in continuation type";
-          match_stack c (ts3 @ [RefT (nul', ht)]) ts' x2.at
+          match_stack c (ts3 @ [RefT (nul', UseHT ut)]) ts' x2.at
         | _ ->
-           error at
+           error x2.at
              ("type mismatch: instruction requires concrete continuation reference type" ^
                 " but label has " ^ string_of_resulttype ts'))
       | OnSwitch ->
         let (ts3, ts4) = func_type_of_tag_type c (tag c x1) x1.at in
-        require (match_result_type "tag" "tag" c ts3 [] x1.at
-          ) x1.at "type mismatch tag type"
+        match_result_type "tag" "tag" c ts3 [] x1.at
     ) xys
 
 let pop c (ell1, ts1) (ell2, ts2) at =
@@ -638,7 +655,7 @@ let rec check_instr (c : context) (e : instr) (s : infer_resulttype) : infer_ins
   | ContNew x ->
     let ut = cont_type c x in
     [RefT (Null, UseHT ut)] -->
-    [RefT (NoNull, VarHT (StatX x.it))], []
+    [RefT (NoNull, UseHT (Idx x.it))], []
 
   | ContBind (x, y) ->
     let ct = cont_type c x in
@@ -650,8 +667,8 @@ let rec check_instr (c : context) (e : instr) (s : infer_resulttype) : infer_ins
     let ts11, ts12 = Lib.List.split (List.length ts1 - List.length ts1') ts1 in
     require (match_comptype c.types (FuncT (ts12, ts2)) (FuncT (ts1', ts2'))) e.at
       "type mismatch in continuation types";
-    (ts11 @ [RefT (Null, VarHT (StatX x.it))]) -->
-      [RefT (NoNull, VarHT (StatX y.it))], []
+    (ts11 @ [RefT (Null, UseHT (Idx x.it))]) -->
+      [RefT (NoNull, UseHT (Idx y.it))], []
 
   | Suspend x ->
     let (ts1, ts2) = func_type_of_tag_type c (tag c x) x.at in
@@ -661,20 +678,20 @@ let rec check_instr (c : context) (e : instr) (s : infer_resulttype) : infer_ins
     let ct = cont_type c x in
     let (ts1, ts2) = func_type_of_cont_type c ct x.at in
     check_resume_table c ts2 xys e.at;
-    (ts1 @ [RefT (Null, VarHT (StatX x.it))]) --> ts2, []
+    (ts1 @ [RefT (Null, UseHT (Idx x.it))]) --> ts2, []
 
   | ResumeThrow (x, y, xys) ->
     let ct = cont_type c x in
     let (ts1, ts2) = func_type_of_cont_type c ct x.at in
     let (ts0, _) = func_type_of_tag_type c (tag c y) y.at in
     check_resume_table c ts2 xys e.at;
-    (ts0 @ [RefT (Null, VarHT (StatX x.it))]) --> ts2, []
+    (ts0 @ [RefT (Null, UseHT (Idx x.it))]) --> ts2, []
 
   | ResumeThrowRef (x, xys) ->
     let ct = cont_type c x in
     let (_ts1, ts2) = func_type_of_cont_type c ct x.at in
     check_resume_table c ts2 xys e.at;
-    ([RefT (Null, ExnHT); RefT (Null, VarHT (StatX x.it))]) --> ts2, []
+    ([RefT (Null, ExnHT); RefT (Null, UseHT (Idx x.it))]) --> ts2, []
 
   | Switch (x, y) ->
      let ct1 = cont_type c x in
@@ -694,7 +711,7 @@ let rec check_instr (c : context) (e : instr) (s : infer_resulttype) : infer_ins
      match_result_type "continuation" "continuation" c ts12 t y.at;
      match_result_type "continuation" "continuation" c t ts22 y.at;
      let ts11' = Lib.List.lead ts11 in
-     (ts11' @ [RefT (Null, VarHT (StatX x.it))]) --> ts21, []
+     (ts11' @ [RefT (Null, UseHT (Idx x.it))]) --> ts21, []
 
   | Throw x ->
     let (ts1, ts2) = func_type_of_tag_type c (tag c x) x.at in

@@ -10,10 +10,24 @@ homepage: "https://github.com/WebAssembly/spec"
 bug-reports: "https://github.com/WebAssembly/spec/issues"
 depends: [
   "dune" {>= "2.9"}
-  "ocaml" {>= "4.12"}
+  "ocaml" {>= "4.14"}
   "menhir" {>= "20220210"}
   "odoc" {with-doc}
 ]
-build: [make "-C" "interpreter"]
-install: [make "-C" "interpreter" "install"]
+build: [
+  ["dune" "subst"] {dev}
+  [
+    "dune"
+    "build"
+    "-p"
+    name
+    "-j"
+    jobs
+    "--promote-install-files=false"
+    "@install"
+    "@runtest" {with-test}
+    "@doc" {with-doc}
+  ]
+  ["dune" "install" "-p" name "--create-install-files" name]
+]
 dev-repo: "git+https://github.com/WebAssembly/spec.git"

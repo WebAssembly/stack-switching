@@ -360,11 +360,11 @@ let locals s =
 let on_clause s =
   match byte s with
   | 0x00 ->
-    let x = at var s in
-    let y = at var s in
+    let x = at u32 s in
+    let y = at u32 s in
     (x, OnLabel y)
   | 0x01 ->
-    let x = at var s in
+    let x = at u32 s in
     (x, OnSwitch)
   | _ -> error s (pos s) "ON opcode expected"
 
@@ -628,28 +628,28 @@ let rec instr s =
   | 0xd5 -> let x = at idx s in br_on_null x
   | 0xd6 -> let x = at idx s in br_on_non_null x
 
-  | 0xe0 -> cont_new (at var s)
+  | 0xe0 -> cont_new (at u32 s)
   | 0xe1 ->
-    let x = at var s in
-    let y = at var s in
+    let x = at u32 s in
+    let y = at u32 s in
     cont_bind x y
-  | 0xe2 -> suspend (at var s)
+  | 0xe2 -> suspend (at u32 s)
   | 0xe3 ->
-    let x = at var s in
+    let x = at u32 s in
     let xls = vec on_clause s in
     resume x xls
   | 0xe4 ->
-    let x   = at var s in
-    let tag = at var s in
+    let x   = at u32 s in
+    let tag = at u32 s in
     let xls = vec on_clause s in
     resume_throw x tag xls
   | 0xe5 ->
-    let x = at var s in
+    let x = at u32 s in
     let xls = vec on_clause s in
     resume_throw_ref x xls
   | 0xe6 ->
-    let x = at var s in
-    let y = at var s in
+    let x = at u32 s in
+    let y = at u32 s in
     switch x y
 
   | 0xfb as b ->

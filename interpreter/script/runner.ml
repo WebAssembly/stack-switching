@@ -375,7 +375,7 @@ let validity = function
   | Ok t -> ()
   | Error (at, msg) -> Invalid.error at msg
 
-let rec result = function
+let result = function
   | Engine.Return x -> x
   | Engine.Exn (at, tag, vs) ->
     let msg = "uncaught exception with args " ^ Value.string_of_values vs in

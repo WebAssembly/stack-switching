@@ -10,14 +10,12 @@ open Instance
 
 module Link = Error.Make ()
 module Trap = Error.Make ()
-module UnhandledException = Error.Make ()
 module Suspension = Error.Make ()
 module Exhaustion = Error.Make ()
 module Crash = Error.Make ()
 
 exception Link = Link.Error
 exception Trap = Trap.Error
-exception UnhandledException = UnhandledException.Error
 exception Suspension = Suspension.Error
 exception Exhaustion = Exhaustion.Error
 exception Crash = Crash.Error (* failure that cannot happen in valid code *)
@@ -74,10 +72,10 @@ and admininstr' =
   | Frame of int * frame * code
   | Handler of int * catch list * code
   | Prompt of handle_table * code
-  | Suspending of tag_inst * value stack * (int32 * ref_) option * ctxt
+  | Suspending of taginst * value stack * (int32 * ref_) option * ctxt
 
 and ctxt = code -> code
-and handle_table = (tag_inst * idx) list * tag_inst list
+and handle_table = (taginst * idx) list * taginst list
 
 type cont = int32 * ctxt  (* TODO: represent type properly *)
 type ref_ += ContRef of cont option ref
@@ -85,7 +83,7 @@ type ref_ += ContRef of cont option ref
 let () =
   let type_of_ref' = !Value.type_of_ref' in
   Value.type_of_ref' := function
-    | ContRef _ -> ContHT
+    | ContRef _ -> BotHT
     | r -> type_of_ref' r
 
 let () =
@@ -143,7 +141,6 @@ let comp_type (inst : moduleinst) x = expand_deftype (type_ inst x)
 let struct_type (inst : moduleinst) x = structtype_of_comptype  (comp_type inst x)
 let array_type (inst : moduleinst) x = arraytype_of_comptype (comp_type inst x)
 let func_type (inst : moduleinst) x = functype_of_comptype (comp_type inst x)
-let cont_type (inst : moduleinst) x = conttype_of_comptype (comp_type inst x)
 
 let subst_of (inst : moduleinst) = function
   | Idx x when x < Lib.List32.length inst.types ->
@@ -181,17 +178,18 @@ let i32_split n (vs : 'a stack) at =
   with
     Failure _ -> Crash.error at "stack underflow"
 
-let comp_type_of_heap_type (inst : moduleinst) ht : comptype =
-  match ht with
-  | VarHT (StatX x) -> comp_type inst (x @@ Source.no_region)
-  | DefHT dt -> expand_deftype dt
+let deftype_of_typeuse (inst : moduleinst) = function
+  | Def dt -> dt
+  | Idx x -> Lib.List32.nth inst.types x
+  | Rec _ -> assert false
+
+let functype_of_cont_type (inst : moduleinst) (ct : comptype) : resulttype * resulttype =
+  match ct with
+  | ContT ut -> functype_of_comptype (expand_deftype (deftype_of_typeuse inst ut))
   | _ -> assert false
 
-let func_type_of_cont_type (inst : moduleinst) (ContT ht) : func_type =
-  functype_of_comptype (comp_type_of_heap_type inst ht)
-
-let func_type_of_tag_type (inst : moduleinst) (TagT ut) : func_type =
-  functype_of_comptype (expand_deftype (deftype_of_typeuse ut))
+let func_type_of_tag_type (inst : moduleinst) (TagT ut) : resulttype * resulttype =
+  functype_of_comptype (expand_deftype (deftype_of_typeuse inst ut))
 
 
 (* Evaluation *)
@@ -350,6 +348,16 @@ let rec step (c : config) : config =
       | ReturnCall x, vs ->
         (match (step {c with code = (vs, [Plain (Call x) @@ e.at])}).code with
         | vs', [{it = Invoke a; at}] -> vs', [ReturningInvoke (vs', a) @@ at]
+        | vs', [{it = Trapping s; at}] -> vs', [Trapping s @@ at]
+        | _ -> assert false
+        )
+
+      | ReturnCallIndirect (x, y), vs ->
+        (match
+          (step {c with code = (vs, [Plain (CallIndirect (x, y)) @@ e.at])}).code
+        with
+        | vs', [{it = Invoke a; at}] -> vs', [ReturningInvoke (vs', a) @@ at]
+        | vs', [{it = Trapping s; at}] -> vs', [Trapping s @@ at]
         | _ -> assert false
         )
 
@@ -363,39 +371,40 @@ let rec step (c : config) : config =
         | _ -> assert false
         )
 
-      | ContNew x, Ref (NullRef _) :: vs ->
+      | ContNew x, Ref (NullRef) :: vs ->
         vs, [Trapping "null function reference" @@ e.at]
 
       | ContNew x, Ref (FuncRef f) :: vs ->
-        let FuncT (ts, _) = as_func_str_type (expand_def_type (Func.type_of f)) in
+        let dt = type_ c.frame.inst x in
+        let ut = conttype_of_comptype (expand_deftype dt) in
+        let (ts, _) = functype_of_comptype (expand_deftype (deftype_of_typeuse c.frame.inst ut)) in
         let ctxt code = compose code ([], [Invoke f @@ e.at]) in
         Ref (ContRef (ref (Some (Lib.List32.length ts, ctxt)))) :: vs, []
 
-      | ContBind (x, y), Ref (NullRef _) :: vs ->
+      | ContBind (x, y), Ref (NullRef) :: vs ->
         vs, [Trapping "null continuation reference" @@ e.at]
 
       | ContBind (x, y), Ref (ContRef {contents = None}) :: vs ->
         vs, [Trapping "continuation already consumed" @@ e.at]
 
       | ContBind (x, y), Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
-        let ct = cont_type c.frame.inst y in
-        let ct = subst_cont_type (subst_of c.frame.inst) ct in
-        let FuncT (ts', _) = func_type_of_cont_type c.frame.inst ct in
+        let dt' = type_ c.frame.inst y in
+        let (ts', _) = functype_of_cont_type c.frame.inst (expand_deftype dt') in
         let args, vs' =
           try i32_split (I32.sub n (Lib.List32.length ts')) vs e.at
           with Failure _ -> Crash.error e.at "type mismatch at continuation bind"
         in
         cont := None;
         let ctxt' code = ctxt (compose code (args, [])) in
-        Ref (ContRef (ref (Some (I32.sub n (Lib.List32.length args), ctxt')))) :: vs', []
+        Ref (ContRef (ref (Some (Lib.List32.length ts', ctxt')))) :: vs', []
 
       | Suspend x, vs ->
         let tagt = tag c.frame.inst x in
-        let FuncT (ts, _) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
+        let (ts, _) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
         let args, vs' = i32_split (Lib.List32.length ts) vs e.at in
         vs', [Suspending (tagt, args, None, fun code -> code) @@ e.at]
 
-      | Resume (x, xls), Ref (NullRef _) :: vs ->
+      | Resume (x, xls), Ref (NullRef) :: vs ->
         vs, [Trapping "null continuation reference" @@ e.at]
 
       | Resume (x, xls), Ref (ContRef {contents = None}) :: vs ->
@@ -407,7 +416,7 @@ let rec step (c : config) : config =
         cont := None;
         vs', [Prompt (hs, ctxt (args, [])) @@ e.at]
 
-      | ResumeThrow (x, y, xls), Ref (NullRef _) :: vs ->
+      | ResumeThrow (x, y, xls), Ref (NullRef) :: vs ->
         vs, [Trapping "null continuation reference" @@ e.at]
 
       | ResumeThrow (x, y, xls), Ref (ContRef {contents = None}) :: vs ->
@@ -415,16 +424,16 @@ let rec step (c : config) : config =
 
       | ResumeThrow (x, y, xls), Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
         let tagt = tag c.frame.inst y in
-        let FuncT (ts, _) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
+        let (ts, _) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
         let hs = handle_table c xls in
         let args, vs' = i32_split (Lib.List32.length ts) vs e.at in
         cont := None;
         vs', [Prompt (hs, ctxt ([], [Throwing (tagt, args) @@ e.at])) @@ e.at]
 
-      | ResumeThrowRef (x, xls), Ref _ :: Ref (NullRef _) :: vs ->
+      | ResumeThrowRef (x, xls), Ref _ :: Ref (NullRef) :: vs ->
         vs, [Trapping "null exception reference" @@ e.at]
 
-      | ResumeThrowRef (x, xls), Ref (NullRef _) :: vs ->
+      | ResumeThrowRef (x, xls), Ref (NullRef) :: vs ->
         vs, [Trapping "null continuation reference" @@ e.at]
 
       | ResumeThrowRef (x, xls), Ref (ContRef {contents = None}) :: Ref _ :: vs ->
@@ -437,42 +446,26 @@ let rec step (c : config) : config =
         cont := None;
         vs, [Prompt (hs, ctxt ([v], [Plain ThrowRef @@ e.at])) @@ e.at]
 
-      | Switch (x, y), Ref (NullRef _) :: vs ->
+      | Switch (x, y), Ref (NullRef) :: vs ->
          vs, [Trapping "null continuation reference" @@ e.at]
 
       | Switch (x, y), Ref (ContRef {contents = None}) :: vs ->
          vs, [Trapping "continuation already consumed" @@ e.at]
 
       | Switch (x, y), Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
-         let FuncT (ts, _) = func_type_of_cont_type c.frame.inst (cont_type c.frame.inst x) in
-         let FuncT (ts', _) = as_cont_func_ref_type (Lib.List.last ts) in
+         let (ts, _) = functype_of_cont_type c.frame.inst (expand_deftype (type_ c.frame.inst x)) in
+         let (ts', _) = as_cont_func_reftype (Lib.List.last ts) in
          let arity = Lib.List32.length ts' in
          let tagt = tag c.frame.inst y in
          let args, vs' = i32_split (Int32.sub n 1l) vs e.at in
          vs', [Suspending (tagt, args, Some (arity, ContRef cont), fun code -> code) @@ e.at]
 
-      | ReturnCall x, vs ->
-        (match (step {c with code = (vs, [Plain (Call x) @@ e.at])}).code with
-        | vs', [{it = Invoke a; at}] -> vs', [ReturningInvoke (vs', a) @@ at]
-        | _ -> assert false
-        )
-
-      | ReturnCallIndirect (x, y), vs ->
-        (match
-          (step {c with code = (vs, [Plain (CallIndirect (x, y)) @@ e.at])}).code
-        with
-        | vs', [{it = Invoke a; at}] -> vs', [ReturningInvoke (vs', a) @@ at]
-        | vs', [{it = Trapping s; at}] -> vs', [Trapping s @@ at]
-        | _ -> assert false
-        )
 
       | Throw x, vs ->
         let t = tag c.frame.inst x in
-        let TagT ut = Tag.type_of t in
-        let dt = deftype_of_typeuse ut in
-        let (ts, _) = functype_of_comptype (expand_deftype dt) in
-        let n = List.length ts in
-        let args, vs' = split n vs e.at in
+        let (ts, _) = func_type_of_tag_type c.frame.inst (Tag.type_of t) in
+        let n = Lib.List32.length ts in
+        let args, vs' = i32_split n vs e.at in
         vs', [Throwing (t, args) @@ e.at]
 
       | ThrowRef, Ref NullRef :: vs ->
@@ -1321,8 +1314,15 @@ let rec step (c : config) : config =
 
     | Prompt ((hs, _), (vs', {it = Suspending (tagt, vs1, None, ctxt); at} :: es')), vs
       when List.mem_assq tagt hs ->
-      let FuncT (_, ts) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
+      let (_, ts) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
       let ctxt' code = compose (ctxt code) (vs', es') in
+      [Ref (ContRef (ref (Some (Lib.List32.length ts, ctxt'))))] @ vs1 @ vs,
+      [Plain (Br (List.assq tagt hs)) @@ e.at]
+
+    | Prompt ((hs, _), (vs', {it = Throwing (tagt, vs1); at} :: es')), vs
+      when List.mem_assq tagt hs ->
+      let (_, ts) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
+      let ctxt' code = compose ([], [Throwing (tagt, vs1) @@ at]) (vs', es') in
       [Ref (ContRef (ref (Some (Lib.List32.length ts, ctxt'))))] @ vs1 @ vs,
       [Plain (Br (List.assq tagt hs)) @@ e.at]
 
@@ -1333,6 +1333,14 @@ let rec step (c : config) : config =
        let args = cont' :: vs1 in
        cont := None;
        vs' @ vs, [Prompt (hso, ctxt (args, [])) @@ e.at]
+
+    | Prompt ((_, hs) as hso, (vs', {it = Throwing (tagt, vs1); at} :: es')), vs
+       when List.memq tagt hs ->
+       let (_, ts) = func_type_of_tag_type c.frame.inst (Tag.type_of tagt) in
+       let ctxt' code = compose ([], [Throwing (tagt, vs1) @@ at]) (vs', es') in
+       let cont' = Ref (ContRef (ref (Some (Lib.List32.length ts, ctxt')))) in
+       let args = cont' :: vs1 in
+       vs' @ vs, [Prompt (hso, ctxt' (args, [])) @@ e.at]
 
     | Prompt (hso, (vs', {it = Suspending (tagt, vs1, contref, ctxt); at} :: es')), vs ->
       let ctxt' code = [], [Prompt (hso, compose (ctxt code) (vs', es')) @@ e.at] in
@@ -1358,15 +1366,12 @@ let rec eval (c : config) : value stack =
   | vs, e::_ when is_jumping e ->
     (match e.it with
     | Trapping msg ->  Trap.error e.at msg
-    | Throwing _ -> UnhandledException.error e.at "unhandled exception"
+    | Throwing (a, args) -> raise (Exception (e.at, Exn.Exn (a, args)))
     | Suspending _ -> Suspension.error e.at "unhandled tag"
     | Returning _ | ReturningInvoke _ -> Crash.error e.at "undefined frame"
     | Breaking _ -> Crash.error e.at "undefined label"
     | _ -> assert false
     )
-
-  | vs, {it = Throwing (a, args); at} :: _ ->
-    raise (Exception (at, Exn.Exn (a, args)))
 
   | vs, es ->
     eval (step c)

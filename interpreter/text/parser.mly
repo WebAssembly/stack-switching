@@ -173,6 +173,7 @@ let func_type (c : context) x =
   | _ -> error x.at ("non-function type " ^ Int32.to_string x.it)
   | exception Failure _ -> error x.at ("unknown type " ^ Int32.to_string x.it)
 
+
 let bind_abs category space x =
   if VarMap.mem x.it space.map then
     error x.at ("duplicate " ^ category ^ " " ^ print x);
@@ -238,7 +239,6 @@ let inline_functype (c : context) (ts1, ts2) loc =
     define_deftype c (DefT (RecT [st], 0l));
     i @@ loc
 
-
 let inline_functype_explicit (c : context) x ft =
   if ft = ([], []) then
     (* Deferring ensures that type lookup is only triggered when
@@ -250,6 +250,7 @@ let inline_functype_explicit (c : context) x ft =
   else if ft <> func_type c x then
     error x.at "inline function type does not match explicit type";
   x
+
 
 (* Custom annotations *)
 
@@ -290,7 +291,7 @@ let parse_annots (m : module_) : Custom.section list =
 %token UNREACHABLE NOP DROP SELECT
 %token BLOCK END IF THEN ELSE LOOP
 %token CONT_NEW CONT_BIND SUSPEND RESUME RESUME_THROW RESUME_THROW_REF SWITCH
-%token BR BR_IF BR_TABLE BR_ON_NON_NULL
+%token BR BR_IF BR_TABLE
 %token<Ast.idx -> Ast.instr'> BR_ON_NULL
 %token<Ast.idx -> Types.reftype -> Types.reftype -> Ast.instr'> BR_ON_CAST
 %token CALL CALL_REF CALL_INDIRECT
@@ -322,7 +323,7 @@ let parse_annots (m : module_) : Custom.section list =
 %token VEC_SHUFFLE
 %token<Ast.laneidx -> Ast.instr'> VEC_EXTRACT VEC_REPLACE
 %token FUNC START TYPE PARAM RESULT LOCAL GLOBAL CONT
-%token TABLE ELEM MEMORY ON TAG DATA DECLARE OFFSET ITEM IMPORT EXPORT
+%token TABLE ELEM MEMORY TAG DATA DECLARE OFFSET ITEM IMPORT EXPORT ON
 %token MODULE BIN QUOTE DEFINITION INSTANCE
 %token SCRIPT REGISTER INVOKE GET
 %token ASSERT_MALFORMED ASSERT_INVALID ASSERT_UNLINKABLE
@@ -395,8 +396,8 @@ reftype :
   | NULLEXNREF { fun c -> (Null, NoExnHT) }  /* Sugar */
   | EXTERNREF { fun c -> (Null, ExternHT) }  /* Sugar */
   | NULLEXTERNREF { fun c -> (Null, NoExternHT) }  /* Sugar */
-  | CONTREF { fun c -> (Null, ContHT) } /* Sugar */
-  | NULLCONTREF { fun c -> (Null, NoContHT) } /* Sugar */
+  | CONTREF { fun c -> (Null, ContHT) }  /* Sugar */
+  | NULLCONTREF { fun c -> (Null, NoContHT) }  /* Sugar */
 
 valtype :
   | NUMTYPE { fun c -> NumT $1 }
@@ -410,32 +411,6 @@ valtype_list :
 globaltype :
   | valtype { fun c -> GlobalT (Cons, $1 c) }
   | LPAR MUT valtype RPAR { fun c -> GlobalT (Var, $3 c) }
-
-cont_type :
-  | typeuse cont_type_params
-    { fun c ->
-      match $2 c with
-      | ([], []) -> VarHT (StatX ($1 c).it)
-      | ft ->
-         let x = inline_functype_explicit c ($1 c) ft in
-         VarHT (StatX x.it) }
-  | cont_type_params
-    { let at = $sloc in fun c -> VarHT (StatX (inline_functype c ($1 c) at).it) }
-  | idx  /* Sugar */
-    { fun c -> VarHT (StatX ($1 c type_).it) }
-
-cont_type_params :
-  | LPAR PARAM valtype_list RPAR cont_type_params
-    { fun c -> let (ts1, ts2) = $5 c in
-      (snd $3 c @ ts1, ts2) }
-  | cont_type_results
-    { fun c -> ([], $1 c) }
-
-cont_type_results :
-  | LPAR RESULT valtype_list RPAR cont_type_results
-    { fun c -> snd $3 c @ $5 c }
-  | /* empty */
-    { fun c -> [] }
 
 storagetype :
   | valtype { fun c -> ValStorageT ($1 c) }
@@ -478,6 +453,32 @@ functype_result :
     { fun c -> [] }
   | LPAR RESULT valtype_list RPAR functype_result
     { fun c -> snd $3 c @ $5 c }
+
+cont_type :
+  | typeuse cont_type_params
+    { fun c ->
+      match $2 c with
+      | ([], []) -> Idx ($1 c).it
+      | ft ->
+         let x = inline_functype_explicit c ($1 c) ft in
+         Idx x.it }
+  | cont_type_params
+    { let at = $sloc in fun c -> Idx (inline_functype c ($1 c) at).it }
+  | idx  /* Sugar */
+    { fun c -> Idx ($1 c type_).it }
+
+cont_type_params :
+  | LPAR PARAM valtype_list RPAR cont_type_params
+    { fun c -> let (ts1, ts2) = $5 c in
+      (snd $3 c @ ts1, ts2) }
+  | cont_type_results
+    { fun c -> ([], $1 c) }
+
+cont_type_results :
+  | LPAR RESULT valtype_list RPAR cont_type_results
+    { fun c -> snd $3 c @ $5 c }
+  | /* empty */
+    { fun c -> [] }
 
 comptype :
   | LPAR STRUCT structtype RPAR { fun c x -> StructT ($3 c x) }
@@ -585,12 +586,35 @@ instr_list :
   | instr1 instr_list { fun c -> $1 c @ $2 c }
   | selectinstr_instr_list { $1 }
   | callinstr_instr_list { $1 }
-  | resume_instr_instr_list { $1 }
+  | resumeinstr_instr_list { $1 }
 
 instr1 :
   | plaininstr { fun c -> [$1 c @@ $sloc] }
   | blockinstr { fun c -> [$1 c @@ $sloc] }
   | expr { $1 }  /* Sugar */
+
+resumeinstr_instr_list :
+  | RESUME idx resume_handler_instr_list
+    { fun c -> let hs, es = $3 c in (resume ($2 c type_) hs @@ $loc($1)) :: es }
+  | RESUME_THROW idx idx resume_handler_instr_list
+    { fun c -> let hs, es = $4 c in (resume_throw ($2 c type_) ($3 c tag) hs @@ $loc($1)) :: es }
+  | RESUME_THROW_REF idx resume_handler_instr_list
+    { fun c -> let hs, es = $3 c in (resume_throw_ref ($2 c type_) hs @@ $loc($1)) :: es }
+
+resume_handler_instr_list :
+  | LPAR ON idx resume_handler_body RPAR resume_handler_instr_list
+    { fun c -> let hs, es = $6 c in ($3 c tag, $4 c) :: hs, es }
+  | instr_list
+    { fun c -> [], $1 c }
+
+resume_handler_list :
+  | /* empty */ { fun c -> [] }
+  | LPAR ON idx resume_handler_body RPAR resume_handler_list
+    { fun c -> ($3 c tag, $4 c) :: $6 c }
+
+resume_handler_body :
+  | idx { fun c -> OnLabel ($1 c label) }
+  | SWITCH { fun c -> OnSwitch }
 
 plaininstr :
   | UNREACHABLE { fun c -> unreachable }
@@ -602,8 +626,10 @@ plaininstr :
     { fun c -> let xs, x = Lib.List.split_last ($2 c label :: $3 c label) in
       br_table xs x }
   | BR_ON_NULL idx { fun c -> $1 ($2 c label) }
-  | BR_ON_NON_NULL idx { fun c -> br_on_non_null ($2 c label) }
   | BR_ON_CAST idx reftype reftype { fun c -> $1 ($2 c label) ($3 c) ($4 c) }
+  | RESUME idx resume_handler_list { fun c -> resume ($2 c type_) ($3 c) }
+  | RESUME_THROW idx idx resume_handler_list { fun c -> resume_throw ($2 c type_) ($3 c tag) ($4 c) }
+  | RESUME_THROW_REF idx resume_handler_list { fun c -> resume_throw_ref ($2 c type_) ($3 c) }
   | RETURN { fun c -> return }
   | CALL idx { fun c -> call ($2 c func) }
   | CALL_REF idx { fun c -> call_ref ($2 c type_) }
@@ -612,6 +638,7 @@ plaininstr :
   | CONT_NEW idx { fun c -> cont_new ($2 c type_) }
   | CONT_BIND idx idx { fun c -> cont_bind ($2 c type_) ($3 c type_) }
   | SUSPEND idx { fun c -> suspend ($2 c tag) }
+  | SWITCH idx idx { fun c -> switch ($2 c type_) ($3 c tag) }
   | THROW idx { fun c -> throw ($2 c tag) }
   | THROW_REF { fun c -> throw_ref }
   | LOCAL_GET idx { fun c -> local_get ($2 c local) }
@@ -663,7 +690,6 @@ plaininstr :
   | STRUCT_NEW idx { fun c -> $1 ($2 c type_) }
   | STRUCT_GET idx idx { fun c -> let x = $2 c type_ in $1 x ($3 c (field x.it)).it }
   | STRUCT_SET idx idx { fun c -> let x = $2 c type_ in struct_set x ($3 c (field x.it)).it }
-  | SWITCH idx idx { fun c -> let x = $2 c type_ in let tag = $3 c tag in switch x tag }
   | ARRAY_NEW idx { fun c -> $1 ($2 c type_) }
   | ARRAY_NEW_FIXED idx nat32 { fun c -> array_new_fixed ($2 c type_) $3 }
   | ARRAY_NEW_ELEM idx idx { fun c -> array_new_elem ($2 c type_) ($3 c elem) }
@@ -762,31 +788,6 @@ callinstr_results_instr_list :
   | instr_list
     { fun c -> [], $1 c }
 
-resume_instr_instr_list :
-  | RESUME idx resume_instr_handler_instr
-    { let loc1 = $loc($1) in
-      fun c ->
-      let x = $2 c type_ in
-      let hs, es = $3 c in (resume x hs @@ loc1) :: es }
-  | RESUME_THROW idx idx resume_instr_handler_instr
-    { let loc1 = $loc($1) in
-      fun c ->
-      let x  = $2 c type_ in
-      let tag = $3 c tag in
-      let hs, es = $4 c in (resume_throw x tag hs @@ loc1) :: es }
-  | RESUME_THROW_REF idx resume_instr_handler_instr
-    { let loc1 = $loc($1) in
-      fun c ->
-      let x  = $2 c type_ in
-      let hs, es = $3 c in (resume_throw_ref x hs @@ loc1) :: es }
-
-resume_instr_handler_instr :
-  | LPAR ON idx idx RPAR resume_instr_handler_instr
-    { fun c -> let hs, es = $6 c in ($3 c tag, OnLabel ($4 c label)) :: hs, es }
-  | LPAR ON idx SWITCH RPAR resume_instr_handler_instr
-    { fun c -> let hs, es = $6 c in ($3 c tag, OnSwitch) :: hs, es }
-  | instr_list
-    { fun c -> [], $1 c }
 
 blockinstr :
   | BLOCK labeling_opt block END labeling_end_opt
@@ -887,21 +888,12 @@ expr1 :  /* Sugar */
     { fun c -> let x, es = $3 c in es, return_call_indirect ($2 c table) x }
   | RETURN_CALL_INDIRECT callexpr_type  /* Sugar */
     { fun c -> let x, es = $2 c in es, return_call_indirect (0l @@ $loc($1)) x }
-  | RESUME idx resume_expr_handler
-    { fun c ->
-      let x = $2 c type_ in
-      let hs, es = $3 c in es, resume x hs }
-  | RESUME_THROW idx idx resume_expr_handler
-    { fun c ->
-      let x = $2 c type_ in
-      let tag = $3 c tag in
-      let hs, es = $4 c in
-      es, resume_throw x tag hs }
-  | RESUME_THROW_REF idx resume_expr_handler
-    { fun c ->
-      let x = $2 c type_ in
-      let hs, es = $3 c in
-      es, resume_throw_ref x hs }
+  | RESUME idx resume_expr_results
+    { fun c -> let hs, es = $3 c in es, resume ($2 c type_) hs }
+  | RESUME_THROW idx idx resume_expr_results
+    { fun c -> let hs, es = $4 c in es, resume_throw ($2 c type_) ($3 c tag) hs }
+  | RESUME_THROW_REF idx resume_expr_results
+    { fun c -> let hs, es = $3 c in es, resume_throw_ref ($2 c type_) hs }
   | BLOCK labeling_opt block
     { fun c -> let c' = $2 c [] in let bt, es = $3 c' in [], block bt es }
   | LOOP labeling_opt block
@@ -912,6 +904,14 @@ expr1 :  /* Sugar */
   | TRY_TABLE labeling_opt try_block
     { fun c -> let c' = $2 c [] in
       let bt, (cs, es) = $3 c c' in [], try_table bt cs es }
+
+resume_expr_results :
+  | LPAR ON idx resume_handler_body RPAR resume_expr_results
+    { fun c -> let hs, es = $6 c in ($3 c tag, $4 c) :: hs, es }
+  | LPAR ON idx RPAR resume_expr_results
+    { fun c -> let hs, es = $5 c in ($3 c tag, OnLabel (0l @@ $sloc)) :: hs, es }
+  | expr_list
+    { fun c -> [], $1 c }
 
 selectexpr_results :
   | LPAR RESULT valtype_list RPAR selectexpr_results
@@ -941,13 +941,6 @@ callexpr_results :
   | expr_list
     { fun c -> [], $1 c }
 
-resume_expr_handler :
-  | LPAR ON idx idx RPAR resume_expr_handler
-    { fun c -> let hs, es = $6 c in ($3 c tag, OnLabel ($4 c label)) :: hs, es }
-  | LPAR ON idx SWITCH RPAR resume_expr_handler
-    { fun c -> let hs, es = $6 c in ($3 c tag, OnSwitch) :: hs, es }
-  | expr_list
-    { fun c -> [], $1 c }
 
 if_block :
   | typeuse if_block_param_body
@@ -983,6 +976,7 @@ if_ :
     { fun c c' -> [], $3 c', $7 c' }
   | LPAR THEN instr_list RPAR  /* Sugar */
     { fun c c' -> [], $3 c', [] }
+
 
 try_block :
   | typeuse try_block_param_body
@@ -1121,6 +1115,9 @@ localtype :
 localtype_list :
   | list(localtype)
     { Lib.List32.length $1, fun c -> List.map (fun f -> f c) $1 }
+
+
+/* Tags, Globals, Memories, Tables */
 
 tag :
   | LPAR TAG bindidx_opt tag_fields RPAR
@@ -1303,6 +1300,7 @@ table_fields :
       [Table (TableT ($1, {min = size; max = Some size}, rt), tinit) @@ loc],
       [Elem (rt, einit, Active (x, offset) @@ loc) @@ loc],
       [], [] }
+
 
 /* Imports & Exports */
 
@@ -1531,7 +1529,6 @@ action :
     { Invoke ($3, $4, $5) @@ $sloc }
   | LPAR GET option(instance_var) name RPAR
     { Get ($3, $4) @@ $sloc }
-
 
 assertion :
   | LPAR ASSERT_MALFORMED script_module STRING RPAR

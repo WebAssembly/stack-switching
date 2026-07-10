@@ -177,7 +177,7 @@ struct
     | StructT fts -> s7 (-0x21); vec fieldtype fts
     | ArrayT ft -> s7 (-0x22); fieldtype ft
     | FuncT (ts1, ts2) -> s7 (-0x20); resulttype ts1; resulttype ts2
-    | ContT ut -> s7 (-0x23); typeuse idx ut
+    | ContT ut -> s7 (-0x23); typeuse u32 ut
 
   let subtype = function
     | SubT (Final, [], ct) -> comptype ct
