@@ -3,11 +3,11 @@
 .. External Standards
 .. ------------------
 
-.. |WasmDraft| replace:: |pagelink|
-.. _WasmDraft: |pagelink|
+.. |WasmDraft| replace:: https://webassembly.github.io/stack-switching/core/
+.. _WasmDraft: https://webassembly.github.io/stack-switching/core/
 
-.. |WasmIssues| replace:: |issuelink|
-.. _WasmIssues: |issuelink|
+.. |WasmIssues| replace:: https://github.com/webassembly/stack-switching/issues/
+.. _WasmIssues: https://github.com/webassembly/stack-switching/issues/
 
 .. |IEEE754| replace:: IEEE 754
 .. _IEEE754: https://ieeexplore.ieee.org/document/8766229

@@ -132,6 +132,8 @@ struct
     | ExternHT -> s7 (-0x11)
     | NoExternHT -> s7 (-0x0e)
     | UseHT ut -> typeuse s33 ut
+    | ContHT -> s7 (-0x18)
+    | NoContHT -> s7 (-0x0b)
     | BotHT -> assert false
 
   let reftype = function
@@ -147,6 +149,8 @@ struct
     | (Null, NoExnHT) -> s7 (-0x0c)
     | (Null, ExternHT) -> s7 (-0x11)
     | (Null, NoExternHT) -> s7 (-0x0e)
+    | (Null, ContHT) -> s7 (-0x18)
+    | (Null, NoContHT) -> s7 (-0x0b)
     | (Null, t) -> s7 (-0x1d); heaptype t
     | (NoNull, t) -> s7 (-0x1c); heaptype t
 
@@ -173,6 +177,11 @@ struct
     | StructT fts -> s7 (-0x21); vec fieldtype fts
     | ArrayT ft -> s7 (-0x22); fieldtype ft
     | FuncT (ts1, ts2) -> s7 (-0x20); resulttype ts1; resulttype ts2
+    | ContT ut ->
+      s7 (-0x23); typeuse u32 ut
+      (* TODO(dhil): This might need to change again in the future as a
+         different proposal might claim this opcode! GC proposal claimed
+         the previous opcode we were using. *)
 
   let subtype = function
     | SubT (Final, [], ct) -> comptype ct
@@ -187,8 +196,12 @@ struct
     let flags = flag (max <> None) 0 + flag (at = I64AT) 2 in
     byte flags; u64 min; opt u64 max
 
+  let resumability = function
+    | Terminal -> byte 0
+    | Resumable -> byte 1
+
   let tagtype = function
-    | TagT ut -> u32 0x00l; typeuse u32 ut
+    | TagT (ut, res) -> resumability res; typeuse u32 ut
 
   let globaltype = function
     | GlobalT (mut, t) -> valtype t; mutability mut
@@ -241,6 +254,16 @@ struct
       | nlocs -> (1, loc) :: nlocs
     in vec local (List.fold_right combine locs [])
 
+  let on_clause (x, y) =
+    match y with
+    | OnSwitch ->
+       byte 0x01; idx x
+    | OnLabel y ->
+       byte 0x00; idx x; idx y
+
+  let resumetable xls =
+    vec on_clause xls
+
   let rec instr e =
     match e.it with
     | Unreachable -> op 0x00
@@ -278,6 +301,14 @@ struct
     | ReturnCallIndirect (x, y) -> op 0x13; idx y; idx x
     | Throw x -> op 0x08; idx x
     | ThrowRef -> op 0x0a
+    | ContNew x -> op 0xe0; idx x
+    | ContBind (x, y) -> op 0xe1; idx x; idx y
+    | Suspend x -> op 0xe2; idx x
+    | Resume (x, xls) -> op 0xe3; idx x; resumetable xls
+    | ResumeThrow (x, y, xls) -> op 0xe4; idx x; idx y; resumetable xls
+    | ResumeThrowRef (x, xls) -> op 0xe5; idx x; resumetable xls
+    | Switch (x, y) -> op 0xe6; idx x; idx y
+    | FuncBind x -> op 0x16; idx x
 
     | LocalGet x -> op 0x20; idx x
     | LocalSet x -> op 0x21; idx x
@@ -934,6 +965,7 @@ struct
 
 
   (* Import section *)
+
 
   let import im =
     let Import (module_name, item_name, xt) = im.it in

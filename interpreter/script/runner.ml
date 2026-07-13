@@ -16,6 +16,7 @@ module Link = Error.Make ()
 module Trap = Error.Make ()
 module Crash = Error.Make ()
 module Exception = Error.Make ()
+module Suspension = Error.Make ()
 module Exhaustion = Error.Make ()
 
 exception Abort = Abort.Error
@@ -26,6 +27,7 @@ exception Link = Link.Error
 exception Trap = Trap.Error
 exception Crash = Crash.Error
 exception Exception = Exception.Error
+exception Suspension = Suspension.Error
 exception Exhaustion = Exhaustion.Error
 
 let trace name = if !Flags.trace then print_endline ("-- " ^ name)
@@ -131,6 +133,7 @@ let input_from get_script run =
   | Trap (at, msg) -> error at "runtime trap" msg
   | Crash (at, msg) -> error at "runtime crash" msg
   | Exception (at, msg) -> error at "uncaught exception" msg
+  | Suspension (at, msg) -> error at "suspension error" msg
   | Exhaustion (at, msg) -> error at "resource exhaustion" msg
   | Assert (at, msg) -> error at "assertion failure" msg
   | IO (at, msg) -> error at "i/o error" msg
@@ -379,6 +382,7 @@ let result = function
     let msg = "uncaught exception with args " ^ Value.string_of_values vs in
     Exception.error at msg
   | Engine.Trap (at, msg) -> Trap.error at msg
+  | Engine.Suspension (at, msg) -> Suspension.error at msg
   | Engine.Exhaustion (at, msg) -> Exhaustion.error at msg
 
 let rec run_definition def : Ast.module_ * Custom.section list =
@@ -573,6 +577,13 @@ let run_assertion ass =
     (match run_action act with
     | exception Exception (_, msg) -> ()
     | _ -> Assert.error ass.at "expected exception"
+    )
+
+  | AssertSuspension (act, re) ->
+    trace ("Asserting suspension...");
+    (match run_action act with
+    | exception Suspension (_, msg) -> assert_message ass.at "runtime" msg re
+    | _ -> Assert.error ass.at "expected suspension"
     )
 
   | AssertTrap (act, re) ->

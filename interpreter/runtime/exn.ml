@@ -7,7 +7,7 @@ and exn_ = Exn of Tag.t * value list
 type ref_ += ExnRef of exn_
 
 let alloc_exn tag vs =
-  let TagT ut = Tag.type_of tag in
+  let TagT (ut, _) = Tag.type_of tag in
   assert Free.((typeuse ut).types = Set.empty);
   let dt = deftype_of_typeuse ut in
   let (ts1, ts2) = functype_of_comptype (expand_deftype dt) in
@@ -16,7 +16,7 @@ let alloc_exn tag vs =
   Exn (tag, vs)
 
 let type_of (Exn (tag, _)) =
-  let TagT ut = Tag.type_of tag in
+  let TagT (ut, _) = Tag.type_of tag in
   deftype_of_typeuse ut
 
 let () =

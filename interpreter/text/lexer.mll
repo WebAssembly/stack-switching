@@ -177,6 +177,9 @@ rule token = parse
       | "noextern" -> NOEXTERN
       | "externref" -> EXTERNREF
       | "nullexternref" -> NULLEXTERNREF
+      | "nocont" -> NOCONT
+      | "contref" -> CONTREF
+      | "nullcontref" -> NULLCONTREF
       | "ref" -> REF
       | "null" -> NULL
 
@@ -187,6 +190,7 @@ rule token = parse
       | "sub" -> SUB
       | "final" -> FINAL
       | "rec" -> REC
+      | "cont" -> CONT
 
       | "nop" -> NOP
       | "unreachable" -> UNREACHABLE
@@ -219,6 +223,14 @@ rule token = parse
       | "catch_ref" -> CATCH_REF
       | "catch_all" -> CATCH_ALL
       | "catch_all_ref" -> CATCH_ALL_REF
+      | "cont.new" -> CONT_NEW
+      | "cont.bind" -> CONT_BIND
+      | "suspend" -> SUSPEND
+      | "resume" -> RESUME
+      | "resume_throw" -> RESUME_THROW
+      | "resume_throw_ref" -> RESUME_THROW_REF
+      | "switch" -> SWITCH
+      | "func.bind" -> FUNC_BIND
 
       | "local.get" -> LOCAL_GET
       | "local.set" -> LOCAL_SET
@@ -765,6 +777,8 @@ rule token = parse
 
       | "type" -> TYPE
       | "tag" -> TAG
+      | "event" -> EVENT
+      | "exception" -> EXCEPTION
       | "global" -> GLOBAL
       | "memory" -> MEMORY
       | "table" -> TABLE
@@ -776,6 +790,7 @@ rule token = parse
       | "elem" -> ELEM
       | "declare" -> DECLARE
       | "offset" -> OFFSET
+      | "on" -> ON
       | "item" -> ITEM
       | "start" -> START
       | "import" -> IMPORT
@@ -799,6 +814,7 @@ rule token = parse
       | "assert_return" -> ASSERT_RETURN
       | "assert_trap" -> ASSERT_TRAP
       | "assert_exception" -> ASSERT_EXCEPTION
+      | "assert_suspension" -> ASSERT_SUSPENSION
       | "assert_exhaustion" -> ASSERT_EXHAUSTION
       | "nan:canonical" -> NAN Script.CanonicalNan
       | "nan:arithmetic" -> NAN Script.ArithmeticNan

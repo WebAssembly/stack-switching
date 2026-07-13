@@ -18,6 +18,7 @@ and vectype = V128T
 and heaptype =
   | AnyHT | NoneHT | EqHT | I31HT | StructHT | ArrayHT
   | FuncHT | NoFuncHT | ExnHT | NoExnHT | ExternHT | NoExternHT
+  | ContHT | NoContHT
   | UseHT of typeuse | BotHT
 and reftype = null * heaptype
 and valtype = NumT of numtype | VecT of vectype | RefT of reftype | BotT
@@ -32,12 +33,14 @@ and comptype =
   | StructT of fieldtype list
   | ArrayT of fieldtype
   | FuncT of (resulttype * resulttype)
+  | ContT of typeuse
 
 and subtype = SubT of final * typeuse list * comptype
 and rectype = RecT of subtype list
 and deftype = DefT of rectype * int32
 
-type tagtype = TagT of typeuse
+type resumability = Terminal | Resumable
+type tagtype = TagT of typeuse * resumability
 type globaltype = GlobalT of mut * valtype
 type memorytype = MemoryT of addrtype * limits
 type tabletype = TableT of addrtype * limits * reftype
@@ -129,8 +132,6 @@ let functype_of_comptype = function FuncT rt2 -> rt2 | _ -> assert false
 
 let externtype_of_importtype = function ImportT (_, _, xt) -> xt
 let externtype_of_exporttype = function ExportT (_, xt) -> xt
-
-
 (* Filters *)
 
 let tags = List.filter_map (function ExternTagT tt -> Some tt | _ -> None)
@@ -176,6 +177,8 @@ and subst_heaptype s = function
   | ExternHT -> ExternHT
   | NoExternHT -> NoExternHT
   | UseHT t -> UseHT (subst_typeuse s t)
+  | ContHT -> ContHT
+  | NoContHT -> NoContHT
   | BotHT -> BotHT
 
 and subst_reftype s = function
@@ -202,6 +205,7 @@ and subst_comptype s = function
   | StructT fts -> StructT (List.map (subst_fieldtype s) fts)
   | ArrayT ft -> ArrayT (subst_fieldtype s ft)
   | FuncT (ts1, ts2) -> FuncT (subst_resulttype s ts1, subst_resulttype s ts2)
+  | ContT ut -> ContT (subst_typeuse s ut)
 
 and subst_subtype s = function
   | SubT (fin, uts, ct) ->
@@ -216,7 +220,7 @@ and subst_deftype s = function
 
 
 let subst_tagtype s = function
-  | TagT ut -> TagT (subst_typeuse s ut)
+  | TagT (ut, res) -> TagT (subst_typeuse s ut, res)
 
 let subst_globaltype s = function
   | GlobalT (mut, t) ->  GlobalT (mut, subst_valtype s t)
@@ -284,6 +288,34 @@ let expand_deftype (dt : deftype) : comptype =
   st
 
 
+(* Helper functions for stack-switching arity fix *)
+
+let as_def_heap_type (ht : heaptype) : deftype =
+  match ht with
+  | UseHT (Def dt) -> dt
+  | _ -> assert false
+
+let as_cont_comptype (dt : comptype) : typeuse =
+  match dt with
+  | ContT ut -> ut
+  | _ -> assert false
+
+let as_func_comptype (st : comptype) : (resulttype * resulttype) =
+  match st with
+  | FuncT ft -> ft
+  | _ -> assert false
+
+let as_cont_func_heap_type (ht : heaptype) : (resulttype * resulttype) =
+  let ut = as_cont_comptype (expand_deftype (as_def_heap_type ht)) in
+  match ut with
+  | Def dt -> as_func_comptype (expand_deftype dt)
+  | _ -> assert false
+
+let as_cont_func_ref_type (rt : valtype) : (resulttype * resulttype) =
+  match rt with
+  | RefT (_, ht) -> as_cont_func_heap_type ht
+  | _ -> assert false
+
 (* String conversion *)
 
 let string_of_idx x =
@@ -347,6 +379,8 @@ and string_of_heaptype = function
   | ExternHT -> "extern"
   | NoExternHT -> "noextern"
   | UseHT ut -> string_of_typeuse ut
+  | ContHT -> "cont"
+  | NoContHT -> "nocont"
   | BotHT -> "something"
 
 and string_of_reftype = function
@@ -381,6 +415,7 @@ and string_of_comptype = function
   | ArrayT ft -> "array " ^ string_of_fieldtype ft
   | FuncT (ts1, ts2) ->
     "func " ^ string_of_resulttype ts1 ^ " -> " ^ string_of_resulttype ts2
+  | ContT ut -> "cont " ^ string_of_typeuse ut
 
 and string_of_subtype = function
   | SubT (Final, [], ct) -> string_of_comptype ct
@@ -405,7 +440,7 @@ let string_of_limits = function
     (match max with None -> "" | Some n -> " " ^ I64.to_string_u n)
 
 let string_of_tagtype = function
-  | TagT ut -> string_of_typeuse ut
+  | TagT (ut, _) -> string_of_typeuse ut
 
 let string_of_globaltype = function
   | GlobalT (mut, t) -> string_of_mut (string_of_valtype t) mut

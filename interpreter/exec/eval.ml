@@ -10,11 +10,13 @@ open Instance
 
 module Link = Error.Make ()
 module Trap = Error.Make ()
+module Suspension = Error.Make ()
 module Crash = Error.Make ()
 module Exhaustion = Error.Make ()
 
 exception Link = Link.Error
 exception Trap = Trap.Error
+exception Suspension = Suspension.Error
 exception Crash = Crash.Error (* failure that cannot happen in valid code *)
 exception Exhaustion = Exhaustion.Error
 exception Exception of region * Exn.t
@@ -44,7 +46,7 @@ let numeric_error at = function
   | exn -> raise exn
 
 
-(* Administrative Expressions & Configurations *)
+(* Administrative Expressions & Continuations *)
 
 type 'a stack = 'a list
 
@@ -61,14 +63,48 @@ and admininstr' =
   | Plain of instr'
   | Refer of ref_
   | Invoke of funcinst
-  | Breaking of int32 * value stack
-  | Returning of value stack
-  | ReturningInvoke of value stack * funcinst
-  | Throwing of Tag.t * value stack
-  | Trapping of string
   | Label of int * instr list * code
   | Frame of int * frame * code
   | Handler of int * catch list * code
+  | Prompt of handle_table * code
+  | Trapping of string
+  | Throwing of Tag.t * value stack
+  | Suspending of Tag.t * value stack * (int * ref_) option * ctxt
+  | Returning of value stack
+  | ReturningInvoke of value stack * funcinst
+  | Breaking of int32 * value stack
+
+and ctxt = code -> code
+and handle_table = (Tag.t * idx) list * Tag.t list
+
+type cont = int * ctxt  (* TODO: represent type properly *)
+type ref_ += ContRef of cont option ref
+
+let () =
+  let type_of_ref' = !Value.type_of_ref' in
+  Value.type_of_ref' := function
+    | ContRef _ -> ContHT
+    | r -> type_of_ref' r
+
+let () =
+  let string_of_ref' = !Value.string_of_ref' in
+  Value.string_of_ref' := function
+    | ContRef _ -> "cont"
+    | r -> string_of_ref' r
+
+let plain e = Plain e.it @@ e.at
+
+let is_jumping e =
+  match e.it with
+  | Trapping _ | Throwing _ | Suspending _
+  | Returning _ | ReturningInvoke _ | Breaking _ ->
+    true
+  | _ -> false
+
+let compose (vs1, es1) (vs2, es2) = vs1 @ vs2, es1 @ es2
+
+
+(* Configurations *)
 
 type config =
 {
@@ -81,20 +117,11 @@ let frame inst locals = {inst; locals}
 let config inst vs es =
   {frame = frame inst []; code = vs, es; budget = !Flags.budget}
 
-let plain e = Plain e.it @@ e.at
-
 let admininstr_of_value (v : value) at : admininstr' =
   match v with
   | Num n -> Plain (Const (n @@ at))
   | Vec v -> Plain (VecConst (v @@ at))
   | Ref r -> Refer r
-
-let is_jumping e =
-  match e.it with
-  | Returning _ | ReturningInvoke _ | Breaking _
-  | Throwing _ | Trapping _ -> true
-  | _ -> false
-
 let lookup category list x =
   try Lib.List32.nth list x.it with Failure _ ->
     Crash.error x.at ("undefined " ^ category ^ " " ^ Int32.to_string x.it)
@@ -113,6 +140,10 @@ let comp_type (inst : moduleinst) x = expand_deftype (type_ inst x)
 let struct_type (inst : moduleinst) x = structtype_of_comptype  (comp_type inst x)
 let array_type (inst : moduleinst) x = arraytype_of_comptype (comp_type inst x)
 let func_type (inst : moduleinst) x = functype_of_comptype (comp_type inst x)
+let cont_func_type (inst : moduleinst) x =
+  match comp_type inst x with
+  | ContT ut -> functype_of_comptype (expand_deftype (deftype_of_typeuse ut))
+  | _ -> assert false
 
 let subst_of (inst : moduleinst) = function
   | Idx x when x < Lib.List32.length inst.types ->
@@ -145,6 +176,7 @@ let drop n (vs : 'a stack) at =
 let split n (vs : 'a stack) at = take n vs at, drop n vs at
 
 
+
 (* Evaluation *)
 
 (*
@@ -174,6 +206,25 @@ let elem_oob frame x i n =
 let array_oob a i n =
   oob (Convert.I64_.extend_i32_u i) (Convert.I64_.extend_i32_u n)
     (Convert.I64_.extend_i32_u (Aggr.array_length a))
+
+let handle_table (c : config) xls : handle_table =
+  let suspend =
+    List.filter_map
+      (fun (x, hdl) ->
+        match hdl with
+        | OnLabel l -> Some (tag c.frame.inst x, l)
+        | _ -> None)
+      xls
+  in
+  let switch =
+    List.filter_map
+      (fun (x, hdl) ->
+        match hdl with
+        | OnSwitch -> Some (tag c.frame.inst x)
+        | _ -> None)
+      xls
+  in
+  (suspend, switch)
 
 let rec step (c : config) : config =
   let vs, es = c.code in
@@ -215,6 +266,7 @@ let rec step (c : config) : config =
           vs', [Plain (Block (bt, es2)) @@ e.at]
         else
           vs', [Plain (Block (bt, es1)) @@ e.at]
+
 
       | Br x, vs ->
         [], [Breaking (x.it, vs) @@ e.at]
@@ -295,6 +347,14 @@ let rec step (c : config) : config =
         | _ -> assert false
         )
 
+
+
+
+
+
+
+
+
       | ReturnCallIndirect (x, y), vs ->
         (match
           (step {c with code = (vs, [Plain (CallIndirect (x, y)) @@ e.at])}).code
@@ -306,7 +366,7 @@ let rec step (c : config) : config =
 
       | Throw x, vs ->
         let t = tag c.frame.inst x in
-        let TagT ut = Tag.type_of t in
+        let TagT (ut, _) = Tag.type_of t in
         let dt = deftype_of_typeuse ut in
         let (ts, _) = functype_of_comptype (expand_deftype dt) in
         let n = List.length ts in
@@ -315,6 +375,116 @@ let rec step (c : config) : config =
 
       | ThrowRef, Ref NullRef :: vs ->
         vs, [Trapping "null exception reference" @@ e.at]
+
+      | FuncBind x, Ref NullRef :: vs ->
+        vs, [Trapping "null function reference" @@ e.at]
+
+      | FuncBind x, Ref (FuncRef f) :: vs ->
+        let (ts, _) = functype_of_comptype (expand_deftype (Func.type_of f)) in
+        let (ts', _) = functype_of_comptype (comp_type c.frame.inst x) in
+        let args, vs' =
+          try split (List.length ts - List.length ts') vs e.at
+          with Failure _ -> Crash.error e.at "type mismatch at function bind"
+        in
+        let f' = Func.alloc_closure (type_ c.frame.inst x) f args in
+        Ref (FuncRef f') :: vs', []
+
+      | ContNew x, Ref NullRef :: vs ->
+        vs, [Trapping "null function reference" @@ e.at]
+
+      | ContNew x, Ref (FuncRef f) :: vs ->
+        let (ts, _) = functype_of_comptype (expand_deftype (Func.type_of f)) in
+        let ctxt code = compose code ([], [Invoke f @@ e.at]) in
+        Ref (ContRef (ref (Some (List.length ts, ctxt)))) :: vs, []
+
+      | ContBind (x, y), Ref NullRef :: vs ->
+        vs, [Trapping "null continuation reference" @@ e.at]
+
+      | ContBind (x, y), Ref (ContRef {contents = None}) :: vs ->
+        vs, [Trapping "continuation already consumed" @@ e.at]
+
+      | ContBind (x, y), Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
+        let (ts', _) = cont_func_type c.frame.inst y in
+        let args, vs' =
+          try split (n - List.length ts') vs e.at
+          with Failure _ -> Crash.error e.at "type mismatch at continuation bind"
+        in
+        cont := None;
+        let ctxt' (vs, es) =
+          let vs', vs'' =
+            try split (n - List.length args) vs e.at
+            with Failure _ -> Crash.error e.at "type mismatch after continuation bind"
+          in
+          ctxt (compose (vs' @ args, []) (vs'', es))
+        in
+        Ref (ContRef (ref (Some (n - List.length args, ctxt')))) :: vs', []
+
+      | Suspend x, vs ->
+        let tg = tag c.frame.inst x in
+        let TagT (ut, _) = Tag.type_of tg in
+        let dt = deftype_of_typeuse ut in
+        let (ts, _) = functype_of_comptype (expand_deftype dt) in
+        let vs0, vs' = split (List.length ts) vs e.at in
+        vs', [Suspending (tg, vs0, None, fun code -> code) @@ e.at]
+
+      | ResumeThrow (x, y, xls), Ref NullRef :: vs ->
+        vs, [Trapping "null continuation reference" @@ e.at]
+
+      | ResumeThrow (x, y, xls), Ref (ContRef {contents = None}) :: vs ->
+        vs, [Trapping "continuation already consumed" @@ e.at]
+
+      | ResumeThrow (x, y, xls), Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
+        let tg = tag c.frame.inst y in
+        let TagT (ut, _) = Tag.type_of tg in
+        let dt = deftype_of_typeuse ut in
+        let (ts, _) = functype_of_comptype (expand_deftype dt) in
+        let vs0, vs' = split (List.length ts) vs e.at in
+        let hs = handle_table c xls in
+        cont := None;
+        vs', [Prompt (hs, ctxt ([], [Throwing (tg, vs0) @@ e.at])) @@ e.at]
+
+      | ResumeThrowRef (x, xls), Ref NullRef :: vs ->
+        vs, [Trapping "null continuation reference" @@ e.at]
+
+      | ResumeThrowRef (x, xls), Ref (ContRef {contents = None}) :: vs ->
+        vs, [Trapping "continuation already consumed" @@ e.at]
+
+      | ResumeThrowRef (x, xls), Ref (ContRef {contents = Some _}) :: Ref NullRef :: vs ->
+        vs, [Trapping "null exception reference" @@ e.at]
+
+      | ResumeThrowRef (x, xls), Ref (ContRef ({contents = Some (_, ctxt)} as cont)) ::
+                                   v :: vs ->
+        let hs = handle_table c xls in
+        cont := None;
+        vs, [Prompt (hs, ctxt ([v], [Plain ThrowRef @@ e.at])) @@ e.at]
+
+      | Resume (x, xls), Ref NullRef :: vs ->
+        vs, [Trapping "null continuation reference" @@ e.at]
+
+      | Resume (x, xls), Ref (ContRef {contents = None}) :: vs ->
+        vs, [Trapping "continuation already consumed" @@ e.at]
+
+      | Resume (x, xls), Ref (ContRef ({contents = Some (n, ctxt)} as cont)) :: vs ->
+        let hs = handle_table c xls in
+        let vs0, vs' = split n vs e.at in
+        cont := None;
+        vs', [Prompt (hs, ctxt (vs0, [])) @@ e.at]
+
+      | Switch (x, y), Ref NullRef :: vs ->
+         vs, [Trapping "null continuation reference" @@ e.at]
+
+      | Switch (x, y), Ref (ContRef {contents = None}) :: vs ->
+         vs, [Trapping "continuation already consumed" @@ e.at]
+
+      | Switch (x, y), Ref (ContRef {contents = Some (n, ctxt)} as cont) :: vs ->
+         let (ts, _) = cont_func_type c.frame.inst x in
+         let (ts', _) = as_cont_func_ref_type (Lib.List.last ts) in
+         let arity = List.length ts' in
+         let tagt = tag c.frame.inst y in
+         let args, vs' = split (n - 1) vs e.at in
+         vs', [Suspending (tagt, args, Some (arity, cont), fun code -> code) @@ e.at]
+
+
 
       | ThrowRef, Ref (Exn.(ExnRef (Exn (t, args)))) :: vs ->
         vs, [Throwing (t, args) @@ e.at]
@@ -1034,21 +1204,20 @@ let rec step (c : config) : config =
     | Refer r, vs ->
       Ref r :: vs, []
 
-    | Trapping _, vs ->
-      assert false
-
-    | Returning _, vs
-    | ReturningInvoke _, vs ->
-      Crash.error e.at "undefined frame"
-
-    | Breaking _, vs ->
-      Crash.error e.at "undefined label"
-
-    | Throwing _, _ ->
+    | Trapping _, _
+    | Throwing _, _
+    | Suspending _, _
+    | Returning _, _
+    | ReturningInvoke _, _
+    | Breaking _, _ ->
       assert false
 
     | Label (n, es0, (vs', [])), vs ->
       vs' @ vs, []
+
+    | Label (n, es0, (vs', {it = Suspending (evt, vs1, contref, ctxt); at} :: es')), vs ->
+      let ctxt' code = [], [Label (n, es0, compose (ctxt code) (vs', es')) @@ e.at] in
+      vs, [Suspending (evt, vs1, contref, ctxt') @@ at]
 
     | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es')), vs ->
       take n vs0 e.at @ vs, List.map plain es0
@@ -1063,8 +1232,14 @@ let rec step (c : config) : config =
       let c' = step {c with code = code'} in
       vs, [Label (n, es0, c'.code) @@ e.at]
 
+
+
     | Frame (n, frame', (vs', [])), vs ->
       vs' @ vs, []
+
+    | Frame (n, frame', (vs', {it = Suspending (evt, vs1, contref, ctxt); at} :: es')), vs ->
+      let ctxt' code = [], [Frame (n, frame', compose (ctxt code) (vs', es')) @@ e.at] in
+      vs, [Suspending (evt, vs1, contref, ctxt') @@ at]
 
     | Frame (n, frame', (vs', {it = Returning vs0; at} :: es')), vs ->
       take n vs0 e.at @ vs, []
@@ -1104,6 +1279,10 @@ let rec step (c : config) : config =
     | Handler (n, [], (vs', {it = Throwing (a, vs0); at} :: es')), vs ->
       vs, [Throwing (a, vs0) @@ at]
 
+    | Handler (n, cs, (vs', {it = Suspending (evt, vs1, contref, ctxt); at} :: es')), vs ->
+      let ctxt' code = [], [Handler (n, cs, compose (ctxt code) (vs', es')) @@ e.at] in
+      vs, [Suspending (evt, vs1, contref, ctxt') @@ at]
+
     | Handler (n, cs, (vs', e' :: es')), vs when is_jumping e' ->
       vs, [e']
 
@@ -1131,7 +1310,41 @@ let rec step (c : config) : config =
       | Func.HostFunc (_, f) ->
         (try List.rev (f (List.rev args)) @ vs', []
         with Crash (_, msg) -> Crash.error e.at msg)
+      | Func.ClosureFunc (_, f', args') ->
+        args @ args' @ vs', [Invoke f' @@ e.at]
       )
+
+    | Prompt (hso, (vs', [])), vs ->
+      vs' @ vs, []
+
+    | Prompt ((hs, _), (vs', {it = Suspending (evt, vs1, None, ctxt); at} :: es')), vs
+      when List.mem_assq evt hs ->
+      let TagT (ut, _) = Tag.type_of evt in
+      let dt = deftype_of_typeuse ut in
+      let (_, ts) = functype_of_comptype (expand_deftype dt) in
+      let ctxt' code = compose (ctxt code) (vs', es') in
+      [Ref (ContRef (ref (Some (List.length ts, ctxt'))))] @ vs1 @ vs,
+      [Plain (Br (List.assq evt hs)) @@ e.at]
+
+    | Prompt (((_, hs) as hso), (vs', {it = Suspending (evt, vs1, Some (ar, ContRef ({contents = Some (_, ctxt)} as cont)), ctxt'); at} :: es')), vs
+       when List.memq evt hs ->
+       let ctxt'' code = compose (ctxt' code) (vs', es') in
+       let cont' = Ref (ContRef (ref (Some (ar, ctxt'')))) in
+       let args = cont' :: vs1 in
+       cont := None;
+       vs' @ vs, [Prompt (hso, ctxt (args, [])) @@ e.at]
+
+    | Prompt (hso, (vs', {it = Suspending (evt, vs1, contref, ctxt); at} :: es')), vs ->
+      let ctxt' code = [], [Prompt (hso, compose (ctxt code) (vs', es')) @@ e.at] in
+      vs, [Suspending (evt, vs1, contref, ctxt') @@ at]
+
+    | Prompt (hso, (vs', e' :: es')), vs when is_jumping e' ->
+      vs, [e']
+
+    | Prompt (hso, code'), vs ->
+      let c' = step {c with code = code'} in
+      vs, [Prompt (hso, c'.code) @@ e.at]
+
   in {c with code = vs', es' @ List.tl es}
 
 
@@ -1146,15 +1359,26 @@ let rec eval (c : config) : value stack =
   | vs, {it = Throwing (a, args); at} :: _ ->
     raise (Exception (at, Exn.Exn (a, args)))
 
+  | vs, {it = Suspending (evt, vs1, _, _); at} :: _ ->
+    raise (Suspension (at, "unhandled tag"))
+
+  | vs, {it = Returning _; at} :: _
+  | vs, {it = ReturningInvoke _; at} :: _ ->
+    Crash.error at "undefined frame"
+
+  | vs, {it = Breaking _; at} :: _ ->
+    Crash.error at "undefined label"
+
   | vs, es ->
     eval (step c)
 
 
 (* Functions & Constants *)
 
-let at_func = function
+let rec at_func = function
  | Func.AstFunc (_, _, f) -> f.at
  | Func.HostFunc _ -> no_region
+ | Func.ClosureFunc (_, func, _) -> at_func func
 
 let invoke (func : funcinst) (vs : value list) : value list =
   let at = at_func func in

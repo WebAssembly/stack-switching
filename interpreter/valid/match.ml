@@ -13,6 +13,7 @@ let lookup c x = Lib.List32.nth c x
 let abs_of_comptype _c = function
   | StructT _ | ArrayT _ -> StructHT
   | FuncT _ -> FuncHT
+  | ContT _ -> ContHT
 
 let rec top_of_comptype c ct =
   top_of_heaptype c (abs_of_comptype c ct)
@@ -28,6 +29,7 @@ and top_of_heaptype c = function
   | ExnHT | NoExnHT -> ExnHT
   | ExternHT | NoExternHT -> ExternHT
   | UseHT ut -> top_of_typeuse c ut
+  | ContHT | NoContHT -> ContHT
   | BotHT -> assert false
 
 let top_of_valtype c = function
@@ -50,6 +52,7 @@ and bot_of_heaptype c = function
   | ExnHT | NoExnHT -> NoExnHT
   | ExternHT | NoExternHT -> NoExternHT
   | UseHT ut -> bot_of_typeuse c ut
+  | ContHT | NoContHT -> NoContHT
   | BotHT -> assert false
 
 
@@ -87,6 +90,7 @@ let rec match_heaptype c t1 t2 =
   | NoFuncHT, t when t <> BotHT -> match_heaptype c t FuncHT
   | NoExnHT, t when t <> BotHT -> match_heaptype c t ExnHT
   | NoExternHT, t when t <> BotHT -> match_heaptype c t ExternHT
+  | NoContHT, t when t <> BotHT -> match_heaptype c t ContHT
   | UseHT (Idx x1), _ -> match_heaptype c (UseHT (Def (lookup c x1))) t2
   | _, UseHT (Idx x2) -> match_heaptype c t1 (UseHT (Def (lookup c x2)))
   | UseHT (Def dt1), UseHT (Def dt2) -> match_deftype c dt1 dt2
@@ -99,6 +103,7 @@ let rec match_heaptype c t1 t2 =
     | ArrayT _, EqHT -> true
     | ArrayT _, ArrayHT -> true
     | FuncT _, FuncHT -> true
+    | ContT _, ContHT -> true
     | _ -> false
     )
   | BotHT, _ -> true
@@ -146,6 +151,8 @@ and match_comptype c ct1 ct2 =
     match_fieldtype c ft1 ft2
   | FuncT (ts11, ts12), FuncT (ts21, ts22) ->
     match_resulttype c ts21 ts11 && match_resulttype c ts12 ts22
+  | ContT ut1, ContT ut2 ->
+    match_heaptype c (UseHT ut1) (UseHT ut2)
   | _, _ -> false
 
 and match_deftype c dt1 dt2 =
@@ -154,7 +161,8 @@ and match_deftype c dt1 dt2 =
   let SubT (_fin, uts1, _st) = unroll_deftype dt1 in
   List.exists (fun ut1 -> match_heaptype c (UseHT ut1) (UseHT (Def dt2))) uts1
 
-let match_tagtype c (TagT ut1) (TagT ut2) =
+let match_tagtype c (TagT (ut1, res1)) (TagT (ut2, res2)) =
+  res1 = res2 &&
   match ut1, ut2 with
   | Def dt1, Def dt2 -> match_deftype c dt1 dt2 && match_deftype c dt2 dt1
   | _, _ -> assert false

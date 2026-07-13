@@ -67,8 +67,6 @@ let load tab i =
   Lib.Array64.get tab.content i
 
 let store tab i r =
-  let TableT (_at, _lim, t) = tab.ty in
-  if not (Match.match_reftype [] (type_of_ref r) t) then raise Type;
   if i < 0L || i >= Lib.Array64.length tab.content then raise Bounds;
   Lib.Array64.set tab.content i r
 

@@ -54,6 +54,7 @@ and assertion' =
   | AssertReturn of action * result list
   | AssertException of action
   | AssertTrap of action * string
+  | AssertSuspension of action * string
   | AssertExhaustion of action * string
 
 type command = command' Source.phrase

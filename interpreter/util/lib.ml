@@ -90,6 +90,11 @@ struct
     | _::xs -> last xs
     | [] -> failwith "last"
 
+  let rec last_opt = function
+    | [] -> None
+    | [x] -> Some x
+    | _::xs -> last_opt xs
+
   let rec split_last = function
     | x::[] -> [], x
     | x::xs -> let ys, y = split_last xs in x::ys, y

@@ -22,6 +22,7 @@ sig
   type 'a return =
     | Return of 'a
     | Exn of Source.region * taginst * value list
+    | Suspension of Source.region * string
     | Trap of error
     | Exhaustion of error
 

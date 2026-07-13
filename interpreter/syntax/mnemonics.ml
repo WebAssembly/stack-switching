@@ -53,6 +53,15 @@ let throw x = Throw x
 let throw_ref = ThrowRef
 let try_table bt cs es = TryTable (bt, cs, es)
 
+let cont_new x = ContNew x
+let cont_bind x y = ContBind (x, y)
+let suspend x = Suspend x
+let resume x xys = Resume (x, xys)
+let resume_throw x y z = ResumeThrow (x, y, z)
+let resume_throw_ref x xys = ResumeThrowRef (x, xys)
+let switch x y = Switch (x, y)
+let func_bind x = FuncBind x
+
 let local_get x = LocalGet x
 let local_set x = LocalSet x
 let local_tee x = LocalTee x

@@ -83,6 +83,7 @@ and heaptype = function
   | ExnHT | NoExnHT -> empty
   | ExternHT | NoExternHT -> empty
   | UseHT x -> typeuse x
+  | ContHT | NoContHT -> empty
   | BotHT -> empty
 
 and reftype = function
@@ -106,6 +107,7 @@ and comptype = function
   | StructT fts -> list fieldtype fts
   | ArrayT ft -> fieldtype ft
   | FuncT (ts1, ts2) -> list valtype ts1 ++ list valtype ts2
+  | ContT ut -> typeuse ut
 
 and subtype = function
   | SubT (_fin, uts, ct) -> list typeuse uts ++ comptype ct
@@ -116,7 +118,7 @@ and rectype = function
 and deftype = function
   | DefT (rt, _i) -> rectype rt
 
-let tagtype (TagT ut) = typeuse ut
+let tagtype (TagT (ut, _)) = typeuse ut
 let globaltype (GlobalT (_mut, t)) = valtype t
 let memorytype (MemoryT (_at, _lim)) = empty
 let tabletype (TableT (_at, _lim, t)) = reftype t
@@ -131,6 +133,10 @@ let externtype = function
 let blocktype = function
   | VarBlockType x -> types (idx x)
   | ValBlockType t -> opt valtype t
+
+let hdl = function
+  | OnLabel x -> labels (idx x)
+  | OnSwitch -> empty
 
 let rec instr (e : instr) =
   match e.it with
@@ -149,6 +155,14 @@ let rec instr (e : instr) =
     tables (idx x) ++ types (idx y)
   | Throw x -> tags (idx x)
   | ThrowRef -> empty
+  | ContNew x -> types (idx x)
+  | ContBind (x, y) -> types (idx x) ++ types (idx y)
+  | Suspend x -> tags (idx x)
+  | Resume (x, xys) -> types (idx x) ++ list (fun (x, y) -> tags (idx x) ++ hdl y) xys
+  | ResumeThrow (x, y, xys) -> types (idx x) ++ tags (idx y) ++ list (fun (x, y) -> tags (idx x) ++ hdl y) xys
+  | ResumeThrowRef (x, xys) -> types (idx x) ++ list (fun (x, y) -> tags (idx x) ++ hdl y) xys
+  | Switch (x, y) -> types (idx x) ++ tags (idx y)
+  | FuncBind x -> types (idx x)
   | TryTable (bt, cs, es) -> blocktype bt ++ list catch cs ++ block es
   | LocalGet x | LocalSet x | LocalTee x -> locals (idx x)
   | GlobalGet x | GlobalSet x -> globals (idx x)

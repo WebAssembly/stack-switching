@@ -140,6 +140,14 @@ function assert_exception(action) {
   throw new Error("exception expected");
 }
 
+function assert_suspension(action) {
+  try { action() } catch (e) {
+    /* TODO: Not clear how to observe form JS */
+    return;
+  }
+  throw new Error("Wasm exception expected");
+}
+
 let StackOverflow;
 try { (function f() { 1 + f() })() } catch (e) { StackOverflow = e.constructor }
 
@@ -331,6 +339,9 @@ and statify_comptype rts = function
     let rts', ts1' = statify_list statify_valtype rts ts1 in
     let rts'', ts2' = statify_list statify_valtype rts' ts2 in
     rts'', FuncT (ts1', ts2')
+  | ContT ut ->
+    let rts', ut' = statify_typeuse rts ut in
+    rts', ContT ut'
 
 and statify_subtype rts (SubT (fin, uts, ct)) =
     let rts', uts' = statify_list statify_typeuse rts uts in
@@ -820,6 +831,8 @@ let of_assertion env ass =
       (Some (assert_return ress))
   | AssertTrap (act, _) ->
     of_assertion' env act loc "assert_trap" [] None
+  | AssertSuspension (act, _) ->
+    of_assertion' env act loc "assert_suspension" [] None
   | AssertExhaustion (act, _) ->
     of_assertion' env act loc "assert_exhaustion" [] None
   | AssertException act ->

@@ -6,6 +6,7 @@ struct
   type 'a return =
     | Return of 'a
     | Exn of Source.region * taginst * Value.t list
+    | Suspension of Source.region * string
     | Trap of error
     | Exhaustion of error
 
@@ -13,6 +14,7 @@ struct
     try Return (f x y) with
     | Eval.Trap (at, msg) -> Trap (at, msg)
     | Eval.Exception (at, Exn.Exn (a, vs)) -> Exn (at, a, vs)
+    | Eval.Suspension (at, msg) -> Suspension (at, msg)
     | Eval.Exhaustion (at, msg) -> Exhaustion (at, msg)
 
   let guard exns f x y =

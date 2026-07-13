@@ -98,6 +98,7 @@ let comptype = function
     Node ("struct", list (fun ft -> Node ("field", [fieldtype ft])) fts)
   | ArrayT ft -> Node ("array", [fieldtype ft])
   | FuncT (ts1, ts2) -> Node ("func", decls "param" ts1 @ decls "result" ts2)
+  | ContT ut -> Node ("cont", [Atom (typeidx ut)])
 
 let subtype = function
   | SubT (Final, [], ct) -> comptype ct
@@ -112,7 +113,7 @@ let rectype i j st =
 let limits nat {min; max} =
   String.concat " " (nat min :: opt nat max)
 
-let tagtype (TagT ut) =
+let tagtype (TagT (ut, _)) =
   [typeuse ut]
 
 let globaltype (GlobalT (mut, t)) =
@@ -482,6 +483,15 @@ let blocktype = function
   | VarBlockType x -> [Node ("type " ^ idx x, [])]
   | ValBlockType ts -> decls "result" (list_of_opt ts)
 
+let hdl = function
+  | OnLabel x -> idx x
+  | OnSwitch -> "switch"
+
+let resumetable xys =
+  List.map
+    (fun (x, y) -> Node ("on " ^ idx x ^ " " ^ hdl y, []))
+    xys
+
 let rec instr e =
   let head, inner =
     match e.it with
@@ -519,6 +529,14 @@ let rec instr e =
     | ThrowRef -> "throw_ref", []
     | TryTable (bt, cs, es) ->
       "try_table", blocktype bt @ list catch cs @ list instr es
+    | ContNew x -> "cont.new " ^ idx x, []
+    | ContBind (x, y) -> "cont.bind " ^ idx x ^ " " ^ idx y, []
+    | Resume (x, xys) -> "resume " ^ idx x, resumetable xys
+    | Suspend x -> "suspend " ^ idx x, []
+    | ResumeThrow (x, y, xys) -> "resume_throw " ^ idx x ^ " " ^ idx y, resumetable xys
+    | ResumeThrowRef (x, xys) -> "resume_throw_ref " ^ idx x, resumetable xys
+    | Switch (x, y) -> "switch " ^ idx x ^ " " ^ idx y, []
+    | FuncBind x -> "func.bind", [Node ("type " ^ idx x, [])]
     | LocalGet x -> "local.get " ^ idx x, []
     | LocalSet x -> "local.set " ^ idx x, []
     | LocalTee x -> "local.tee " ^ idx x, []
@@ -616,8 +634,13 @@ let type_ (ns, i) ty =
     Node ("rec", List.mapi (rectype i) sts) :: ns, i + List.length sts
 
 let tag off i tag =
-  let Tag tt = tag.it in
-  Node ("tag $" ^ nat (off + i), tagtype tt)
+  let Tag (TagT (ut, res) as tt) = tag.it in
+  let keyword =
+    match res with
+    | Resumable -> "event"
+    | Terminal -> "tag"
+  in
+  Node (keyword ^ " $" ^ nat (off + i), tagtype tt)
 
 let global off i g =
   let Global (gt, c) = g.it in
@@ -691,7 +714,14 @@ let start s =
 
 
 let importtype fx tx mx tgx gx = function
-  | ExternTagT tt -> incr tgx; Node ("tag $" ^ nat (!tgx - 1), tagtype tt)
+  | ExternTagT (TagT (ut, res) as tt) ->
+    incr tgx;
+    let keyword =
+      match res with
+      | Resumable -> "event"
+      | Terminal -> "tag"
+    in
+    Node (keyword ^ " $" ^ nat (!tgx - 1), tagtype tt)
   | ExternGlobalT gt -> incr gx; Node ("global $" ^ nat (!gx - 1), globaltype gt)
   | ExternMemoryT mt -> incr mx; Node ("memory $" ^ nat (!mx - 1), memorytype mt)
   | ExternTableT tt -> incr tx; Node ("table $" ^ nat (!tx - 1), tabletype tt)
@@ -896,6 +926,8 @@ let assertion mode ass =
     [Node ("assert_trap", [action mode act; Atom (string re)])]
   | AssertException act ->
     [Node ("assert_exception", [action mode act])]
+  | AssertSuspension (act, re) ->
+    [Node ("assert_suspension", [action mode act; Atom (string re)])]
   | AssertExhaustion (act, re) ->
     [Node ("assert_exhaustion", [action mode act; Atom (string re)])]
 
