@@ -10,11 +10,18 @@ See the [explainer](proposals/stack-switching/Explainer.md) for a high-level sum
 
 # spec
 
-This repository holds the sources for the WebAssembly specification,
-a reference implementation, and the official test suite.
+This repository holds a prototypical reference implementation for WebAssembly,
+which is currently serving as the official specification. Eventually, we expect
+to produce a specification either written in human-readable prose or in a formal
+specification language.
 
-A formatted version of the spec is available here:
-[webassembly.github.io/spec](https://webassembly.github.io/spec/),
+It also holds the WebAssembly testsuite, which tests numerous aspects of
+conformance to the spec.
+
+View the work-in-progress spec at [webassembly.github.io/spec](https://webassembly.github.io/spec/).
+
+At this time, the contents of this repository are under development and known
+to be "incomplet and inkorrect".
 
 Participation is welcome. Discussions about new features, significant semantic
 changes, or any specification change likely to generate substantial discussion

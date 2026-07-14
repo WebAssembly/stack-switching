@@ -56,8 +56,8 @@ def Main():
   # an error — which in turn causes the W3C pubrules checker to refuse to
   # autopublish the resulting bikeshed output.
   data = data.replace(
-      """\href{#binary-sint}{\href{#syntax-int}""",
-      """{\href{#syntax-int}""")
+      """\\href{#binary-sint}{\\href{#syntax-int}""",
+      """{\\href{#syntax-int}""")
 
   # Strip the entire <head> element from the the sphinx output — because it
   # contains several <meta>, <script>, and <link> elements that are unnecessary
@@ -65,7 +65,7 @@ def Main():
   # get carried over into the resulting bikeshed output and then end up causing
   # the W3C pubrules checker to refuse to autopublish that bikeshed output.
   data = re.sub(r'.+?(<div class="toctree-wrapper compound">.+)',
-                r'<!doctype HTML>\n<meta charset="utf-8">\n<body>\1',
+                r'<!doctype HTML>\n<meta charset="utf-8">\n<body><section id="webassembly-specification">\1',
                 data, flags=re.DOTALL)
 
   # Drop spurious navigation from footer.
