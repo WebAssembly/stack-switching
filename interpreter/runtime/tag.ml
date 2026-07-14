@@ -1,10 +1,10 @@
 open Types
 
-type tag = {ty : tag_type}
+type tag = {ty : tagtype}
 type t = tag
 
 let alloc ty =
-  {ty}
+   {ty}
 
-let type_of tag =
-  tag.ty
+let type_of tg =
+  tg.ty

@@ -80,11 +80,6 @@ struct
     | n, y::ys' when n > 0 -> split' (n - 1) (y::xs) ys'
     | _ -> failwith "split"
 
-  let rec last_opt = function
-    | x::[] -> Some x
-    | _::xs -> last_opt xs
-    | [] -> None
-
   let rec lead = function
     | x::[] -> []
     | x::xs -> x :: lead xs
@@ -94,6 +89,11 @@ struct
     | x::[] -> x
     | _::xs -> last xs
     | [] -> failwith "last"
+
+  let rec last_opt = function
+    | [] -> None
+    | [x] -> Some x
+    | _::xs -> last_opt xs
 
   let rec split_last = function
     | x::[] -> [], x

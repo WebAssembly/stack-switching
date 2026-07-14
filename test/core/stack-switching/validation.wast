@@ -483,10 +483,10 @@
   (type $ft3 (func (param i32) (result f64)))
   (type $ct3 (cont $ft3))
 
-  (tag $t0)
-  (tag $t1)
-  (tag $t2 (param i32) (result i64))
-  (tag $t3 (param i64) (result i32))
+  (event $t0)
+  (event $t1)
+  (event $t2 (param i32) (result i64))
+  (event $t3 (param i64) (result i32))
 
   ;; Multiple tags, all types handled correctly
   (func $test0 (param $x (ref $ct1)) (result f64)
@@ -558,7 +558,7 @@
   (module
     (type $ft0 (func))
     (type $ct0 (cont $ft0))
-    ;;(tag $t0)
+    ;;(event $t0)
     (func $error (param $x (ref $ct0))
       (block $handler (result (ref null $ct0))
         (local.get $x)
@@ -591,7 +591,7 @@
   (module
     (type $ft0 (func))
     (type $ct0 (cont $ft0))
-    (tag $t0)
+    (event $t0)
     (func $test1 (param $x (ref $ct0))
       (block $handler (result (ref $ft0))
         (local.get $x)
@@ -660,7 +660,7 @@
     (type $ft0 (func))
     (type $ct0 (cont $ft0))
 
-    (tag $t (param i32))
+    (event $t (param i32))
 
     (func $error
       (param $p (ref $ct0))
@@ -681,7 +681,7 @@
     (type $ft0 (func))
     (type $ct0 (cont $ft0))
 
-    (tag $t (param i32))
+    (event $t (param i32))
 
     (func $error
       (param $p (ref $ct0))
@@ -702,7 +702,7 @@
     (type $ft0 (func))
     (type $ct0 (cont $ft0))
 
-    (tag $t (param i32))
+    (event $t (param i32))
 
     (func $error
       (param $p (ref $ct0))
@@ -726,7 +726,7 @@
     (type $ft1 (func (param i32)))
     (type $ct1 (cont $ft1))
 
-    (tag $t (param i32))
+    (event $t (param i32))
 
     (func $error
       (param $p (ref $ct0))
@@ -747,7 +747,7 @@
 ;;;;
 
 (module
-  (tag $t (param i64 i32) (result i32 i64))
+  (event $t (param i64 i32) (result i32 i64))
 
   (func $test (result i32 i64)
     (i64.const 123)
@@ -759,7 +759,7 @@
 
 (assert_invalid
   (module
-    (tag $t (param i64 i32) (result i32 i64))
+    (event $t (param i64 i32) (result i32 i64))
 
     (func $test (result i32 i64)
       ;; error: Insufficient arguments::
@@ -774,7 +774,7 @@
 
 (assert_invalid
   (module
-    (tag $t (param i32) (result i32 i64))
+    (event $t (param i32) (result i32 i64))
 
     (func $test (result i32 i64)
       ;; error: Too many arguments:

@@ -239,7 +239,7 @@
   (type $ft_sub (func (param (ref func))))
   (type $ct_sub (cont $ft_sub)) ;; unused
 
-  (tag $t (result (ref func)))
+  (event $t (result (ref func)))
 
   (func $test0
     (param $p (ref $ct0))
@@ -265,7 +265,7 @@
   (type $ft0 (func))
   (type $ct0 (cont $ft0))
 
-  (tag $t (param (ref $ft0)))
+  (event $t (param (ref $ft0)))
 
   (func $test0
     (param $p (ref $ct0))
@@ -294,7 +294,7 @@
     (type $ft_sub (sub $ft_sup (func (param (ref func)))))
     (type $ct_sub (cont $ft_sub))
 
-    (tag $t (param (ref $ct_sub)))
+    (event $t (param (ref $ct_sub)))
 
     (func $test0
       (param $p (ref $ct0))

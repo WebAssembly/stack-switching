@@ -71,7 +71,7 @@
 ;; Test resume_throw where the continuation handles the exception.
 (module
   (tag $exn)
-  (tag $e1)
+  (event $e1)
 
   (type $f (func))
   (type $k (cont $f))
@@ -98,7 +98,7 @@
 ;; Test resume_throw where the continuation does not handle the exception.
 (module
   (tag $exn)
-  (tag $e1)
+  (event $e1)
 
   (type $f (func))
   (type $k (cont $f))
@@ -151,7 +151,7 @@
 ;; Test resume_throw_ref where the continuation handles the exception.
 (module
   (tag $e0 (param i32))
-  (tag $yield)
+  (event $yield)
 
   (type $f (func (result i32)))
   (type $k (cont $f))
@@ -183,6 +183,7 @@
         (suspend $yield)
 	    (unreachable)
       )
+      (unreachable)
     )
   )
   (elem declare func $yield42)
@@ -226,15 +227,7 @@
     (local $k_ref (ref $k))
     (local.set $k_ref (cont.new $k (ref.func $f1)))
     (resume $k (local.get $k_ref)) ;; consume it
-
-    (block $h (result exnref)
-      (try_table (result exnref) (catch_ref $e0 $h)
-         (throw $e0)
-      )
-    )
-    (local.get $k_ref)
-
-    (resume_throw_ref $k) ;; should trap
+    (resume_throw_ref $k (ref.null exn) (local.get $k_ref)) ;; should trap
   )
 )
 (assert_trap (invoke "throw_consumed_ref") "continuation already consumed")
@@ -245,12 +238,7 @@
   (type $f (func))
   (type $k (cont $f))
   (func (export "throw_null_ref")
-    (block $h (result exnref)
-      (try_table (catch_ref $e0 $h)
-         (throw $e0))
-      (unreachable)
-    )
-    (resume_throw_ref $k (ref.null $k))
+    (resume_throw_ref $k (ref.null exn) (ref.null $k))
   )
 )
 (assert_trap (invoke "throw_null_ref") "null continuation reference")

@@ -2,8 +2,8 @@
 
 (module
   (tag $exn)
-  (tag $e1)
-  (tag $e2)
+  (event $e1)
+  (event $e2)
 
   (type $f1 (func))
   (type $k1 (cont $f1))
@@ -213,7 +213,7 @@
         (unreachable)
       )
       (drop)))
-  "non-continuation type 0")
+  "handling a non-resumable tag")
 
 (assert_invalid
   (module
@@ -227,7 +227,7 @@
       )
       (drop)
       (drop)))
-  "non-continuation type 0")
+  "handling a non-resumable tag")
 
 (assert_invalid
   (module
@@ -303,8 +303,8 @@
 ;; Simple state example
 
 (module $state
-  (tag $get (result i32))
-  (tag $set (param i32) (result i32))
+  (event $get (result i32))
+  (event $set (param i32) (result i32))
 
   (type $f (func (param i32) (result i32)))
   (type $k (cont $f))
@@ -361,7 +361,7 @@
   (type $cont0 (cont $gen))
   (type $cont (cont $geny))
 
-  (tag $yield (param i64) (result i32))
+  (event $yield (param i64) (result i32))
 
   ;; Hook for logging purposes
   (global $hook (export "hook") (mut (ref $gen)) (ref.func $dummy))
@@ -415,8 +415,8 @@
   (type $proc (func))
   (type $cont (cont $proc))
 
-  (tag $yield (export "yield"))
-  (tag $spawn (export "spawn") (param (ref $cont)))
+  (event $yield (export "yield"))
+  (event $spawn (export "spawn") (param (ref $cont)))
 
   ;; Table as simple queue (keeping it simple, no ring buffer)
   (table $queue 0 (ref null $cont))
@@ -500,8 +500,8 @@
   (type $pproc (func (param i32))) ;; parameterised proc
   (type $cont (cont $proc))
   (type $pcont (cont $pproc)) ;; parameterised continuation proc
-  (tag $yield (import "scheduler" "yield"))
-  (tag $spawn (import "scheduler" "spawn") (param (ref $cont)))
+  (event $yield (import "scheduler" "yield"))
+  (event $spawn (import "scheduler" "spawn") (param (ref $cont)))
   (func $scheduler (import "scheduler" "scheduler") (param $main (ref $cont)))
 
   (func $log (import "spectest" "print_i32") (param i32))
@@ -587,8 +587,8 @@
 (module $concurrent_generator
   (func $log (import "spectest" "print_i64") (param i64))
 
-  (tag $syield (import "scheduler" "yield"))
-  (tag $spawn (import "scheduler" "spawn") (param (ref $cont)))
+  (event $syield (import "scheduler" "yield"))
+  (event $spawn (import "scheduler" "spawn") (param (ref $cont)))
   (func $scheduler (import "scheduler" "scheduler") (param $main (ref $cont)))
 
   (type $ghook (func (param i64)))
@@ -674,7 +674,7 @@
 
 
 (module
-  (tag $e (result i32 i32 i32 i32 i32 i32))
+  (event $e (result i32 i32 i32 i32 i32 i32))
 
   (type $f0 (func (result i32 i32 i32 i32 i32 i32 i32)))
   (type $f2 (func (param i32 i32) (result i32 i32 i32 i32 i32 i32 i32)))
@@ -761,7 +761,7 @@
   (global $fi (mut i32) (i32.const 0))
   (global $gi (mut i32) (i32.const 1))
 
-  (tag $swap)
+  (event $swap)
 
   (func $init (export "init") (result i32)
     (resume $ct (on $swap switch)
@@ -795,7 +795,7 @@
 
   (func $print-i32 (import "spectest" "print_i32") (param i32))
 
-  (tag $swap (result i32))
+  (event $swap (result i32))
 
   (func $init (export "init") (result i32)
     (resume $ct (on $swap switch)
@@ -838,7 +838,7 @@
     (type $ft2 (func))
     (type $ct2 (cont $ft2))
 
-    (tag $swap)
+    (event $swap)
     (func $f (type $ft)
       (switch $ct $swap (cont.new $ct2 (ref.null $ft2)))
       (drop)))
@@ -850,7 +850,7 @@
       (type $ft (func (param i32) (param (ref null $ct))))
       (type $ct (cont $ft)))
 
-    (tag $swap)
+    (event $swap)
     (func $f (type $ft)
       (switch $ct $swap (i64.const 0) (local.get 1))
       (drop)
@@ -864,7 +864,7 @@
     (type $ft2 (func (param (ref null $ct2))))
     (type $ct2 (cont $ft2)))
 
-  (tag $t)
+  (event $t)
 
   (func $suspend (type $ft2)
     (suspend $t))
@@ -896,7 +896,8 @@
     (type $ft (func (param (ref null $ct))))
     (type $ct (cont $ft)))
 
-  (tag $t)
+  (tag $t_exn)
+  (event $t_evt)
 
   (func
     (cont.new $ct (ref.null $ft))
@@ -908,17 +909,17 @@
     (resume $ct (ref.null $ct) (ref.null $ct))
     (unreachable))
   (func
-    (resume_throw $ct $t (ref.null $ct))
+    (resume_throw $ct $t_exn (ref.null $ct))
     (unreachable))
   (func
-    (switch $ct $t (ref.null $ct))
+    (switch $ct $t_evt (ref.null $ct))
     (unreachable))
 )
 
 (module $co2
   (type $task (func (result i32))) ;; type alias task = [] -> []
   (type $ct   (cont $task)) ;; type alias   ct = $task
-  (tag $pause (export "pause"))   ;; pause : [] -> []
+  (event $pause (export "pause"))   ;; pause : [] -> []
   (tag $cancel (export "cancel"))   ;; cancel : [] -> []
   ;; run : [(ref $task) (ref $task)] -> []
   ;; implements a 'seesaw' (c.f. Ganz et al. (ICFP@99))
@@ -961,7 +962,7 @@
 
   (func $seesaw (import "co2" "seesaw") (param (ref $ct)) (param (ref $ct)) (result i32))
   (func $print-i32 (import "spectest" "print_i32") (param i32))
-  (tag $pause (import "co2" "pause"))
+  (event $pause (import "co2" "pause"))
 
   (func $even (param $niter i32) (result i32)
      (local $next i32) ;; zero initialised.
@@ -1007,7 +1008,7 @@
   (type $c2 (cont $f2))
   (type $f3 (func (param (ref null $c2)) (result i32)))
   (type $c3 (cont $f3))
-  (tag $e (result i32))
+  (event $e (result i32))
 
   (func $fn_1 (param (ref null $c2)) (result i32)
     (local.get 0)
@@ -1040,8 +1041,9 @@
     (type $ft2 (func (param (ref null $ct2))))
     (type $ct2 (cont $ft2)))
 
-  (tag $yield (param i32))
-  (tag $swap)
+  (event $yield (param i32))
+  (tag $yield_err (param i32))
+  (event $swap)
 
   ;; Check cont.new
   (func (result (ref $ct))
@@ -1078,7 +1080,7 @@
     block $on_yield (result i32 (ref $ct))
       i32.const 42
       local.get $k
-      resume_throw $ct $yield
+      resume_throw $ct $yield_err
       i32.const 42
       return
     end
@@ -1103,7 +1105,7 @@
     (type $ct2 (cont $ft2)))
 
   (tag $yield (param i32))
-  (tag $swap)
+  (event $swap)
 
   ;; Check cont.new
   (func (result (ref $ct))
@@ -1145,7 +1147,7 @@
   (type $ft1 (func (param (ref $ct0))))
   (type $ct1 (cont $ft1))
 
-  (tag $t)
+  (event $t)
 
   (func $f
     (cont.new $ct1 (ref.func $g))
@@ -1167,7 +1169,7 @@
     (rec
       (type $ft (func (param (ref $ct))))
       (type $ct (cont $ft)))
-    (tag $t (param i32))
+    (event $t (param i32))
 
     (func (param $k (ref $ct))
       (switch $ct $t)))
@@ -1178,7 +1180,7 @@
   (module
     (type $ft (func))
     (type $ct (cont $ft))
-    (tag $t)
+    (event $t)
 
     (func
       (block $on_t (result (ref cont))
@@ -1193,7 +1195,7 @@
   (module
     (type $ft (func))
     (type $ct (cont $ft))
-    (tag $t)
+    (event $t)
 
     (func
       (block $on_t (result (ref nocont))

@@ -6,6 +6,7 @@
 (module (table 0 1 funcref))
 (module (table 1 256 funcref))
 (module (table 0 65536 funcref))
+(module definition (table 0xffff_ffff funcref))
 (module (table 0 0xffff_ffff funcref))
 
 (module (table 1 (ref null func)))
@@ -44,27 +45,6 @@
   "table size"
 )
 
-;; Same as above but with i64 address types
-
-(module (table i64 0 funcref))
-(module (table i64 1 funcref))
-(module (table i64 0 0 funcref))
-(module (table i64 0 1 funcref))
-(module (table i64 1 256 funcref))
-(module (table i64 0 65536 funcref))
-(module (table i64 0 0xffff_ffff funcref))
-
-(module (table i64 0 funcref) (table i64 0 funcref))
-(module (table (import "spectest" "table64") i64 0 funcref) (table i64 0 funcref))
-
-(assert_invalid
-  (module (table i64 1 0 funcref))
-  "size minimum must not be greater than maximum"
-)
-(assert_invalid
-  (module (table i64 0xffff_ffff 0 funcref))
-  "size minimum must not be greater than maximum"
-)
 
 ;; Elem segments with no table
 
@@ -134,31 +114,6 @@
 (assert_return (invoke "get3") (ref.func))
 (assert_return (invoke "get4") (ref.func))
 (assert_return (invoke "get5") (ref.func))
-
-
-(assert_invalid
-  (module
-    (type $f (func))
-    (table 10 (ref $f))
-  )
-  "type mismatch"
-)
-
-(assert_invalid
-  (module
-    (type $f (func))
-    (table 0 (ref $f))
-  )
-  "type mismatch"
-)
-
-(assert_invalid
-  (module
-    (type $f (func))
-    (table 0 0 (ref $f))
-  )
-  "type mismatch"
-)
 
 
 (assert_invalid

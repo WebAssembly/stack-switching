@@ -1,17 +1,17 @@
 {
 open Parser
-open Operators
+open Mnemonics
 open Source
 
-let convert_pos pos =
+let loc_of_pos pos =
   { file = pos.Lexing.pos_fname;
     line = pos.Lexing.pos_lnum;
     column = pos.Lexing.pos_cnum - pos.Lexing.pos_bol
   }
 
 let region lexbuf =
-  let left = convert_pos (Lexing.lexeme_start_p lexbuf) in
-  let right = convert_pos (Lexing.lexeme_end_p lexbuf) in
+  let left = loc_of_pos (Lexing.lexeme_start_p lexbuf) in
+  let right = loc_of_pos (Lexing.lexeme_end_p lexbuf) in
   {left = left; right = right}
 
 let error lexbuf msg = raise (Parse_error.Syntax (region lexbuf, msg))
@@ -142,19 +142,19 @@ rule token = parse
 
   | keyword as s
     { match s with
-      | "i8" -> PACK_TYPE Pack.Pack8
-      | "i16" -> PACK_TYPE Pack.Pack16
-      | "i32" -> NUM_TYPE Types.I32T
-      | "i64" -> NUM_TYPE Types.I64T
-      | "f32" -> NUM_TYPE Types.F32T
-      | "f64" -> NUM_TYPE Types.F64T
-      | "v128" -> VEC_TYPE Types.V128T
-      | "i8x16" -> VEC_SHAPE (V128.I8x16 ())
-      | "i16x8" -> VEC_SHAPE (V128.I16x8 ())
-      | "i32x4" -> VEC_SHAPE (V128.I32x4 ())
-      | "i64x2" -> VEC_SHAPE (V128.I64x2 ())
-      | "f32x4" -> VEC_SHAPE (V128.F32x4 ())
-      | "f64x2" -> VEC_SHAPE (V128.F64x2 ())
+      | "i8" -> PACKTYPE Types.I8T
+      | "i16" -> PACKTYPE Types.I16T
+      | "i32" -> NUMTYPE Types.I32T
+      | "i64" -> NUMTYPE Types.I64T
+      | "f32" -> NUMTYPE Types.F32T
+      | "f64" -> NUMTYPE Types.F64T
+      | "v128" -> VECTYPE Types.V128T
+      | "i8x16" -> VECSHAPE (V128.I8x16 ())
+      | "i16x8" -> VECSHAPE (V128.I16x8 ())
+      | "i32x4" -> VECSHAPE (V128.I32x4 ())
+      | "i64x2" -> VECSHAPE (V128.I64x2 ())
+      | "f32x4" -> VECSHAPE (V128.F32x4 ())
+      | "f64x2" -> VECSHAPE (V128.F64x2 ())
 
       | "any" -> ANY
       | "anyref" -> ANYREF
@@ -187,10 +187,10 @@ rule token = parse
       | "struct" -> STRUCT
       | "field" -> FIELD
       | "mut" -> MUT
-      | "cont" -> CONT
       | "sub" -> SUB
       | "final" -> FINAL
       | "rec" -> REC
+      | "cont" -> CONT
 
       | "nop" -> NOP
       | "unreachable" -> UNREACHABLE
@@ -223,8 +223,6 @@ rule token = parse
       | "catch_ref" -> CATCH_REF
       | "catch_all" -> CATCH_ALL
       | "catch_all_ref" -> CATCH_ALL_REF
-
-
       | "cont.new" -> CONT_NEW
       | "cont.bind" -> CONT_BIND
       | "suspend" -> SUSPEND
@@ -232,7 +230,7 @@ rule token = parse
       | "resume_throw" -> RESUME_THROW
       | "resume_throw_ref" -> RESUME_THROW_REF
       | "switch" -> SWITCH
-
+      | "func.bind" -> FUNC_BIND
 
       | "local.get" -> LOCAL_GET
       | "local.set" -> LOCAL_SET
@@ -778,21 +776,23 @@ rule token = parse
       | "i32x4.relaxed_dot_i8x16_i7x16_add_s" -> VEC_BINARY i32x4_relaxed_dot_i8x16_i7x16_add_s
 
       | "type" -> TYPE
+      | "tag" -> TAG
+      | "event" -> EVENT
+      | "exception" -> EXCEPTION
+      | "global" -> GLOBAL
+      | "memory" -> MEMORY
+      | "table" -> TABLE
       | "func" -> FUNC
       | "param" -> PARAM
       | "result" -> RESULT
-      | "start" -> START
       | "local" -> LOCAL
-      | "global" -> GLOBAL
-      | "table" -> TABLE
-      | "memory" -> MEMORY
-      | "tag" -> TAG
-      | "elem" -> ELEM
       | "data" -> DATA
+      | "elem" -> ELEM
       | "declare" -> DECLARE
       | "offset" -> OFFSET
       | "on" -> ON
       | "item" -> ITEM
+      | "start" -> START
       | "import" -> IMPORT
       | "export" -> EXPORT
 
@@ -814,8 +814,8 @@ rule token = parse
       | "assert_return" -> ASSERT_RETURN
       | "assert_trap" -> ASSERT_TRAP
       | "assert_exception" -> ASSERT_EXCEPTION
-      | "assert_exhaustion" -> ASSERT_EXHAUSTION
       | "assert_suspension" -> ASSERT_SUSPENSION
+      | "assert_exhaustion" -> ASSERT_EXHAUSTION
       | "nan:canonical" -> NAN Script.CanonicalNan
       | "nan:arithmetic" -> NAN Script.ArithmeticNan
       | "either" -> EITHER
