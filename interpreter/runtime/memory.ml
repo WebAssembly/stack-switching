@@ -8,7 +8,7 @@ type offset = address
 type count = int32
 
 type memory' = (int, int8_unsigned_elt, c_layout) Array1.t
-type memory = {mutable ty : memory_type; mutable content : memory'}
+type memory = {mutable ty : memorytype; mutable content : memory'}
 type t = memory
 
 exception Type = Value.Type
@@ -26,19 +26,20 @@ let valid_limits {min; max} =
 
 let valid_size at i =
   match at with
-  | I32AT -> I64.le_u i 0xffffL
-  | I64AT -> true
+  | I32AT -> I64.le_u i 0x1_0000L
+  | I64AT -> I64.le_u i 0x1_0000_0000_0000L
 
 let create n =
+  if n > Int64.(div max_int page_size) then raise OutOfMemory else
+  let size = Int64.(mul n page_size) in
   try
-    let size = Int64.(mul n page_size) in
     let mem = Array1_64.create Int8_unsigned C_layout size in
     Array1.fill mem 0;
     mem
-  with Out_of_memory -> raise OutOfMemory
+  with Out_of_memory | Invalid_argument _ -> raise OutOfMemory
 
 let alloc (MemoryT (at, lim) as ty) =
-  assert Free.((memory_type ty).types = Set.empty);
+  assert Free.((memorytype ty).types = Set.empty);
   if not (valid_size at lim.min) then raise SizeOverflow;
   if not (valid_limits lim) then raise Type;
   {ty; content = create lim.min}
@@ -52,7 +53,7 @@ let size mem =
 let type_of mem =
   mem.ty
 
-let addr_type_of mem =
+let addrtype_of mem =
   let MemoryT (at, _) = type_of mem in at
 
 let grow mem delta =
@@ -107,9 +108,9 @@ let store_num mem a o n =
   let bs = Value.bits_of_num n in
   store_bytes mem (effective_address a o) bs
 
-let load_num_packed sz ext mem a o nt =
+let load_num_packed sz sx mem a o nt =
   let bs = load_bytes mem (effective_address a o) (Pack.packed_size sz) in
-  Value.num_of_packed_bits nt sz ext bs
+  Value.num_of_packed_bits nt sz sx bs
 
 let store_num_packed sz mem a o n =
   let bs = Value.packed_bits_of_num sz n in
@@ -123,9 +124,9 @@ let store_vec mem a o v =
   let bs = Value.bits_of_vec v in
   store_bytes mem (effective_address a o) bs
 
-let load_vec_packed sz ext mem a o t =
+let load_vec_packed sz vext mem a o t =
   let bs = load_bytes mem (effective_address a o) (Pack.packed_size sz) in
-  Value.vec_of_packed_bits t sz ext bs
+  Value.vec_of_packed_bits t sz vext bs
 
 let load_val mem a o t =
   let bs = load_bytes mem (effective_address a o) (Types.val_size t) in

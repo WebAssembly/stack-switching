@@ -227,7 +227,7 @@
       )
       (drop)
       (drop)))
-  "non-continuation type 0")
+  "non-continuation type")
 
 (assert_invalid
   (module

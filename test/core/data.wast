@@ -16,6 +16,8 @@
   (data (memory $m) (i32.const 1) "a" "" "bcd")
   (data (memory $m) (offset (i32.const 0)))
   (data (memory $m) (offset (i32.const 0)) "" "a" "bc" "")
+  (data)
+  (data "a" "" "bcd")
 
   (data $d1 (i32.const 0))
   (data $d2 (i32.const 1) "a" "" "bcd")
@@ -29,6 +31,8 @@
   (data $d10 (memory $m) (i32.const 1) "a" "" "bcd")
   (data $d11 (memory $m) (offset (i32.const 0)))
   (data $d12 (memory $m) (offset (i32.const 0)) "" "a" "bc" "")
+  (data $d13)
+  (data $d14 "a" "" "bcd")
 )
 
 ;; Basic use
@@ -523,3 +527,17 @@
    )
    "constant expression required"
 )
+
+;; Testing how identifiers interact with data segments specified inline
+(module
+  (memory (data "\AB"))
+  (data $d "\CD")
+  (func (export "init")
+    (memory.init $d (i32.const 0) (i32.const 0) (i32.const 1))
+  )
+  (func (export "load") (result i32)
+    (i32.load8_u (i32.const 0))
+  )
+)
+(invoke "init")
+(assert_return (invoke "load") (i32.const 0xCD))
