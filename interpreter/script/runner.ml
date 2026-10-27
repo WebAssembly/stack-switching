@@ -133,7 +133,7 @@ let input_from get_script run =
   | Trap (at, msg) -> error at "runtime trap" msg
   | Crash (at, msg) -> error at "runtime crash" msg
   | Exception (at, msg) -> error at "uncaught exception" msg
-  | Suspension (at, msg) -> error at "suspension error" msg
+  | Suspension (at, msg) -> error at "unhandled suspension" msg
   | Exhaustion (at, msg) -> error at "resource exhaustion" msg
   | Assert (at, msg) -> error at "assertion failure" msg
   | IO (at, msg) -> error at "i/o error" msg
