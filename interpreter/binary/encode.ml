@@ -1020,6 +1020,7 @@ struct
   let global_section gs =
     section 6 (vec global) gs (gs <> [])
 
+
   (* Export section *)
 
   let externidx xx =

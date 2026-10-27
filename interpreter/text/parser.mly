@@ -217,6 +217,7 @@ let anon_label (c : context) loc = bind "label" c.labels 1l (at loc)
 let anon_fields (c : context) x n loc =
   bind "field" (Lib.List32.nth c.types.fields x) n (at loc)
 
+
 let inline_functype (c : context) (ts1, ts2) loc =
   let st = SubT (Final, [], FuncT (ts1, ts2)) in
   match
@@ -410,8 +411,8 @@ conttype :
       match $2 c with
       | ([], []) -> Idx ($1 c).it
       | ft ->
-         let x = inline_functype_explicit c ($1 c) ft in
-         Idx x.it }
+        let x = inline_functype_explicit c ($1 c) ft in
+        Idx x.it }
   | conttype_params
     /* TODO: the inline type is broken for now */
     { let at = $sloc in fun c -> Idx (inline_functype c ($1 c) at).it }
@@ -1309,6 +1310,7 @@ table_fields :
       [Table (TableT ($1, {min = size; max = Some size}, rt), tinit) @@ loc],
       [Elem (rt, einit, Active (x, offset) @@ loc) @@ loc],
       [], [] }
+
 
 /* Imports & Exports */
 

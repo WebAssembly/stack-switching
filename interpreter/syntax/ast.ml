@@ -197,7 +197,7 @@ and instr' =
   | ResumeThrowRef of typeidx * (tagidx * hdl) list (* abort continuation *)
   | Switch of typeidx * tagidx           (* direct switch continuation *)
   | Throw of tagidx                      (* throw exception *)
-  | ThrowRef                            (* rethrow exception *)
+  | ThrowRef                             (* rethrow exception *)
   | TryTable of blocktype * catch list * instr list  (* handle exceptions *)
   | LocalGet of localidx                 (* read local variable *)
   | LocalSet of localidx                 (* write local variable *)
