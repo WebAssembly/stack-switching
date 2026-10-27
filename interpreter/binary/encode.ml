@@ -179,9 +179,6 @@ struct
     | ArrayT ft -> s7 (-0x22); fieldtype ft
     | FuncT (ts1, ts2) -> s7 (-0x20); resulttype ts1; resulttype ts2
     | ContT ut -> s7 (-0x23); typeuse s33 ut
-    (* TODO(dhil): This might need to change again in the future as a
-       different proposal might claim this opcode! GC proposal claimed
-       the previous opcode we were using. *)
 
   let subtype = function
     | SubT (Final, [], ct) -> comptype ct
