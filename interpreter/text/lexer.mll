@@ -1,17 +1,17 @@
 {
 open Parser
-open Operators
+open Mnemonics
 open Source
 
-let convert_pos pos =
+let loc_of_pos pos =
   { file = pos.Lexing.pos_fname;
     line = pos.Lexing.pos_lnum;
     column = pos.Lexing.pos_cnum - pos.Lexing.pos_bol
   }
 
 let region lexbuf =
-  let left = convert_pos (Lexing.lexeme_start_p lexbuf) in
-  let right = convert_pos (Lexing.lexeme_end_p lexbuf) in
+  let left = loc_of_pos (Lexing.lexeme_start_p lexbuf) in
+  let right = loc_of_pos (Lexing.lexeme_end_p lexbuf) in
   {left = left; right = right}
 
 let error lexbuf msg = raise (Parse_error.Syntax (region lexbuf, msg))
@@ -21,7 +21,7 @@ let error_nest start lexbuf msg =
 
 let unknown lexbuf = error lexbuf ("unknown operator " ^ Lexing.lexeme lexbuf)
 
-let string s =
+let string lexbuf s =
   let b = Buffer.create (String.length s) in
   let i = ref 1 in
   while !i < String.length s - 1 do
@@ -36,8 +36,12 @@ let string s =
       | 'u' ->
         let j = !i + 2 in
         i := String.index_from s j '}';
-        let n = int_of_string ("0x" ^ String.sub s j (!i - j)) in
-        let bs = Utf8.encode [n] in
+        let bs =
+          try
+            let n = int_of_string ("0x" ^ String.sub s j (!i - j)) in
+            Utf8.encode [n]
+          with Failure _ | Utf8.Utf8 -> error lexbuf "malformed UTF-8 codepoint"
+        in
         Buffer.add_substring b bs 0 (String.length bs - 1);
         bs.[String.length bs - 1]
       | h ->
@@ -49,7 +53,7 @@ let string s =
   Buffer.contents b
 
 let annot_id lexbuf s =
-  let s' = string s in
+  let s' = string lexbuf s in
   if s' = "" then error lexbuf "empty annotation id";
   try Utf8.decode s' with Utf8.Utf8 -> error lexbuf "malformed UTF-8 encoding"
 
@@ -133,7 +137,7 @@ rule token = parse
   | int as s { INT s }
   | float as s { FLOAT s }
 
-  | string as s { STRING (string s) }
+  | string as s { STRING (string lexbuf s) }
   | '"'character*(newline|eof) { error lexbuf "unclosed string literal" }
   | '"'character*(control#ascii_newline)
     { error lexbuf "illegal control character in string literal" }
@@ -142,19 +146,19 @@ rule token = parse
 
   | keyword as s
     { match s with
-      | "i8" -> PACK_TYPE Pack.Pack8
-      | "i16" -> PACK_TYPE Pack.Pack16
-      | "i32" -> NUM_TYPE Types.I32T
-      | "i64" -> NUM_TYPE Types.I64T
-      | "f32" -> NUM_TYPE Types.F32T
-      | "f64" -> NUM_TYPE Types.F64T
-      | "v128" -> VEC_TYPE Types.V128T
-      | "i8x16" -> VEC_SHAPE (V128.I8x16 ())
-      | "i16x8" -> VEC_SHAPE (V128.I16x8 ())
-      | "i32x4" -> VEC_SHAPE (V128.I32x4 ())
-      | "i64x2" -> VEC_SHAPE (V128.I64x2 ())
-      | "f32x4" -> VEC_SHAPE (V128.F32x4 ())
-      | "f64x2" -> VEC_SHAPE (V128.F64x2 ())
+      | "i8" -> PACKTYPE Types.I8T
+      | "i16" -> PACKTYPE Types.I16T
+      | "i32" -> NUMTYPE Types.I32T
+      | "i64" -> NUMTYPE Types.I64T
+      | "f32" -> NUMTYPE Types.F32T
+      | "f64" -> NUMTYPE Types.F64T
+      | "v128" -> VECTYPE Types.V128T
+      | "i8x16" -> VECSHAPE (V128.I8x16 ())
+      | "i16x8" -> VECSHAPE (V128.I16x8 ())
+      | "i32x4" -> VECSHAPE (V128.I32x4 ())
+      | "i64x2" -> VECSHAPE (V128.I64x2 ())
+      | "f32x4" -> VECSHAPE (V128.F32x4 ())
+      | "f64x2" -> VECSHAPE (V128.F64x2 ())
 
       | "any" -> ANY
       | "anyref" -> ANYREF
@@ -778,21 +782,21 @@ rule token = parse
       | "i32x4.relaxed_dot_i8x16_i7x16_add_s" -> VEC_BINARY i32x4_relaxed_dot_i8x16_i7x16_add_s
 
       | "type" -> TYPE
+      | "tag" -> TAG
+      | "global" -> GLOBAL
+      | "memory" -> MEMORY
+      | "table" -> TABLE
       | "func" -> FUNC
       | "param" -> PARAM
       | "result" -> RESULT
-      | "start" -> START
       | "local" -> LOCAL
-      | "global" -> GLOBAL
-      | "table" -> TABLE
-      | "memory" -> MEMORY
-      | "tag" -> TAG
-      | "elem" -> ELEM
       | "data" -> DATA
+      | "elem" -> ELEM
       | "declare" -> DECLARE
       | "offset" -> OFFSET
       | "on" -> ON
       | "item" -> ITEM
+      | "start" -> START
       | "import" -> IMPORT
       | "export" -> EXPORT
 
@@ -830,7 +834,7 @@ rule token = parse
 
   | '$'(id as s) { VAR s }
   | '$'(string as s)
-    { let s' = string s in
+    { let s' = string lexbuf s in
       if s' = "" then error lexbuf "empty identifier"; VAR s' }
   | '$' { error lexbuf "empty identifier" }
 
@@ -888,13 +892,13 @@ and annot start = parse
       (Annot.Var s @@ r) :: annot start lexbuf }
   | '$'(string as s)
     { let r = region lexbuf in
-      let s' = string s in
+      let s' = string lexbuf s in
       if s' = "" then error lexbuf "empty identifier";
       (Annot.Var s' @@ r) :: annot start lexbuf }
   | '$' { error lexbuf "empty identifier" }
   | string as s
     { let r = region lexbuf in
-      (Annot.String (string s) @@ r) :: annot start lexbuf }
+      (Annot.String (string lexbuf s) @@ r) :: annot start lexbuf }
   | reserved as s
     { let r = region lexbuf in
       (Annot.Atom s @@ r) :: annot start lexbuf }

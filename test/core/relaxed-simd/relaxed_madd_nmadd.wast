@@ -1,5 +1,4 @@
 ;; Tests for f32x4.relaxed_madd, f32x4.relaxed_nmadd, f64x2.relaxed_madd, and f64x2.relaxed_nmadd.
-;; `either` comes from https://github.com/WebAssembly/threads.
 
 (module
     (func (export "f32x4.relaxed_madd") (param v128 v128 v128) (result v128) (f32x4.relaxed_madd (local.get 0) (local.get 1) (local.get 2)))
@@ -72,7 +71,6 @@
 ;; DLB_MAX * 2 - DLB_MAX ==
 ;;   DLB_MAX (if fma)
 ;;   0       (if no fma)
-;; form https://www.vinc17.net/software/fma-tests.c
 ;; from https://www.vinc17.net/software/fma-tests.c
 (assert_return (invoke "f64x2.relaxed_madd"
                        (v128.const f64x2 0x1.fffffffffffffp+1023 0x1.fffffffffffffp+1023)
@@ -155,7 +153,6 @@
 ;; DLB_MAX * 2 - DLB_MAX ==
 ;;   DLB_MAX (if fma)
 ;;   0       (if no fma)
-;; form https://www.vinc17.net/software/fma-tests.c
 ;; from https://www.vinc17.net/software/fma-tests.c
 (assert_return (invoke "f64x2.relaxed_madd_cmp"
                        (v128.const f64x2 0x1.fffffffffffffp+1023 0x1.fffffffffffffp+1023)
@@ -189,6 +186,15 @@
                        (v128.const f64x2 -0x1.000002p+0 -0x1.000002p+0)
                        (v128.const f64x2 -0x1.00000204p+0 -0x1.00000204p+0))
                (v128.const i64x2 -1 -1))
+
+;; Check that FMA rounds correctly
+(assert_return
+  (invoke "f32x4.relaxed_madd"
+    (v128.const i32x4 0x3ff40a3e 0x3ff40a3e 0x3ff40a3e 0x3ff40a3e)
+    (v128.const i32x4 0x3fe158e1 0x3fe158e1 0x3fe158e1 0x3fe158e1)
+    (v128.const i32x4 0xafa0fbff 0xafa0fbff 0xafa0fbff 0xafa0fbff))
+  (v128.const i32x4 0x4056d1bb 0x4056d1bb 0x4056d1bb 0x4056d1bb)
+)
 
 ;; Test that the non-deterministic choice of fusing and then rounding or
 ;; rounding multiple times in `relaxed_madd` is consistent throughout a

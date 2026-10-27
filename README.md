@@ -8,6 +8,7 @@ support for stack-switching.
 
 See the [explainer](proposals/stack-switching/Explainer.md) for a high-level summary of the proposal.
 
+
 # spec
 
 This repository holds the sources for the WebAssembly specification,
