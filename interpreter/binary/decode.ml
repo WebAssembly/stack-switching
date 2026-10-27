@@ -419,10 +419,7 @@ let rec instr s =
   | 0x14 -> let x = at idx s in call_ref x
   | 0x15 -> let x = at idx s in return_call_ref x
 
-  | (0x16 | 0x17) as b -> illegal s pos b
-
-  | 0x18 -> error s pos "misplaced DELEGATE opcode"
-  | 0x19 -> error s pos "misplaced CATCH_ALL opcode"
+  | 0x16 | 0x17 | 0x18 | 0x19 as b -> illegal s pos b
 
   | 0x1a -> drop
   | 0x1b -> select None
