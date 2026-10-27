@@ -368,7 +368,7 @@ let on_clause s =
   | 0x01 ->
     let x = at idx s in
     (x, OnSwitch)
-  | _ -> error s (pos s) "ON opcode expected"
+  | _ -> error s (pos s) "malformed handler clause"
 
 let rec instr s =
   let pos = pos s in
