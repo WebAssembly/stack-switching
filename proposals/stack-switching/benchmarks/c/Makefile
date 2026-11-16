@@ -1,3 +1,5 @@
+.SUFFIXES:  # Suppress default make recipes for C
+
 # A generic set of make rules.
 CONFIG=make.config
 include ${CONFIG}
@@ -25,8 +27,8 @@ all: $(BENCHMARKS) $(SWITCH_BENCHMARKS)
 			@echo Made $@ #from $^
 
 $(SWITCH_BENCHMARKS): %: bin/%_switch_asyncify.wasm bin/%_switch_wasmfx.wasm \
- 	bin/%_switch_asyncify.cwasm bin/%_switch_wasmfx.cwasm \
- 	bin/%_switch_asyncify.stripped.wasm bin/%_switch_wasmfx.stripped.wasm
+	bin/%_switch_asyncify.cwasm bin/%_switch_wasmfx.cwasm \
+	bin/%_switch_asyncify.stripped.wasm bin/%_switch_wasmfx.stripped.wasm
 
 bin/%_asyncify.wasm: %.c inc/fiber.h src/asyncify/asyncify_impl.c | bin
 	$(WASICC) -DSTACK_POOL_SIZE=$(STACK_POOL_SIZE) -DASYNCIFY_DEFAULT_STACK_SIZE=$(ASYNCIFY_DEFAULT_STACK_SIZE) src/asyncify/asyncify_impl.c $(WASI_FLAGS) $< -o $(@:.wasm=.pre.wasm)

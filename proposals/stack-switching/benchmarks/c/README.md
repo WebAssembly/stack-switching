@@ -5,6 +5,14 @@ switching) against Asyncify. The [fiber-c
 library](https://github.com/wasmfx/fiber-c) is used to provide a C interface for
 fibers, which can be compiled with either backend.
 
+## Dependencies
+
+You'll need some dependencies:
+  * Binaryen
+  * Wasi-SDK clang https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-30/wasi-sdk-30.0-x86_64-linux.tar.gz
+  * The Wasm interpreter/assembler from this repo (stack-switching/interpreter/wasm)
+
+Set the environment variables BINARYEN, WASI_SDK and WASM_INTERP to the paths to these.
 
 ## Benchmarks
 
