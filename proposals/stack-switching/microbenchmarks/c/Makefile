@@ -17,9 +17,6 @@ SWITCH_BENCHMARKS= hello itersum treesum pi roundrobin
 # This strange invocation tells make not to delete "intermediate products".
 .SECONDARY:
 
-# Initial table size. In the paper, we had this conditionally overridden for c10m,
-# but that makes the Makefile not really deterministic, and setting it to a fixed
-# value seems not to slow things down.
 WASMFX_CONT_TABLE_INITIAL_CAPACITY=16384
 
 all: $(BENCHMARKS) $(SWITCH_BENCHMARKS)
